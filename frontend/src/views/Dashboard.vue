@@ -5,7 +5,7 @@
       <v-col cols="12">
         <div class="text-center mb-6">
           <h1 class="text-h3 font-weight-bold text-white dashboard-title">
-            📊 Dashboard FinanCash
+            📊  FinanCoop
           </h1>
           <p class="text-subtitle-1 text-grey-lighten-2">
             Resumen del sistema de financiamiento

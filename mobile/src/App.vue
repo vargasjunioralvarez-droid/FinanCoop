@@ -125,19 +125,19 @@
 
       <!-- Bottom Navigation tipo Cashea -->
       <v-bottom-navigation
-        v-model="activeTab"
+        :model-value="activeTab"
         grow
         color="primary"
         elevation="8"
         class="bottom-nav"
         mode="shift"
       >
-        <v-btn value="inicio" :active="activeTab === 'inicio'" @click="$router.push('/')">
+        <v-btn value="inicio" :active="activeTab === 'inicio'" @click="navigateTo('inicio')">
           <v-icon>mdi-home</v-icon>
           <span>Inicio</span>
         </v-btn>
 
-        <v-btn value="cuotas" :active="activeTab === 'cuotas'" @click="$router.push('/cuotas')">
+        <v-btn value="cuotas" :active="activeTab === 'cuotas'" @click="navigateTo('cuotas')">
           <template v-if="badgeCount > 0">
             <v-badge :content="badgeCount" color="error" offset-x="-10" offset-y="6">
               <v-icon>mdi-calendar-clock</v-icon>
@@ -149,19 +149,19 @@
           <span>Cuotas</span>
         </v-btn>
 
-        <v-btn value="pagar" :active="activeTab === 'pagar'" class="pagar-btn" @click="$router.push('/pagar')">
+        <v-btn value="pagar" :active="activeTab === 'pagar'" class="pagar-btn" @click="navigateTo('pagar')">
           <div class="pagar-icon-wrapper">
             <v-icon size="28">mdi-credit-card</v-icon>
           </div>
           <span>Pagar</span>
         </v-btn>
 
-        <v-btn value="explorar" :active="activeTab === 'explorar'" @click="$router.push('/explorar')">
+        <v-btn value="explorar" :active="activeTab === 'explorar'" @click="navigateTo('explorar')">
           <v-icon>mdi-store-search</v-icon>
           <span>Explorar</span>
         </v-btn>
 
-        <v-btn value="perfil" :active="activeTab === 'perfil'" @click="$router.push('/perfil')">
+        <v-btn value="perfil" :active="activeTab === 'perfil'" @click="navigateTo('perfil')">
           <v-icon>mdi-account</v-icon>
           <span>Perfil</span>
         </v-btn>
@@ -180,7 +180,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch, computed } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useFinanCash } from '@/composables/useFinanCash'
 import LoginView from '@/views/LoginView.vue'
@@ -202,10 +202,22 @@ const mostrarAyuda = ref(false)
 const tema = ref(localStorage.getItem('financoop_theme') || 'light')
 const scrolled = ref(false)
 
-// Sincronizar tab activo con la ruta actual
+// Tab activo basado en la ruta actual (solo lectura)
 const activeTab = computed(() => {
   return route.meta?.tab || route.name || 'inicio'
 })
+
+// Navegación manual - evita v-model en computed
+const navigateTo = (tab) => {
+  const routes = {
+    inicio: '/',
+    cuotas: '/cuotas',
+    pagar: '/pagar',
+    explorar: '/explorar',
+    perfil: '/perfil'
+  }
+  router.push(routes[tab])
+}
 
 const toggleTema = () => {
   tema.value = tema.value === 'light' ? 'dark' : 'light'
