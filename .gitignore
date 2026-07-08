@@ -1,0 +1,57 @@
+﻿# Reemplaza el .gitignore con este contenido
+@"
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+backend/venv/
+backend/__pycache__/
+*.pyc
+
+# Node.js
+node_modules/
+mobile/node_modules/
+frontend/node_modules/
+**/node_modules/
+
+# Builds
+dist/
+build/
+*.local
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Testing
+coverage/
+.pytest_cache/
+
+# Capacitor
+android/
+ios/
+
+# Otros
+*.tmp
+*.temp
+.cache/
+dev-dist/
+dist-ssr/
+"@ | Out-File -FilePath .gitignore -Encoding utf8
