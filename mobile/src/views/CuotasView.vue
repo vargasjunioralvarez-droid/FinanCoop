@@ -1,8 +1,10 @@
 <template>
   <v-container class="pa-4 cuotas-view">
-    <!-- Header con filtros -->
     <div class="d-flex align-center mb-3">
-      <h2 class="text-h5 font-weight-bold">Todas mis Cuotas</h2>
+      <v-btn icon variant="text" size="small" @click="$router.push('/')">
+        <v-icon>mdi-arrow-left</v-icon>
+      </v-btn>
+      <span class="text-h6 font-weight-medium ml-2">Mis Cuotas</span>
       <v-spacer />
       <v-chip size="small" color="primary" variant="tonal">
         {{ cuotasPendientes.length }} pendientes
@@ -16,7 +18,6 @@
       <v-chip value="pagadas" size="small" variant="outlined" filter color="success">Pagadas</v-chip>
     </v-chip-group>
 
-    <!-- Resumen de deuda -->
     <v-card class="mb-3 resumen-card" elevation="2">
       <v-card-text class="pa-4">
         <div class="d-flex justify-space-between align-center">
@@ -37,7 +38,6 @@
       </v-card-text>
     </v-card>
 
-    <!-- Lista de cuotas -->
     <div v-if="cuotasFiltradas.length === 0" class="text-center py-8">
       <v-icon size="48" color="medium-emphasis" class="mb-2">mdi-inbox-outline</v-icon>
       <div class="text-body-1 text-medium-emphasis">No hay cuotas {{ filtro !== 'todas' ? 'en esta categoría' : '' }}</div>
@@ -45,59 +45,44 @@
 
     <v-card
       v-for="c in cuotasFiltradas"
-      :key="c.cuota_id"
+      :key="c.cuota_id || c.id"
       class="mb-2 cuota-item"
       :class="{ 'cuota-seleccionable': c.estado === 'pendiente' || c.estado === 'conciliando' }"
       elevation="1"
-      @click="(c.estado === 'pendiente' || c.estado === 'conciliando') && $emit('pagar', c)"
+      @click="seleccionarCuota(c)"
     >
       <v-card-text class="pa-3">
         <div class="d-flex align-center">
-          <v-avatar
-            :color="avatarColor(c)"
-            size="40"
-            class="mr-3"
-          >
+          <v-avatar :color="avatarColor(c)" size="40" class="mr-3">
             <v-icon color="white" size="20">{{ avatarIcon(c) }}</v-icon>
           </v-avatar>
-
           <div class="flex-grow-1">
             <div class="d-flex align-center mb-1">
-              <span class="text-body-2 font-weight-medium">{{ c.financiamiento_descripcion }}</span>
-              <v-chip
-                size="x-small"
-                :color="chipColor(c)"
-                variant="tonal"
-                class="ml-2"
-              >
+              <span class="text-body-2 font-weight-medium">{{ c.financiamiento_descripcion || 'Sin descripción' }}</span>
+              <v-chip size="x-small" :color="chipColor(c)" variant="tonal" class="ml-2">
                 {{ chipLabel(c) }}
               </v-chip>
             </div>
             <div class="text-caption text-medium-emphasis">
-              Cuota #{{ c.cuota_numero }} — {{ formatearFecha(c.fecha_vencimiento) }}
+              Cuota #{{ c.cuota_numero || c.numero }} — {{ formatearFecha(c.fecha_vencimiento) }}
             </div>
             <div v-if="c.dias_atraso > 0" class="text-caption text-error">
               {{ c.dias_atraso }} días de mora
             </div>
           </div>
-
           <div class="text-right ml-2">
+            <!-- ✅ MONTO EN BS ACTUALIZADO -->
             <div class="text-h6 font-weight-bold" style="font-variant-numeric: tabular-nums;">
-              BS {{ formatearBS(c.monto_total_bs) }}
+              BS {{ formatearBS(c.monto_total_bs || c.monto_bs) }}
             </div>
+            <!-- ✅ USD SIEMPRE IGUAL -->
             <div class="text-caption text-medium-emphasis">
-              ${{ formatearUSD(c.monto_total_usd_ref) }}
+              ${{ formatearUSD(c.monto_total_usd_ref || c.monto_usd_ref) }}
             </div>
             <div v-if="c.monto_interes_bs > 0" class="text-caption text-error">
               +{{ formatearBS(c.monto_interes_bs) }} mora
             </div>
-            <v-chip
-              v-if="c.puede_pagar"
-              color="success"
-              size="small"
-              class="mt-1"
-              variant="flat"
-            >
+            <v-chip v-if="c.puede_pagar !== false && c.estado !== 'pagada'" color="success" size="small" class="mt-1" variant="flat">
               Pagar
             </v-chip>
           </div>
@@ -105,12 +90,12 @@
       </v-card-text>
     </v-card>
 
-    <!-- Info -->
     <v-card class="mt-3 info-card" variant="outlined">
       <v-card-text class="pa-3 d-flex align-center">
         <v-icon size="18" color="info" class="mr-2">mdi-information-outline</v-icon>
         <div class="text-caption text-medium-emphasis">
-          Los montos en Bs se actualizan según el tipo de cambio. Tu deuda se mantiene en USD.
+          ✅ Los montos en Bs se actualizan automáticamente con el tipo de cambio.<br>
+          💵 Tu deuda se mantiene en DÓLARES (USD) para protegerte de la devaluación.
         </div>
       </v-card-text>
     </v-card>
@@ -119,7 +104,11 @@
 
 <script setup>
 import { ref, computed } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useFinanCash } from '@/composables/useFinanCash'
+
+const router = useRouter()
+const route = useRoute()
 
 const { 
   todasCuotas, 
@@ -130,13 +119,22 @@ const {
   formatearBS,
   formatearUSD,
   formatearNumero,
-  formatearFecha
+  formatearFecha,
+  setCuotaSeleccionada
 } = useFinanCash()
 
 const filtro = ref('todas')
+const financiamientoId = route.query.financiamiento_id
 
 const cuotasFiltradas = computed(() => {
-  let lista = [...todasCuotas.value].sort((a, b) => {
+  let lista = [...todasCuotas.value]
+  
+  // Filtrar por financiamiento si viene en query
+  if (financiamientoId) {
+    lista = lista.filter(c => c.financiamiento_id === Number(financiamientoId))
+  }
+  
+  lista = lista.sort((a, b) => {
     const orden = { vencida: 0, conciliando: 1, pendiente: 2, pagada: 3 }
     const ea = estadoCuota(a)
     const eb = estadoCuota(b)
@@ -210,32 +208,33 @@ function chipLabel(c) {
   }[est]
 }
 
-defineEmits(['pagar'])
+function seleccionarCuota(c) {
+  if (c.estado === 'pagada') {
+    console.log('❌ Esta cuota ya está pagada')
+    return
+  }
+  console.log('✅ Seleccionando cuota:', c)
+  setCuotaSeleccionada(c)
+  router.push('/pagar')
+}
 </script>
 
 <style scoped>
-.cuotas-view {
-  padding-bottom: 80px;
-}
-
+.cuotas-view { padding-bottom: 80px; }
 .resumen-card {
   border-left: 4px solid rgb(var(--v-theme-warning));
   border-radius: 12px;
 }
-
 .cuota-item {
   transition: all 0.2s ease;
   border-left: 3px solid transparent;
   border-radius: 12px;
 }
-.cuota-item.cuota-seleccionable {
-  cursor: pointer;
-}
+.cuota-item.cuota-seleccionable { cursor: pointer; }
 .cuota-item.cuota-seleccionable:hover {
   transform: translateX(4px);
   box-shadow: 0 2px 8px rgba(0,0,0,0.08) !important;
 }
-
 .info-card {
   border-style: dashed;
   opacity: 0.8;

@@ -1,5 +1,6 @@
-from fastapi import FastAPI, Depends, BackgroundTasks, HTTPException, Query
+from fastapi import FastAPI, Depends, BackgroundTasks, HTTPException, Query, File, UploadFile, Form
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, ForeignKey, Text, Enum, Boolean
 from sqlalchemy.orm import sessionmaker, relationship, Session
@@ -8,6 +9,16 @@ from datetime import datetime, timedelta
 import random
 import uuid
 import enum
+import os
+import base64
+from typing import Optional
+
+# ============ TWILIO ============
+from twilio.rest import Client
+from dotenv import load_dotenv
+
+# Cargar variables de entorno
+load_dotenv()
 
 # ============ CONFIGURACIÓN ============
 app = FastAPI(title="FinanCash API", version="4.0")
@@ -21,6 +32,23 @@ app.add_middleware(
 )
 
 Base = declarative_base()
+
+# ============ CONFIGURACIÓN TWILIO ============
+TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID')
+TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
+TWILIO_WHATSAPP_NUMBER = os.getenv('TWILIO_WHATSAPP_NUMBER', 'whatsapp:+14155238886')
+TWILIO_SMS_NUMBER = os.getenv('TWILIO_SMS_NUMBER', '+14155238886')
+
+# Inicializar cliente Twilio
+twilio_client = None
+if TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN:
+    try:
+        twilio_client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+        print("✅ Twilio cliente inicializado")
+    except Exception as e:
+        print(f"❌ Error inicializando Twilio: {e}")
+else:
+    print("⚠️ Twilio no configurado (sin credenciales)")
 
 # ============ ENUMS ============
 class EstadoFinanciamiento(str, enum.Enum):
@@ -50,7 +78,7 @@ class Nivel(str, enum.Enum):
     ORO = "oro"
     PLATINO = "platino"
 
-# ============ NIVELES CONFIG (default, editable desde admin) ============
+# ============ NIVELES CONFIG ============
 NIVELES_CONFIG_DEFAULT = {
     "nuevo": {
         "min_score": 0, "max_score": 2,
@@ -94,7 +122,6 @@ NIVELES_CONFIG_DEFAULT = {
     },
 }
 
-# Variable global que se puede modificar
 NIVELES_CONFIG = dict(NIVELES_CONFIG_DEFAULT)
 
 # ============ MODELOS ============
@@ -143,6 +170,7 @@ class Cliente(Base):
     pin = Column(String(4), nullable=True)
     token_app = Column(String(100), nullable=True)
     ultimo_acceso = Column(DateTime, nullable=True)
+    cedula_foto = Column(Text, nullable=True)
 
 class Financiamiento(Base):
     __tablename__ = "financiamientos"
@@ -244,11 +272,10 @@ class ConfiguracionPago(Base):
     correo_binance = Column(String(100), nullable=True)
 
 # ============ DATABASE ============
-engine = create_engine("postgresql://postgres:TU_PASSWORD@localhost:5432/financash_db")
+engine = create_engine("postgresql://postgres:@localhost:5433/financash_db")
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 def init_niveles_db(db: Session):
-    """Carga niveles en BD si no existen"""
     for nivel_key, config in NIVELES_CONFIG_DEFAULT.items():
         existe = db.query(NivelConfig).filter(NivelConfig.nivel == nivel_key).first()
         if not existe:
@@ -268,7 +295,6 @@ def init_niveles_db(db: Session):
     db.commit()
 
 def get_niveles_config(db: Session):
-    """Obtiene niveles desde BD"""
     global NIVELES_CONFIG
     niveles = db.query(NivelConfig).all()
     if niveles:
@@ -292,7 +318,6 @@ def init_db():
     
     db = SessionLocal()
     
-    # Inicializar niveles
     init_niveles_db(db)
     get_niveles_config(db)
     
@@ -322,6 +347,35 @@ def get_db():
     finally:
         db.close()
 
+# ============ RECALCULAR CUOTAS ============
+def recalcular_cuotas_pendientes(db: Session, nueva_tasa: float):
+    financiamientos = db.query(Financiamiento).filter(
+        Financiamiento.estado == "activo"
+    ).all()
+    
+    recalculados = 0
+    
+    for fin in financiamientos:
+        fin.monto_total_bs = fin.monto_total_usd * nueva_tasa
+        fin.monto_entrada_bs = fin.monto_entrada_usd * nueva_tasa
+        fin.monto_financia_bs = fin.monto_financia_usd * nueva_tasa
+        fin.monto_cuota_bs = fin.monto_cuota_usd * nueva_tasa
+        
+        cuotas = db.query(Cuota).filter(
+            Cuota.financiamiento_id == fin.id,
+            Cuota.estado.in_(["pendiente", "conciliando"])
+        ).all()
+        
+        for c in cuotas:
+            c.monto_base_bs = c.monto_base_usd * nueva_tasa
+            c.monto_interes_mora_bs = c.monto_interes_mora_usd * nueva_tasa
+            c.monto_total_bs = c.monto_total_usd * nueva_tasa
+        
+        recalculados += len(cuotas)
+    
+    db.commit()
+    return recalculados
+
 # ============ UTILIDADES TASA ============
 def obtener_tasa_actual(db: Session):
     tasa = db.query(TasaDolar).order_by(TasaDolar.id.desc()).first()
@@ -331,32 +385,95 @@ def obtener_tasa_actual(db: Session):
         db.commit()
     return tasa.tasa
 
-def recalcular_cuotas_pendientes(db: Session, nueva_tasa: float):
-    financiamientos = db.query(Financiamiento).filter(
-        Financiamiento.estado == "activo"
-    ).all()
+# ============ FUNCIONES TWILIO ============
+
+def enviar_whatsapp(telefono: str, mensaje: str):
+    """Envía mensaje por WhatsApp usando Twilio"""
+    if not twilio_client:
+        print("❌ Twilio no disponible, guardando en log...")
+        return False, "Twilio no disponible"
     
-    recalculados = 0
-    for fin in financiamientos:
-        fin.monto_total_usd = fin.monto_total_bs / nueva_tasa
-        fin.monto_entrada_usd = fin.monto_entrada_bs / nueva_tasa
-        fin.monto_financia_usd = fin.monto_financia_bs / nueva_tasa
-        fin.monto_cuota_usd = fin.monto_cuota_bs / nueva_tasa
+    try:
+        if not telefono.startswith('+'):
+            telefono = '+58' + telefono.lstrip('0')
         
-        cuotas = db.query(Cuota).filter(
-            Cuota.financiamiento_id == fin.id,
-            Cuota.estado.in_(["pendiente", "conciliando"])
-        ).all()
+        message = twilio_client.messages.create(
+            body=mensaje,
+            from_=TWILIO_WHATSAPP_NUMBER,
+            to=f'whatsapp:{telefono}'
+        )
         
-        for c in cuotas:
-            c.monto_base_usd = c.monto_base_bs / nueva_tasa
-            c.monto_interes_mora_usd = c.monto_interes_mora_bs / nueva_tasa
-            c.monto_total_usd = c.monto_total_bs / nueva_tasa
+        print(f"✅ WhatsApp enviado a {telefono}. SID: {message.sid}")
+        return True, message.sid
         
-        recalculados += len(cuotas)
+    except Exception as e:
+        print(f"❌ Error enviando WhatsApp: {e}")
+        return False, str(e)
+
+def enviar_sms(telefono: str, mensaje: str):
+    """Envía mensaje por SMS usando Twilio (fallback)"""
+    if not twilio_client:
+        print("❌ Twilio no disponible, guardando en log...")
+        return False, "Twilio no disponible"
     
-    db.commit()
-    return recalculados
+    try:
+        if not telefono.startswith('+'):
+            telefono = '+58' + telefono.lstrip('0')
+        
+        message = twilio_client.messages.create(
+            body=mensaje,
+            from_=TWILIO_SMS_NUMBER,
+            to=telefono
+        )
+        
+        print(f"✅ SMS enviado a {telefono}. SID: {message.sid}")
+        return True, message.sid
+        
+    except Exception as e:
+        print(f"❌ Error enviando SMS: {e}")
+        return False, str(e)
+
+def enviar_pin_cliente(telefono: str, nombre: str, cedula: str, pin: str):
+    """Envía el PIN al cliente por WhatsApp (con fallback a SMS)"""
+    mensaje = f"""🎉 *¡Bienvenido a FinanCoop, {nombre}!*
+
+🔑 *Tu PIN de acceso es:* {pin}
+
+📋 *Tus datos:*
+🆔 Cédula: {cedula}
+📞 Teléfono: {telefono}
+
+✅ *Próximos pasos:*
+1. Descarga la app FinanCoop
+2. Ingresa con tu cédula y PIN
+3. Comienza a comprar en tiendas afiliadas
+
+⚠️ *Importante:*
+- Tu deuda se mantiene en USD
+- Pagas en Bs al tipo de cambio del día
+- Tienes 3 días de gracia
+
+📱 *¿Dudas?* Visita tu tienda Cecosesola más cercana.
+
+¡Gracias por confiar en FinanCoop! 🚀"""
+    
+    # Intentar WhatsApp primero
+    exito, resultado = enviar_whatsapp(telefono, mensaje)
+    
+    # Si falla, intentar SMS
+    if not exito:
+        print("⚠️ WhatsApp falló, intentando SMS...")
+        mensaje_sms = f"FinanCoop: Tu PIN es {pin}. Usa tu cédula {cedula} para ingresar a la app."
+        exito_sms, _ = enviar_sms(telefono, mensaje_sms)
+        
+        if exito_sms:
+            print("✅ SMS enviado como fallback")
+            return True
+        else:
+            print("❌ Todos los canales fallaron")
+            return False
+    
+    return True
 
 # ============ SCHEMAS ============
 class ClienteCreate(BaseModel):
@@ -443,17 +560,14 @@ def generar_token():
     return str(uuid.uuid4())
 
 def calcular_usado_disponible(cliente_id: int, db: Session):
-    """Calcula cuánto ha usado y cuánto le queda disponible"""
     tasa = obtener_tasa_actual(db)
     
-    # Obtener nivel actual del cliente
     cliente = db.query(Cliente).filter(Cliente.id == cliente_id).first()
     nivel, config = calcular_nivel(cliente.score)
     
     limite_usd = config["monto_max_usd"]
     limite_bs = limite_usd * tasa
     
-    # Sumar financiamientos activos
     activos = db.query(Financiamiento).filter(
         Financiamiento.cliente_id == cliente_id,
         Financiamiento.estado == "activo"
@@ -510,13 +624,15 @@ def actualizar_tasa_manual(tasa_update: TasaUpdate, db: Session = Depends(get_db
     
     recalculados = recalcular_cuotas_pendientes(db, nueva_tasa)
     
+    financiamientos_activos = db.query(Financiamiento).filter(
+        Financiamiento.estado == "activo"
+    ).count()
+    
     return {
-        "mensaje": f"Tasa actualizada a {nueva_tasa} BS/$",
+        "mensaje": f"✅ Tasa actualizada a {nueva_tasa} BS/$",
         "tasa": nueva_tasa,
         "fuente": "manual",
-        "financiamientos_afectados": db.query(Financiamiento).filter(
-            Financiamiento.estado == "activo"
-        ).count(),
+        "financiamientos_afectados": financiamientos_activos,
         "cuotas_recalculadas": recalculados
     }
 
@@ -536,7 +652,6 @@ def historial_tasas(db: Session = Depends(get_db)):
 # ============ API NIVELES CONFIG ============
 @app.get("/config/niveles")
 def obtener_niveles(db: Session = Depends(get_db)):
-    """Obtiene configuración de niveles"""
     niveles = get_niveles_config(db)
     return {
         "niveles": niveles,
@@ -545,7 +660,6 @@ def obtener_niveles(db: Session = Depends(get_db)):
 
 @app.put("/config/niveles/{nivel}")
 def actualizar_nivel(nivel: str, config: NivelConfigUpdate, db: Session = Depends(get_db)):
-    """Actualiza configuración de un nivel"""
     nc = db.query(NivelConfig).filter(NivelConfig.nivel == nivel).first()
     if not nc:
         raise HTTPException(status_code=404, detail="Nivel no encontrado")
@@ -560,47 +674,116 @@ def actualizar_nivel(nivel: str, config: NivelConfigUpdate, db: Session = Depend
     
     db.commit()
     
-    # Recargar en memoria
     get_niveles_config(db)
     
     return {"mensaje": f"Nivel {nivel} actualizado", "config": NIVELES_CONFIG[nivel]}
 
 @app.post("/config/niveles/reset")
 def reset_niveles(db: Session = Depends(get_db)):
-    """Restaura niveles a valores por defecto"""
     db.query(NivelConfig).delete()
     db.commit()
     init_niveles_db(db)
     get_niveles_config(db)
     return {"mensaje": "Niveles restaurados a valores por defecto"}
 
-# ============ API CLIENTES ============
+# ============ API CLIENTES (CORREGIDA) ============
+
 @app.post("/clientes")
-def crear_cliente(cliente: ClienteCreate, db: Session = Depends(get_db)):
-    existe = db.query(Cliente).filter(Cliente.cedula == cliente.cedula).first()
-    if existe:
-        return {"error": "Cliente ya existe", "cliente": existe}
-    
-    db_cliente = Cliente(
-        nombre=cliente.nombre,
-        cedula=cliente.cedula,
-        telefono=cliente.telefono,
-        email=cliente.email,
-        direccion=cliente.direccion,
-        referencia_nombre=cliente.referencia_nombre,
-        referencia_telefono=cliente.referencia_telefono,
-        referencia_parentesco=cliente.referencia_parentesco,
-    )
-    db_cliente.pin = generar_pin()
-    db.add(db_cliente)
-    db.commit()
-    db.refresh(db_cliente)
-    
-    return {
-        "cliente": db_cliente,
-        "pin_generado": db_cliente.pin,
-        "mensaje": "Cliente creado. PIN para app: " + db_cliente.pin
-    }
+async def crear_cliente(
+    nombre: str = Form(...),
+    cedula: str = Form(...),
+    telefono: str = Form(...),
+    email: str = Form(""),
+    direccion: str = Form(""),
+    referencia_nombre: str = Form(""),
+    referencia_telefono: str = Form(""),
+    referencia_parentesco: str = Form(""),
+    cedula_foto: Optional[UploadFile] = File(None),
+    db: Session = Depends(get_db)
+):
+    try:
+        print(f"📝 Registrando cliente: {nombre}, {cedula}")
+        
+        # Verificar si existe
+        existe = db.query(Cliente).filter(Cliente.cedula == cedula).first()
+        if existe:
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "error": f"Cliente con cédula {cedula} ya existe"}
+            )
+        
+        # Crear cliente
+        db_cliente = Cliente(
+            nombre=nombre,
+            cedula=cedula,
+            telefono=telefono,
+            email=email,
+            direccion=direccion,
+            referencia_nombre=referencia_nombre,
+            referencia_telefono=referencia_telefono,
+            referencia_parentesco=referencia_parentesco,
+        )
+        db_cliente.pin = generar_pin()
+        db.add(db_cliente)
+        db.commit()
+        db.refresh(db_cliente)
+        
+        print(f"✅ Cliente creado con ID: {db_cliente.id}, PIN: {db_cliente.pin}")
+        
+        # Procesar foto de cédula (opcional)
+        foto_guardada = False
+        if cedula_foto:
+            try:
+                print(f"📸 Procesando foto: {cedula_foto.filename}")
+                contenido = await cedula_foto.read()
+                foto_base64 = base64.b64encode(contenido).decode('utf-8')
+                db_cliente.cedula_foto = foto_base64
+                db.commit()
+                foto_guardada = True
+                print(f"📸 Foto guardada: {len(contenido)} bytes")
+            except Exception as e:
+                print(f"❌ Error procesando foto: {e}")
+        
+        # ENVIAR PIN POR WHATSAPP/SMS
+        try:
+            enviado = enviar_pin_cliente(
+                telefono=db_cliente.telefono,
+                nombre=db_cliente.nombre,
+                cedula=db_cliente.cedula,
+                pin=db_cliente.pin
+            )
+            
+            if enviado:
+                mensaje_extra = " ✅ PIN enviado por WhatsApp"
+            else:
+                mensaje_extra = " ⚠️ No se pudo enviar el PIN (revisa logs)"
+        except Exception as e:
+            print(f"❌ Error enviando PIN: {e}")
+            mensaje_extra = " ⚠️ Error enviando PIN"
+        
+        return {
+            "success": True,
+            "cliente": {
+                "id": db_cliente.id,
+                "nombre": db_cliente.nombre,
+                "cedula": db_cliente.cedula,
+                "telefono": db_cliente.telefono,
+                "email": db_cliente.email,
+                "direccion": db_cliente.direccion
+            },
+            "pin_generado": db_cliente.pin,
+            "foto_guardada": foto_guardada,
+            "mensaje": f"Cliente creado. PIN para app: {db_cliente.pin}{mensaje_extra}"
+        }
+        
+    except Exception as e:
+        print(f"❌ Error en registro: {e}")
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": str(e)}
+        )
 
 @app.get("/clientes")
 def listar_clientes(db: Session = Depends(get_db)):
@@ -618,7 +801,6 @@ def buscar_cliente_por_cedula(cedula: str, db: Session = Depends(get_db)):
     nivel, config = calcular_nivel(cliente.score)
     tasa = obtener_tasa_actual(db)
     
-    # Calcular límite disponible
     disponible = calcular_usado_disponible(cliente.id, db)
     
     return {
@@ -635,7 +817,7 @@ def buscar_cliente_por_cedula(cedula: str, db: Session = Depends(get_db)):
         "score": cliente.score,
         "nivel": cliente.nivel,
         "total_compras": cliente.total_compras,
-        "limite_disponible": disponible,  # NUEVO
+        "limite_disponible": disponible,
         "nivel_config": {
             "monto_max_usd": config["monto_max_usd"],
             "monto_max_bs": round(config["monto_max_usd"] * tasa, 2),
@@ -712,7 +894,6 @@ def estado_cuenta_cliente(id: int, db: Session = Depends(get_db)):
     elif len(cuotas_vencidas) >= 1:
         riesgo = "medio"
     
-    # Límite disponible
     disponible = calcular_usado_disponible(id, db)
     
     return {
@@ -752,7 +933,6 @@ def propuesta_financiamiento(
     actualizar_score_cliente(cliente, db)
     nivel, config = calcular_nivel(cliente.score)
     
-    # Validar límite disponible
     disponible = calcular_usado_disponible(id, db)
     monto_total_usd = monto_total_bs / tasa
     
@@ -774,7 +954,6 @@ def propuesta_financiamiento(
             "mensaje": f"Solo puede financiar hasta ${disponible['disponible_usd']:.2f} USD más (BS {disponible['disponible_bs']:.2f})"
         }
     
-    # Validar monto máximo del nivel
     if monto_total_usd > config["monto_max_usd"]:
         return {
             "error": "Monto excede el límite del nivel",
@@ -845,7 +1024,6 @@ def crear_financiamiento(f: FinanciamientoCreate, db: Session = Depends(get_db))
     if not cliente:
         return {"error": "Cliente no encontrado"}
     
-    # Verificar deudas vencidas
     hoy = datetime.now()
     deudas_vencidas = db.query(Cuota).join(Financiamiento).filter(
         Financiamiento.cliente_id == f.cliente_id,
@@ -860,7 +1038,6 @@ def crear_financiamiento(f: FinanciamientoCreate, db: Session = Depends(get_db))
             "deudas_vencidas": deudas_vencidas
         }
     
-    # Verificar límite disponible
     disponible = calcular_usado_disponible(f.cliente_id, db)
     if not disponible["puede_comprar"]:
         return {
@@ -1211,6 +1388,7 @@ def pagar_cuota_efectivo(id: int, db: Session = Depends(get_db)):
     }
 
 # ============ API APP MÓVIL ============
+
 @app.post("/app/login")
 def login_app(login: LoginApp, db: Session = Depends(get_db)):
     cliente = db.query(Cliente).filter(Cliente.cedula == login.cedula).first()
@@ -1220,22 +1398,31 @@ def login_app(login: LoginApp, db: Session = Depends(get_db)):
     if cliente.pin != login.pin:
         return {"error": "PIN incorrecto"}
     
-    cliente.token_app = generar_token()
+    nuevo_token = generar_token()
+    cliente.token_app = nuevo_token
     cliente.ultimo_acceso = datetime.now()
     db.commit()
+    db.refresh(cliente)
     
     return {
-        "token": cliente.token_app,
+        "success": True,
+        "token": nuevo_token,
         "cliente": {
             "id": cliente.id,
             "nombre": cliente.nombre,
+            "cedula": cliente.cedula,
             "nivel": cliente.nivel,
-            "score": cliente.score
+            "score": cliente.score,
+            "telefono": cliente.telefono,
+            "email": cliente.email
         }
     }
 
 @app.get("/app/mis-datos")
 def mis_datos(token: str, db: Session = Depends(get_db)):
+    if not token:
+        return {"error": "Token no proporcionado"}
+    
     cliente = db.query(Cliente).filter(Cliente.token_app == token).first()
     if not cliente:
         return {"error": "Sesión no válida"}
@@ -1249,25 +1436,31 @@ def mis_datos(token: str, db: Session = Depends(get_db)):
     ).all()
     
     financiamientos_data = []
+    total_deuda_bs = 0
+    total_deuda_usd = 0
+    
     for fin in activos:
         cuotas = db.query(Cuota).filter(Cuota.financiamiento_id == fin.id).all()
         
         cuotas_pendientes = [c for c in cuotas if c.estado in ["pendiente", "conciliando"]]
-        cuotas_atrasadas = [c for c in cuotas if c.estado == "pendiente" and datetime.now() > c.fecha_vencimiento]
+        cuotas_pagadas = [c for c in cuotas if c.estado == "pagada"]
+        
+        saldo_pendiente_bs = sum(c.monto_total_bs for c in cuotas_pendientes)
+        saldo_pendiente_usd = sum(c.monto_total_usd for c in cuotas_pendientes)
+        
+        total_deuda_bs += saldo_pendiente_bs
+        total_deuda_usd += saldo_pendiente_usd
         
         proxima_cuota = None
         if cuotas_pendientes:
             proxima = cuotas_pendientes[0]
-            dias_para_vencer = (proxima.fecha_vencimiento - datetime.now()).days if proxima.fecha_vencimiento else 0
-            
             proxima_cuota = {
                 "id": proxima.id,
                 "numero": proxima.numero,
                 "monto_bs": round(proxima.monto_total_bs, 2),
                 "monto_usd_ref": round(proxima.monto_total_usd, 2),
                 "fecha_vencimiento": proxima.fecha_vencimiento.isoformat() if proxima.fecha_vencimiento else None,
-                "dias_para_vencer": max(0, dias_para_vencer),
-                "estado": proxima.estado
+                "puede_pagar": True
             }
         
         financiamientos_data.append({
@@ -1278,16 +1471,14 @@ def mis_datos(token: str, db: Session = Depends(get_db)):
             "monto_total_usd_ref": round(fin.monto_total_usd, 2),
             "monto_entrada_bs": round(fin.monto_entrada_bs, 2),
             "monto_entrada_usd_ref": round(fin.monto_entrada_usd, 2),
-            "cuotas_total": fin.cuotas_aprobadas,
-            "cuotas_pagadas": len([c for c in cuotas if c.estado == "pagada"]),
+            "cuotas_pagadas": len(cuotas_pagadas),
             "cuotas_pendientes": len(cuotas_pendientes),
-            "cuotas_atrasadas": len(cuotas_atrasadas),
-            "proxima_cuota": proxima_cuota,
-            "saldo_pendiente_bs": round(sum(c.monto_total_bs for c in cuotas_pendientes), 2),
-            "saldo_pendiente_usd_ref": round(sum(c.monto_total_usd for c in cuotas_pendientes), 2)
+            "cuotas_total": len(cuotas),
+            "cuotas_atrasadas": len([c for c in cuotas_pendientes if c.fecha_vencimiento and c.fecha_vencimiento < datetime.now()]),
+            "saldo_pendiente_bs": round(saldo_pendiente_bs, 2),
+            "saldo_pendiente_usd_ref": round(saldo_pendiente_usd, 2),
+            "proxima_cuota": proxima_cuota
         })
-    
-    config = db.query(ConfiguracionPago).first()
     
     return {
         "cliente": {
@@ -1296,30 +1487,32 @@ def mis_datos(token: str, db: Session = Depends(get_db)):
             "cedula": cliente.cedula,
             "nivel": cliente.nivel,
             "score": cliente.score,
-            "telefono": cliente.telefono
+            "telefono": cliente.telefono,
+            "email": cliente.email
         },
         "limite": disponible,
         "tasa_actual": tasa,
         "financiamientos_activos": financiamientos_data,
-        "total_deuda_bs": round(sum(f["saldo_pendiente_bs"] for f in financiamientos_data), 2),
-        "total_deuda_usd_ref": round(sum(f["saldo_pendiente_usd_ref"] for f in financiamientos_data), 2),
+        "total_deuda_bs": round(total_deuda_bs, 2),
+        "total_deuda_usd_ref": round(total_deuda_usd, 2),
         "datos_pago": {
             "pago_movil": {
-                "banco": config.banco_pago_movil if config else "",
-                "telefono": config.telefono_pago_movil if config else "",
-                "cedula": config.cedula_pago_movil if config else ""
+                "banco": "Banco de Venezuela",
+                "telefono": "0412-1234567",
+                "cedula": "V-12345678"
             },
             "transferencia": {
-                "banco": config.banco_transferencia if config else "",
-                "cuenta": config.cuenta_transferencia if config else ""
-            },
-            "zelle": config.correo_zelle if config else None,
-            "binance": config.correo_binance if config else None
+                "banco": "Banco Mercantil",
+                "cuenta": "0105-1234-56-1234567890"
+            }
         }
     }
 
 @app.get("/app/mis-cuotas")
 def mis_cuotas(token: str, db: Session = Depends(get_db)):
+    if not token:
+        return {"error": "Token no proporcionado"}
+    
     cliente = db.query(Cliente).filter(Cliente.token_app == token).first()
     if not cliente:
         return {"error": "Sesión no válida"}
@@ -1355,7 +1548,7 @@ def mis_cuotas(token: str, db: Session = Depends(get_db)):
                 "fecha_vencimiento": c.fecha_vencimiento.isoformat() if c.fecha_vencimiento else None,
                 "estado": c.estado,
                 "dias_atraso": dias_atraso,
-                "puede_pagar": c.estado == "pendiente"
+                "puede_pagar": c.estado == "pendiente" or c.estado == "conciliando"
             })
     
     return {

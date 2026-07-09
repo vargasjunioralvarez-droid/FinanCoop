@@ -37,6 +37,8 @@ class Cliente(Base):
     referencia_nombre = Column(String(100), default="")
     referencia_telefono = Column(String(20), default="")
     referencia_parentesco = Column(String(30), default="")
+    foto_cedula = Column(String(200), nullable=True)  # Ruta de la foto de cédula
+
     
     score = Column(Integer, default=0)
     nivel = Column(String(20), default="nuevo")

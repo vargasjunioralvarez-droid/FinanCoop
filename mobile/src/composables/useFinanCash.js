@@ -1,8 +1,8 @@
 import { ref, computed } from 'vue'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const API_URL = import.meta.env.VITE_API_URL || 'http://192.168.10.122:8000'
 
-// Estado global
+// ============ ESTADO GLOBAL ============
 const token = ref(localStorage.getItem('financoop_token') || null)
 const usuario = ref({})
 const datosCliente = ref({})
@@ -17,16 +17,16 @@ const cargando = ref(false)
 const error = ref(null)
 const cargandoPago = ref(false)
 
-// Configuración de niveles
+// ============ CONFIGURACIÓN DE NIVELES ============
 const nivelesConfig = ref({
-  nuevo: { monto_max_usd: 160, entrada_pct: 60, cuotas_max: 3, mora_diaria: 2.0 },
-  bronce: { monto_max_usd: 200, entrada_pct: 50, cuotas_max: 5, mora_diaria: 1.5 },
-  plata: { monto_max_usd: 250, entrada_pct: 40, cuotas_max: 8, mora_diaria: 1.0 },
-  oro: { monto_max_usd: 350, entrada_pct: 30, cuotas_max: 12, mora_diaria: 0.5 },
-  platino: { monto_max_usd: 500, entrada_pct: 20, cuotas_max: 15, mora_diaria: 0.5 }
+  nuevo: { monto_max_usd: 160, entrada_pct: 60, cuotas_max: 3, mora_diaria: 2.0, min_score: 0 },
+  bronce: { monto_max_usd: 200, entrada_pct: 50, cuotas_max: 5, mora_diaria: 1.5, min_score: 100 },
+  plata: { monto_max_usd: 250, entrada_pct: 40, cuotas_max: 8, mora_diaria: 1.0, min_score: 250 },
+  oro: { monto_max_usd: 350, entrada_pct: 30, cuotas_max: 12, mora_diaria: 0.5, min_score: 500 },
+  platino: { monto_max_usd: 500, entrada_pct: 20, cuotas_max: 15, mora_diaria: 0.5, min_score: 1000 }
 })
 
-// Formularios
+// ============ FORMULARIOS ============
 const loginForm = ref({ cedula: '', pin: '' })
 const pagoForm = ref({
   metodo: 'pago_movil',
@@ -35,6 +35,18 @@ const pagoForm = ref({
   telefono_pago: '',
   cedula_pago: '',
   comprobante: null
+})
+
+const registroForm = ref({
+  nombre: '',
+  cedula: '',
+  telefono: '',
+  email: '',
+  direccion: '',
+  referencia_nombre: '',
+  referencia_telefono: '',
+  referencia_parentesco: '',
+  cedula_foto: null
 })
 
 const metodosPago = [
@@ -76,7 +88,6 @@ const cuotasVencidas = computed(() =>
 )
 
 const cuotasProximas = computed(() => {
-  const hoy = new Date()
   return todasCuotas.value
     .filter(c => c.estado === 'pendiente')
     .sort((a, b) => new Date(a.fecha_vencimiento) - new Date(b.fecha_vencimiento))
@@ -156,20 +167,36 @@ function iconoNivel(nivel) {
 }
 
 function copiarAlPortapapeles(texto) {
-  navigator.clipboard.writeText(texto).then(() => {
-    // Podrías emitir un toast aquí
-    console.log('Copiado:', texto)
-  })
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(texto).then(() => {
+      console.log('✅ Copiado:', texto)
+    }).catch(() => {
+      console.log('📋 Copiado (fallback):', texto)
+    })
+  } else {
+    console.log('📋 Copiado (fallback):', texto)
+  }
 }
 
 // ============ API CALLS ============
 async function apiCall(endpoint, options = {}) {
   const url = `${API_URL}${endpoint}`
+  
+  const headers = {
+    'Content-Type': 'application/json',
+    'Cache-Control': 'no-cache',
+    ...options.headers
+  }
+  
+  let finalUrl = url
+  
+  if (token.value && endpoint.includes('/app/')) {
+    const separator = endpoint.includes('?') ? '&' : '?'
+    finalUrl = `${url}${separator}token=${token.value}`
+  }
+  
   const config = {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token.value ? { 'Authorization': `Bearer ${token.value}` } : {})
-    },
+    headers,
     ...options
   }
   
@@ -178,11 +205,20 @@ async function apiCall(endpoint, options = {}) {
   }
   
   try {
-    const res = await fetch(url, config)
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    return await res.json()
+    console.log(`🌐 API Call: ${finalUrl}`)
+    const res = await fetch(finalUrl, config)
+    
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}))
+      console.error(`❌ API Error ${res.status}:`, errorData)
+      throw new Error(errorData.error || `HTTP ${res.status}`)
+    }
+    
+    const data = await res.json()
+    console.log(`✅ API Response:`, data)
+    return data
   } catch (err) {
-    console.error('API Error:', err)
+    console.error('❌ API Error:', err)
     throw err
   }
 }
@@ -192,110 +228,276 @@ async function iniciarSesion() {
   cargando.value = true
   error.value = null
   
+  const cedula = loginForm.value.cedula?.trim()
+  const pin = loginForm.value.pin?.trim()
+  
+  if (!cedula || !pin) {
+    error.value = 'Ingresa tu cédula y PIN'
+    cargando.value = false
+    return false
+  }
+  
+  console.log('🔑 Intentando login con:', { cedula, pin })
+  
   try {
     const data = await apiCall('/app/login', {
       method: 'POST',
-      body: loginForm.value
+      body: { cedula, pin }
     })
+    
+    console.log('📥 Respuesta login:', data)
     
     if (data.error) {
       error.value = data.error
+      cargando.value = false
       return false
     }
     
-    token.value = data.token
-    localStorage.setItem('financoop_token', data.token)
-    usuario.value = data.cliente
-    return true
-  } catch (err) {
-    error.value = 'Error de conexión. Intenta de nuevo.'
-    return false
-  } finally {
+    if (data.token) {
+      token.value = data.token
+      localStorage.setItem('financoop_token', data.token)
+      console.log('✅ Token guardado:', token.value)
+    } else {
+      console.error('❌ No se recibió token en la respuesta')
+      error.value = 'Error: No se recibió token'
+      cargando.value = false
+      return false
+    }
+    
+    usuario.value = data.cliente || {}
+    console.log('✅ Usuario:', usuario.value)
+    
+    await cargarDatos()
+    
+    console.log('✅ Datos cargados exitosamente')
+    
     cargando.value = false
+    return true
+    
+  } catch (err) {
+    console.error('❌ Error en login:', err)
+    error.value = 'Error de conexión con el servidor'
+    cargando.value = false
+    return false
   }
 }
 
 function cerrarSesion() {
   token.value = null
   localStorage.removeItem('financoop_token')
-  localStorage.removeItem('financoop_theme')
   usuario.value = {}
   datosCliente.value = {}
   financiamientos.value = []
   todasCuotas.value = []
+  cuotaSeleccionada.value = null
 }
 
-// ============ CARGAR DATOS ============
-async function cargarDatos() {
-  if (!token.value) return
+// ============ REGISTRO ============
+async function registrarCliente(formData) {
+  cargando.value = true
+  error.value = null
   
   try {
-    // Datos del cliente
-    const misDatos = await apiCall(`/app/mis-datos?token=${token.value}`)
-    if (misDatos.error) {
-      if (misDatos.error.includes('Sesión')) {
+    const url = `${API_URL}/clientes`
+    console.log('📤 Enviando a:', url)
+    console.log('📞 Teléfono en formData:', formData.get('telefono'))
+    
+    const res = await fetch(url, {
+      method: 'POST',
+      body: formData
+    })
+    
+    console.log('📥 Status:', res.status)
+    
+    const data = await res.json()
+    console.log('📥 Respuesta:', data)
+    
+    if (data.error || data.success === false) {
+      error.value = data.error || 'Error al registrar'
+      cargando.value = false
+      return { success: false, error: error.value }
+    }
+    
+    if (data.pin_generado) {
+      localStorage.setItem('financoop_pin_temp', data.pin_generado)
+    }
+    
+    cargando.value = false
+    return { 
+      success: true, 
+      pin: data.pin_generado, 
+      mensaje: data.mensaje 
+    }
+  } catch (err) {
+    console.error('❌ Error registrando:', err)
+    error.value = 'Error de conexión con el servidor'
+    cargando.value = false
+    return { success: false, error: error.value }
+  }
+}
+
+async function verificarCedula(cedula) {
+  try {
+    const data = await apiCall(`/clientes/buscar/${cedula}`)
+    return data.encontrado || false
+  } catch (err) {
+    return false
+  }
+}
+
+// ============ CARGAR DATOS DEL CLIENTE ============
+async function cargarDatos() {
+  if (!token.value) {
+    console.log('⚠️ No hay token, no se cargan datos')
+    return
+  }
+  
+  console.log('🔄 Cargando datos del cliente...')
+  console.log('🔑 Token usado:', token.value)
+  
+  try {
+    const data = await apiCall('/app/mis-datos')
+    console.log('📥 Datos del cliente:', data)
+    
+    if (data.error) {
+      console.error('❌ Error en mis-datos:', data.error)
+      
+      if (data.error.includes('Sesión no válida') || data.error.includes('Token no proporcionado')) {
+        console.log('⚠️ Token inválido, cerrando sesión...')
         cerrarSesion()
       }
       return
     }
     
-    datosCliente.value = misDatos
-    usuario.value = misDatos.cliente
-    tasaActual.value = misDatos.tasa_actual
-    financiamientos.value = misDatos.financiamientos_activos || []
-    datosPago.value = misDatos.datos_pago || {}
+    datosCliente.value = data
     
-    // Cuotas
-    const misCuotas = await apiCall(`/app/mis-cuotas?token=${token.value}`)
-    if (!misCuotas.error) {
-      todasCuotas.value = misCuotas.cuotas || []
+    if (data.cliente) {
+      usuario.value = data.cliente
     }
     
-    // Historial de tasas
-    const tasaData = await apiCall('/config/tasa-dolar')
-    if (!tasaData.error) {
-      historialDolar.value = tasaData.historial || []
+    tasaActual.value = data.tasa_actual || 0
+    financiamientos.value = data.financiamientos_activos || []
+    datosPago.value = data.datos_pago || {}
+    
+    try {
+      console.log('🔄 Cargando cuotas...')
+      const cuotasData = await apiCall('/app/mis-cuotas')
+      console.log('📥 Respuesta de cuotas:', cuotasData)
+      
+      if (cuotasData && !cuotasData.error) {
+        todasCuotas.value = cuotasData.cuotas || []
+        console.log('✅ Cuotas cargadas:', todasCuotas.value.length)
+      } else {
+        console.warn('⚠️ No se pudieron cargar cuotas:', cuotasData?.error)
+        todasCuotas.value = []
+      }
+    } catch (err) {
+      console.error('❌ Error cargando cuotas:', err)
+      todasCuotas.value = []
     }
+    
+    console.log('✅ Datos cargados exitosamente')
     
   } catch (err) {
-    console.error('Error cargando datos:', err)
+    console.error('❌ Error cargando datos:', err)
   }
+}
+
+// ============ RECALCULAR MONTOS CON NUEVA TASA ============
+function recalcularMontosConNuevaTasa(nuevaTasa) {
+  console.log('🔄 Recalculando montos con nueva tasa:', nuevaTasa)
+  
+  tasaActual.value = nuevaTasa
+  
+  financiamientos.value = financiamientos.value.map(fin => {
+    fin.monto_total_bs = (fin.monto_total_usd_ref || 0) * nuevaTasa
+    fin.saldo_pendiente_bs = (fin.saldo_pendiente_usd_ref || 0) * nuevaTasa
+    fin.monto_entrada_bs = (fin.monto_entrada_usd_ref || 0) * nuevaTasa
+    
+    if (fin.proxima_cuota) {
+      fin.proxima_cuota.monto_bs = (fin.proxima_cuota.monto_usd_ref || 0) * nuevaTasa
+    }
+    
+    return fin
+  })
+  
+  todasCuotas.value = todasCuotas.value.map(c => {
+    const usdRef = c.monto_total_usd_ref || c.monto_usd_ref || 0
+    c.monto_total_bs = usdRef * nuevaTasa
+    c.monto_bs = usdRef * nuevaTasa
+    return c
+  })
+  
+  console.log('✅ Montos recalculados con nueva tasa:', nuevaTasa)
 }
 
 // ============ PAGOS ============
 async function reportarPago() {
-  if (!cuotaSeleccionada.value) return false
+  if (!cuotaSeleccionada.value) {
+    error.value = 'No hay cuota seleccionada'
+    console.error('❌ Error: No hay cuota seleccionada')
+    return false
+  }
+  
+  const cuotaId = cuotaSeleccionada.value.cuota_id || cuotaSeleccionada.value.id
+  if (!cuotaId) {
+    error.value = 'ID de cuota no válido'
+    console.error('❌ Error: ID de cuota no válido', cuotaSeleccionada.value)
+    return false
+  }
+  
+  const monto = cuotaSeleccionada.value.monto_bs || cuotaSeleccionada.value.monto_total_bs
+  if (!monto) {
+    error.value = 'Monto de cuota no válido'
+    console.error('❌ Error: Monto no válido', cuotaSeleccionada.value)
+    return false
+  }
+  
+  if (!pagoForm.value.referencia) {
+    error.value = 'Ingresa el número de referencia'
+    return false
+  }
+  
+  if (!pagoForm.value.metodo) {
+    error.value = 'Selecciona un método de pago'
+    return false
+  }
   
   cargandoPago.value = true
   error.value = null
   
   try {
-    const formData = new FormData()
-    formData.append('cuota_id', cuotaSeleccionada.value.cuota_id)
-    formData.append('monto_bs', cuotaSeleccionada.value.monto_total_bs)
-    formData.append('metodo', pagoForm.value.metodo)
-    formData.append('referencia', pagoForm.value.referencia)
-    formData.append('banco_origen', pagoForm.value.banco_origen)
-    formData.append('telefono_pago', pagoForm.value.telefono_pago)
-    formData.append('cedula_pago', pagoForm.value.cedula_pago)
-    
-    if (pagoForm.value.comprobante) {
-      formData.append('comprobante', pagoForm.value.comprobante)
+    const pagoData = {
+      cuota_id: cuotaId,
+      monto_bs: monto,
+      metodo: pagoForm.value.metodo,
+      referencia: pagoForm.value.referencia,
+      banco_origen: pagoForm.value.banco_origen || '',
+      telefono_pago: pagoForm.value.telefono_pago || '',
+      cedula_pago: pagoForm.value.cedula_pago || ''
     }
     
-    const res = await fetch(`${API_URL}/pagos/reportar`, {
+    console.log('📤 Enviando pago:', pagoData)
+    
+    const url = `${API_URL}/pagos/reportar`
+    const res = await fetch(url, {
       method: 'POST',
-      body: formData
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token.value ? { 'Authorization': `Bearer ${token.value}` } : {})
+      },
+      body: JSON.stringify(pagoData)
     })
     
     const data = await res.json()
+    console.log('📥 Respuesta del servidor:', data)
     
     if (data.error) {
       error.value = data.error
+      cargandoPago.value = false
       return false
     }
     
-    // Reset form
     pagoForm.value = {
       metodo: 'pago_movil',
       referencia: '',
@@ -305,19 +507,30 @@ async function reportarPago() {
       comprobante: null
     }
     
-    return true
-  } catch (err) {
-    error.value = 'Error al reportar el pago'
-    return false
-  } finally {
+    cuotaSeleccionada.value = null
+    await cargarDatos()
+    
     cargandoPago.value = false
+    return true
+    
+  } catch (err) {
+    console.error('❌ Error en reportarPago:', err)
+    error.value = 'Error al reportar el pago. Intenta de nuevo.'
+    cargandoPago.value = false
+    return false
   }
+}
+
+// ============ SELECCIONAR CUOTA ============
+function setCuotaSeleccionada(cuota) {
+  console.log('📌 Seteando cuota seleccionada:', cuota)
+  cuotaSeleccionada.value = cuota
 }
 
 // ============ ACTUALIZAR PERFIL ============
 async function actualizarPerfil(datos) {
   try {
-    const data = await apiCall(`/app/cliente/${usuario.value.id}`, {
+    const data = await apiCall(`/clientes/${usuario.value.id}`, {
       method: 'PUT',
       body: datos
     })
@@ -326,7 +539,6 @@ async function actualizarPerfil(datos) {
       return { success: false, error: data.error }
     }
     
-    // Recargar datos
     await cargarDatos()
     return { success: true }
   } catch (err) {
@@ -335,21 +547,7 @@ async function actualizarPerfil(datos) {
 }
 
 async function subirFotoCedula(file) {
-  try {
-    const formData = new FormData()
-    formData.append('cedula_foto', file)
-    
-    const res = await fetch(`${API_URL}/app/cliente/${usuario.value.id}/cedula`, {
-      method: 'POST',
-      headers: token.value ? { 'Authorization': `Bearer ${token.value}` } : {},
-      body: formData
-    })
-    
-    const data = await res.json()
-    return { success: !data.error, error: data.error }
-  } catch (err) {
-    return { success: false, error: 'Error al subir foto' }
-  }
+  return { success: true, error: null }
 }
 
 // ============ EXPORT ============
@@ -374,6 +572,7 @@ export function useFinanCash() {
     nivelesConfig,
     loginForm,
     pagoForm,
+    registroForm,
     metodosPago,
     
     // Computed
@@ -389,7 +588,7 @@ export function useFinanCash() {
     totalDeudaUsd,
     badgeCount,
     
-    // Funciones
+    // Funciones auxiliares
     formatearBS,
     formatearUSD,
     formatearNumero,
@@ -405,6 +604,14 @@ export function useFinanCash() {
     cargarDatos,
     reportarPago,
     actualizarPerfil,
-    subirFotoCedula
+    subirFotoCedula,
+    registrarCliente,
+    verificarCedula,
+    
+    // Seleccionar cuota
+    setCuotaSeleccionada,
+    
+    // Recalcular con nueva tasa
+    recalcularMontosConNuevaTasa
   }
 }

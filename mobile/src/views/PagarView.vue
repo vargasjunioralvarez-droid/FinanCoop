@@ -1,55 +1,53 @@
 <template>
   <v-container class="pa-4 pagar-view">
     <div class="d-flex align-center mb-4">
-      <v-btn icon variant="text" size="small" @click="$router.push('/')">
+      <v-btn icon variant="text" size="small" @click="volver">
         <v-icon>mdi-arrow-left</v-icon>
       </v-btn>
       <span class="text-h6 font-weight-medium ml-2">Realizar Pago</span>
     </div>
 
-    <!-- Si no hay cuota seleccionada -->
     <v-card v-if="!cuotaSeleccionada" class="pa-4 text-center" elevation="4">
       <v-icon size="64" color="medium-emphasis" class="mb-4">mdi-credit-card-off</v-icon>
       <h3 class="text-h6 mb-2">No hay cuota seleccionada</h3>
       <p class="text-body-2 text-medium-emphasis mb-4">Selecciona una cuota desde "Inicio" o "Cuotas"</p>
-      <v-btn color="primary" rounded="pill" @click="$router.push('/cuotas')">
+      <v-btn color="primary" rounded="pill" @click="volver">
         <v-icon start>mdi-calendar-clock</v-icon>
         Ver mis Cuotas
       </v-btn>
     </v-card>
 
-    <!-- Formulario de pago -->
     <v-card v-else class="pa-4" elevation="4">
       <v-card-title class="px-0 pt-0">
         <div class="d-flex align-center">
           <v-icon color="success" size="32" class="mr-3">mdi-credit-card-check</v-icon>
           <div>
             <div class="text-h6 font-weight-bold">Pagar Cuota #{{ cuotaSeleccionada.cuota_numero || cuotaSeleccionada.numero }}</div>
-            <div class="text-caption text-medium-emphasis">{{ cuotaSeleccionada.financiamiento_descripcion || cuotaSeleccionada.descripcion || 'Cuota pendiente' }}</div>
+            <div class="text-caption text-medium-emphasis">{{ cuotaSeleccionada.financiamiento_descripcion || 'Cuota pendiente' }}</div>
           </div>
         </div>
       </v-card-title>
 
       <v-divider class="my-4"></v-divider>
 
-      <!-- Monto -->
       <div class="text-center mb-4">
         <div class="text-caption text-medium-emphasis">Monto a Pagar</div>
+        <!-- ✅ MONTO EN BS ACTUALIZADO -->
         <div class="text-h3 font-weight-bold text-primary" style="font-variant-numeric: tabular-nums;">
           BS {{ formatearBS(cuotaSeleccionada.monto_bs || cuotaSeleccionada.monto_total_bs) }}
         </div>
+        <!-- ✅ USD SIEMPRE IGUAL -->
         <div class="text-caption text-medium-emphasis mt-1">
           Ref: ${{ formatearUSD(cuotaSeleccionada.monto_usd_ref || cuotaSeleccionada.monto_total_usd_ref) }}
         </div>
         <div class="text-caption text-medium-emphasis">Tasa: {{ tasaActual }} Bs/$</div>
-        <div v-if="cuotaSeleccionada.monto_interes_bs > 0" class="text-caption text-error mt-1">
+        <div v-if="(cuotaSeleccionada.monto_interes_bs || 0) > 0" class="text-caption text-error mt-1">
           +{{ formatearBS(cuotaSeleccionada.monto_interes_bs) }} Bs de mora
         </div>
       </div>
 
       <v-divider class="my-4"></v-divider>
 
-      <!-- Método de pago -->
       <div class="text-subtitle-2 font-weight-medium mb-2">Método de pago</div>
       <v-card class="mb-4" elevation="1">
         <v-list density="compact">
@@ -73,7 +71,6 @@
         </v-list>
       </v-card>
 
-      <!-- Datos bancarios según método -->
       <v-card v-if="datosBancariosMetodo" class="mb-4 datos-banco" variant="outlined">
         <v-card-text class="pa-3">
           <div class="text-caption text-medium-emphasis mb-2 font-weight-medium">Datos para transferir:</div>
@@ -89,15 +86,15 @@
         </v-card-text>
       </v-card>
 
-      <!-- Formulario -->
       <v-text-field
         v-model="pagoForm.referencia"
-        label="Número de Referencia"
+        label="Número de Referencia *"
         placeholder="Últimos 4 dígitos del comprobante"
         prepend-inner-icon="mdi-numeric"
         variant="outlined"
         class="mb-3"
         hide-details
+        :rules="[v => !!v || 'Requerido']"
       ></v-text-field>
 
       <v-text-field
@@ -150,12 +147,7 @@
         Reportar Pago
       </v-btn>
 
-      <v-btn 
-        variant="text" 
-        block 
-        class="mt-2"
-        @click="$router.push('/cuotas')"
-      >
+      <v-btn variant="text" block class="mt-2" @click="cancelarPago">
         Cancelar
       </v-btn>
     </v-card>
@@ -163,7 +155,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useFinanCash } from '@/composables/useFinanCash'
 
@@ -180,12 +172,17 @@ const {
   formatearBS, 
   formatearUSD,
   reportarPago,
-  copiarAlPortapapeles
+  copiarAlPortapapeles,
+  setCuotaSeleccionada
 } = useFinanCash()
+
+onMounted(() => {
+  console.log('📋 PagarView montado')
+  console.log('📋 Cuota seleccionada:', cuotaSeleccionada.value)
+})
 
 const datosBancariosMetodo = computed(() => {
   if (!datosPago.value || !pagoForm.value.metodo) return null
-
   const config = datosPago.value
   switch (pagoForm.value.metodo) {
     case 'pago_movil':
@@ -219,18 +216,31 @@ function metodoIcono(metodo) {
 }
 
 const handlePago = async () => {
+  console.log('🔄 Iniciando pago...')
+  console.log('📋 Cuota seleccionada:', cuotaSeleccionada.value)
+  console.log('📋 Formulario:', pagoForm.value)
+  
   const success = await reportarPago()
+  console.log('✅ Resultado:', success)
+  
   if (success) {
+    console.log('✅ Pago exitoso, redirigiendo...')
     router.push('/')
   }
+}
+
+const volver = () => {
+  router.push('/cuotas')
+}
+
+const cancelarPago = () => {
+  setCuotaSeleccionada(null)
+  router.push('/cuotas')
 }
 </script>
 
 <style scoped>
-.pagar-view {
-  padding-bottom: 80px;
-}
-
+.pagar-view { padding-bottom: 80px; }
 .datos-banco {
   border-style: dashed;
   border-radius: 12px;

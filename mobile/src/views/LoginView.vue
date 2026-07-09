@@ -66,6 +66,19 @@
           Ingresar
         </v-btn>
 
+        <v-btn 
+          color="warning"
+          block 
+          size="large"
+          class="mt-4 btn-registro"
+          elevation="2"
+          rounded="pill"
+          @click="irARegistro"
+        >
+          <v-icon start size="18">mdi-account-plus</v-icon>
+          ¿No tienes cuenta? Regístrate
+        </v-btn>
+
         <div class="text-center mt-6">
           <p class="text-caption text-grey">
             ¿No tienes PIN? Solicítalo en tu tienda afiliada
@@ -81,15 +94,33 @@
 </template>
 
 <script setup>
+import { useRouter } from 'vue-router'
 import { useFinanCash } from '@/composables/useFinanCash'
 
 const { loginForm, error, cargando, iniciarSesion } = useFinanCash()
-
-const emit = defineEmits(['login-success'])
+const router = useRouter()
 
 const handleLogin = async () => {
-  const success = await iniciarSesion()
-  if (success) emit('login-success')
+  console.log('🔑 Intentando login...')
+  
+  try {
+    const success = await iniciarSesion()
+    console.log('✅ Resultado login:', success)
+    
+    if (success) {
+      console.log('✅ Login exitoso, navegando a /inicio...')
+      // ✅ NAVEGACIÓN DIRECTA - no dependemos del v-if de App.vue
+      await router.replace('/inicio')
+    } else {
+      console.log('❌ Login falló')
+    }
+  } catch (err) {
+    console.error('❌ Error en login:', err)
+  }
+}
+
+const irARegistro = () => {
+  router.push('/registro')
 }
 </script>
 
@@ -171,5 +202,30 @@ const handleLogin = async () => {
   border-radius: 12px;
   font-weight: 600;
   letter-spacing: 0.5px;
+}
+
+.btn-registro {
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  padding: 10px 16px !important;
+  min-height: 48px !important;
+  height: auto !important;
+  white-space: normal !important;
+  line-height: 1.3 !important;
+}
+
+.btn-registro .v-icon {
+  font-size: 18px !important;
+}
+
+@media (max-width: 400px) {
+  .btn-registro {
+    font-size: 13px !important;
+    padding: 8px 12px !important;
+    min-height: 42px !important;
+  }
+  .btn-registro .v-icon {
+    font-size: 16px !important;
+  }
 }
 </style>

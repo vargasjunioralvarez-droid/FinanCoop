@@ -1,7 +1,10 @@
 <template>
   <v-app :theme="tema" class="mobile-app">
-    <!-- LOGIN -->
-    <LoginView v-if="!token" @login-success="onLoginSuccess" />
+    <!-- REGISTRO (sin layout) -->
+    <router-view v-if="route.path === '/registro' || route.path === '/registro-exitoso'" />
+
+    <!-- LOGIN (sin layout) -->
+    <router-view v-else-if="route.path === '/login' || !token" />
 
     <!-- DASHBOARD CON ROUTER -->
     <div v-else class="app-content">
@@ -180,14 +183,12 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useFinanCash } from '@/composables/useFinanCash'
-import LoginView from '@/views/LoginView.vue'
 
 const { 
   token, 
-  cuotaSeleccionada,
   nivelesConfig,
   badgeCount,
   cargarDatos,
@@ -202,15 +203,15 @@ const mostrarAyuda = ref(false)
 const tema = ref(localStorage.getItem('financoop_theme') || 'light')
 const scrolled = ref(false)
 
-// Tab activo basado en la ruta actual (solo lectura)
+// Tab activo basado en la ruta actual
 const activeTab = computed(() => {
-  return route.meta?.tab || route.name || 'inicio'
+  return route.meta?.tab || route.name?.toLowerCase() || 'inicio'
 })
 
-// Navegación manual - evita v-model en computed
+// Navegación manual
 const navigateTo = (tab) => {
   const routes = {
-    inicio: '/',
+    inicio: '/inicio',
     cuotas: '/cuotas',
     pagar: '/pagar',
     explorar: '/explorar',
@@ -224,18 +225,13 @@ const toggleTema = () => {
   localStorage.setItem('financoop_theme', tema.value)
 }
 
-const onLoginSuccess = () => {
-  cargarDatos()
-  router.push('/')
-}
-
-// Detectar scroll para header
+// Detectar scroll
 const onScroll = () => {
   scrolled.value = window.scrollY > 10
 }
 
 onMounted(() => {
-  if (token.value) cargarDatos()
+  console.log('📱 App montada, token:', !!token.value)
   window.addEventListener('scroll', onScroll)
 })
 </script>
@@ -321,7 +317,6 @@ onMounted(() => {
   transform: scale(0.98);
 }
 
-/* Transiciones entre rutas */
 .slide-fade-enter-active {
   transition: all 0.3s ease;
 }

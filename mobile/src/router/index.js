@@ -1,83 +1,96 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useFinanCash } from '@/composables/useFinanCash'
 
-// Lazy loading para mejor rendimiento
-const LoginView = () => import('@/views/LoginView.vue')
-const InicioView = () => import('@/views/InicioView.vue')
-const CuotasView = () => import('@/views/CuotasView.vue')
-const PagarView = () => import('@/views/PagarView.vue')
-const ExplorarView = () => import('@/views/ExplorarView.vue')
-const PerfilView = () => import('@/views/PerfilView.vue')
+// Importar vistas
+import InicioView from '@/views/InicioView.vue'
+import CuotasView from '@/views/CuotasView.vue'
+import PagarView from '@/views/PagarView.vue'
+import ExplorarView from '@/views/ExplorarView.vue'
+import PerfilView from '@/views/PerfilView.vue'
+import LoginView from '@/views/LoginView.vue'
 
-const routes = [
-  {
-    path: '/login',
-    name: 'login',
-    component: LoginView,
-    meta: { public: true }
-  },
-  {
-    path: '/',
-    name: 'inicio',
-    component: InicioView,
-    meta: { requiresAuth: true, tab: 'inicio' }
-  },
-  {
-    path: '/cuotas',
-    name: 'cuotas',
-    component: CuotasView,
-    meta: { requiresAuth: true, tab: 'cuotas' }
-  },
-  {
-    path: '/pagar',
-    name: 'pagar',
-    component: PagarView,
-    meta: { requiresAuth: true, tab: 'pagar' }
-  },
-  {
-    path: '/explorar',
-    name: 'explorar',
-    component: ExplorarView,
-    meta: { requiresAuth: true, tab: 'explorar' }
-  },
-  {
-    path: '/perfil',
-    name: 'perfil',
-    component: PerfilView,
-    meta: { requiresAuth: true, tab: 'perfil' }
-  },
-  // Redirects
-  {
-    path: '/:pathMatch(.*)*',
-    redirect: '/'
-  }
-]
+// Importar registro
+import RegisterView from '@/views/RegisterView.vue'
+import RegisterSuccessView from '@/views/RegisterSuccessView.vue'
 
 const router = createRouter({
-  history: createWebHistory(),
-  routes,
-  scrollBehavior() {
-    return { top: 0 }
-  }
+  history: createWebHistory(import.meta.env.BASE_URL),
+  routes: [
+    // 🔓 Rutas públicas
+    {
+      path: '/login',
+      name: 'Login',
+      component: LoginView,
+      meta: { public: true }
+    },
+    {
+      path: '/registro',
+      name: 'Register',
+      component: RegisterView,
+      meta: { public: true }
+    },
+    {
+      path: '/registro-exitoso/:cedula?',
+      name: 'RegisterSuccess',
+      component: RegisterSuccessView,
+      meta: { public: true }
+    },
+    
+    // 🔒 Rutas protegidas
+    {
+      path: '/',
+      redirect: '/inicio'  // ✅ Redirige / a /inicio
+    },
+    {
+      path: '/inicio',
+      name: 'Inicio',
+      component: InicioView,
+      meta: { tab: 'inicio', requiresAuth: true }
+    },
+    {
+      path: '/cuotas',
+      name: 'Cuotas',
+      component: CuotasView,
+      meta: { tab: 'cuotas', requiresAuth: true }
+    },
+    {
+      path: '/pagar',
+      name: 'Pagar',
+      component: PagarView,
+      meta: { tab: 'pagar', requiresAuth: true }
+    },
+    {
+      path: '/explorar',
+      name: 'Explorar',
+      component: ExplorarView,
+      meta: { tab: 'explorar', requiresAuth: true }
+    },
+    {
+      path: '/perfil',
+      name: 'Perfil',
+      component: PerfilView,
+      meta: { tab: 'perfil', requiresAuth: true }
+    }
+  ]
 })
 
-// Guard de navegación - protección de rutas
+// ✅ Guardia de navegación
 router.beforeEach((to, from, next) => {
   const { token } = useFinanCash()
+  const isPublic = to.meta.public
+  const requiresAuth = to.meta.requiresAuth
 
-  // Si no hay token y la ruta requiere auth → login
-  if (to.meta.requiresAuth && !token.value) {
+  console.log('🛣️ Navegando a:', to.path, 'Token:', !!token.value)
+
+  if (requiresAuth && !token.value) {
+    console.log('⛔ Requiere autenticación, redirigiendo a login')
     next('/login')
-    return
+  } else if (isPublic && token.value && to.path !== '/registro-exitoso') {
+    console.log('🔓 Pública pero con token, redirigiendo a /inicio')
+    next('/inicio')
+  } else {
+    next()
   }
-
-  // Si hay token y va a login → inicio
-  if (to.meta.public && token.value) {
-    next('/')
-    return
-  }
-
-  next()
 })
 
 export default router
