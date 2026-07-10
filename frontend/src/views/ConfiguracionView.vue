@@ -53,7 +53,7 @@
           
           <v-alert type="info" class="mt-3" density="compact">
             <strong>⚠️ Importante:</strong><br>
-            Al cambiar la tasa se recalculan TODAS las cuotas pendientes 
+            Al cambiar la tasa se recalcular TODAS las cuotas pendientes 
             para proteger contra la devaluación.
           </v-alert>
         </v-card-text>
@@ -132,9 +132,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import axios from 'axios'
-
-import { API_URL } from '@/config/api'
+import { api } from '@/config/api'  // ✅ Usar 'api'
 
 const tasaActual = ref(40.0)
 const nuevaTasa = ref(40.0)
@@ -159,13 +157,13 @@ const headersTasas = [
 
 const cargarTasa = async () => {
   try {
-    const res = await axios.get(`${API_URL}/config/tasa-dolar`)
-    tasaActual.value = res.data.tasa
-    nuevaTasa.value = res.data.tasa
-    fechaActualizacion.value = formatearFecha(res.data.fecha)
+    const data = await api.get('/config/tasa-dolar')
+    tasaActual.value = data.tasa
+    nuevaTasa.value = data.tasa
+    fechaActualizacion.value = formatearFecha(data.fecha)
     
-    if (res.data.historial && res.data.historial.length > 0) {
-      fuenteActual.value = res.data.historial[0].fuente
+    if (data.historial && data.historial.length > 0) {
+      fuenteActual.value = data.historial[0].fuente
     }
   } catch (e) {
     console.error('Error cargando tasa:', e)
@@ -189,14 +187,14 @@ const actualizarTasaManual = async () => {
   
   cargando.value = true
   try {
-    const res = await axios.post(`${API_URL}/config/tasa-dolar`, {
+    const data = await api.post('/config/tasa-dolar', {
       tasa: parseFloat(nuevaTasa.value),
       actualizado_por: "admin"
     })
     
-    alert(res.data.mensaje + 
-          `\n\nFinanciamientos afectados: ${res.data.financiamientos_afectados}` +
-          `\nCuotas recalculadas: ${res.data.cuotas_recalculadas}`)
+    alert(data.mensaje + 
+          `\n\nFinanciamientos afectados: ${data.financiamientos_afectados}` +
+          `\nCuotas recalculadas: ${data.cuotas_recalculadas}`)
     
     await cargarTasa()
     await cargarStats()
@@ -213,15 +211,15 @@ const actualizarTasaManual = async () => {
 const actualizarTasaBCV = async () => {
   cargandoBCV.value = true
   try {
-    const res = await axios.post(`${API_URL}/config/tasa-dolar/bcv`)
+    const data = await api.post('/config/tasa-dolar/bcv')
     
-    if (res.data.error) {
-      alert(res.data.mensaje + `\nTasa actual: ${res.data.tasa_actual} BS/$`)
+    if (data.error) {
+      alert(data.mensaje + `\nTasa actual: ${data.tasa_actual} BS/$`)
       return
     }
     
-    alert(res.data.mensaje + 
-          `\nCuotas recalculadas: ${res.data.cuotas_recalculadas}`)
+    alert(data.mensaje + 
+          `\nCuotas recalculadas: ${data.cuotas_recalculadas}`)
     
     await cargarTasa()
     await cargarStats()
@@ -237,8 +235,8 @@ const actualizarTasaBCV = async () => {
 
 const cargarStats = async () => {
   try {
-    const fin = await axios.get(`${API_URL}/financiamientos`)
-    const activos = fin.data.filter(f => f.estado === 'activo')
+    const financiamientos = await api.get('/financiamientos')
+    const activos = financiamientos.filter(f => f.estado === 'activo')
     stats.value.financiamientos_activos = activos.length
     
     let cuotasPendientes = 0
@@ -246,8 +244,8 @@ const cargarStats = async () => {
     let totalCarteraBS = 0
     
     for (const f of activos) {
-      const cuotas = await axios.get(`${API_URL}/financiamientos/${f.id}/cuotas`)
-      const pendientes = cuotas.data.filter(c => c.estado === 'pendiente')
+      const cuotas = await api.get(`/financiamientos/${f.id}/cuotas`)
+      const pendientes = cuotas.filter(c => c.estado === 'pendiente')
       cuotasPendientes += pendientes.length
       totalCarteraUSD += pendientes.reduce((sum, c) => sum + (c.monto_total_usd || 0), 0)
       totalCarteraBS += pendientes.reduce((sum, c) => sum + (c.monto_total_bs || 0), 0)
@@ -263,8 +261,8 @@ const cargarStats = async () => {
 
 const cargarHistorial = async () => {
   try {
-    const res = await axios.get(`${API_URL}/config/historial-tasas`)
-    historialTasas.value = res.data
+    const data = await api.get('/config/historial-tasas')
+    historialTasas.value = data
   } catch (e) {
     console.error('Error cargando historial:', e)
   }

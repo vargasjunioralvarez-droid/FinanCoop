@@ -114,9 +114,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import axios from 'axios'
-
-import { API_URL } from '@/config/api'
+import { api } from '@/config/api'  // ✅ Usar 'api'
 
 const pagosPendientes = ref([])
 const dialogConfirmar = ref(false)
@@ -157,8 +155,8 @@ const formatearFecha = (fechaStr) => {
 
 const cargarPagos = async () => {
   try {
-    const res = await axios.get(`${API_URL}/pagos/pendientes`)
-    pagosPendientes.value = res.data
+    const data = await api.get('/pagos/pendientes')
+    pagosPendientes.value = data
   } catch (e) {
     console.error('Error cargando pagos:', e)
   }
@@ -173,14 +171,14 @@ const abrirConciliar = (pago, aprobar) => {
 
 const confirmarAccion = async () => {
   try {
-    const res = await axios.post(`${API_URL}/pagos/conciliar`, {
+    const data = await api.post('/pagos/conciliar', {
       pago_id: pagoSeleccionado.value.pago_id,
       monto_confirmado: accionAprobar.value ? parseFloat(montoConfirmado.value) : 0,
       estado: accionAprobar.value ? 'conciliado' : 'rechazado',
       conciliado_por: 'admin'
     })
     
-    alert(res.data.mensaje)
+    alert(data.mensaje)
     dialogConfirmar.value = false
     await cargarPagos()
     
@@ -192,7 +190,6 @@ const confirmarAccion = async () => {
 
 const verComprobante = (comprobante) => {
   if (comprobante.startsWith('data:image')) {
-    // Es base64, mostrar en nueva ventana
     const win = window.open()
     win.document.write(`<img src="${comprobante}" style="max-width:100%">`)
   } else {
@@ -202,7 +199,6 @@ const verComprobante = (comprobante) => {
 
 onMounted(() => {
   cargarPagos()
-  // Actualizar cada 30 segundos
   setInterval(cargarPagos, 30000)
 })
 </script>

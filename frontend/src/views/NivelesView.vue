@@ -1,4 +1,4 @@
-<<template>
+<template>
   <v-container>
     <v-row>
       <v-col cols="12">
@@ -160,7 +160,7 @@
                     <div class="text-caption">Límite máximo</div>
                     <v-divider class="my-2"></v-divider>
                     <div class="text-body-2">
-                      Entrada: {{ config.entrada_pct }}%<<br>
+                      Entrada: {{ config.entrada_pct }}%<br>
                       Cuotas: {{ config.cuotas_base }}-{{ config.cuotas_max }}
                     </div>
                   </v-card-text>
@@ -176,9 +176,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import axios from 'axios'
-
-import { API_URL } from '@/config/api'
+import { api } from '@/config/api'  // ✅ Usar 'api'
 
 const niveles = ref({})
 const cargandoNivel = ref('')
@@ -197,8 +195,8 @@ const colorNivel = (nivel) => {
 
 const cargarNiveles = async () => {
   try {
-    const res = await axios.get(`${API_URL}/config/niveles`)
-    niveles.value = res.data.niveles
+    const data = await api.get('/config/niveles')
+    niveles.value = data.niveles
   } catch (e) {
     console.error('Error cargando niveles:', e)
     alert('Error cargando configuración de niveles')
@@ -209,7 +207,7 @@ const guardarNivel = async (nivel) => {
   cargandoNivel.value = nivel
   try {
     const config = niveles.value[nivel]
-    const res = await axios.put(`${API_URL}/config/niveles/${nivel}`, {
+    const data = await api.put(`/config/niveles/${nivel}`, {
       monto_max_usd: parseFloat(config.monto_max_usd),
       entrada_pct: parseFloat(config.entrada_pct),
       financia_pct: parseFloat(config.financia_pct),
@@ -234,8 +232,8 @@ const resetNiveles = async () => {
   
   cargandoReset.value = true
   try {
-    const res = await axios.post(`${API_URL}/config/niveles/reset`)
-    alert('✅ ' + res.data.mensaje)
+    const data = await api.post('/config/niveles/reset')
+    alert('✅ ' + data.mensaje)
     await cargarNiveles()
   } catch (e) {
     console.error('Error restaurando niveles:', e)

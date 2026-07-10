@@ -239,9 +239,7 @@
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
-import axios from 'axios'
-
-import { API_URL } from '@/config/api'
+import { api } from '@/config/api'  // ✅ Usar 'api'
 
 const stats = ref({
   clientes: 0,
@@ -290,17 +288,17 @@ const formatearFecha = (fechaStr) => {
 const cargarDatos = async () => {
   try {
     // Tasa
-    const tasaRes = await axios.get(`${API_URL}/config/tasa-dolar`)
-    stats.value.tasa = tasaRes.data.tasa
+    const tasaData = await api.get('/config/tasa-dolar')
+    stats.value.tasa = tasaData.tasa
 
     // Clientes
-    const clientes = await axios.get(`${API_URL}/clientes`)
-    stats.value.clientes = clientes.data.length
+    const clientesData = await api.get('/clientes')
+    stats.value.clientes = clientesData.length
 
     // Financiamientos
-    const financiamientos = await axios.get(`${API_URL}/financiamientos`)
-    const activos = financiamientos.data.filter(f => f.estado === 'activo')
-    const completados = financiamientos.data.filter(f => f.estado === 'completado')
+    const financiamientos = await api.get('/financiamientos')
+    const activos = financiamientos.filter(f => f.estado === 'activo')
+    const completados = financiamientos.filter(f => f.estado === 'completado')
     stats.value.activos = activos.length
 
     // Cuotas y cartera
@@ -318,15 +316,15 @@ const cargarDatos = async () => {
       platino: '#AB47BC'
     }
 
-    for (const fin of financiamientos.data) {
+    for (const fin of financiamientos) {
       // Contar por nivel
       if (nivelesConteo[fin.nivel_aplicado] !== undefined) {
         nivelesConteo[fin.nivel_aplicado]++
       }
 
-      const cuotas = await axios.get(`${API_URL}/financiamientos/${fin.id}/cuotas`)
-      const cuotasPendientes = cuotas.data.filter(c => c.estado === 'pendiente')
-      const cuotasVencidas = cuotas.data.filter(c => {
+      const cuotas = await api.get(`/financiamientos/${fin.id}/cuotas`)
+      const cuotasPendientes = cuotas.filter(c => c.estado === 'pendiente')
+      const cuotasVencidas = cuotas.filter(c => {
         return c.estado === 'pendiente' && new Date(c.fecha_vencimiento) < new Date()
       })
 
@@ -352,7 +350,7 @@ const cargarDatos = async () => {
     }))
 
     // Recientes (últimos 5)
-    recientes.value = financiamientos.data
+    recientes.value = financiamientos
       .sort((a, b) => new Date(b.fecha_creacion) - new Date(a.fecha_creacion))
       .slice(0, 5)
       .map(f => ({
@@ -459,7 +457,6 @@ onMounted(cargarDatos)
   }
 }
 
-/* Responsive */
 @media (max-width: 600px) {
   .dashboard-title {
     font-size: 1.5rem !important;

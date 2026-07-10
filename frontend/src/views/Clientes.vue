@@ -1,4 +1,4 @@
-<<template>
+<template>
   <v-container>
     <v-row>
       <v-col cols="12">
@@ -225,9 +225,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import axios from 'axios'
-
-import { API_URL } from '@/config/api'
+import { api } from '@/config/api'  // ✅ Usar 'api' en lugar de axios
 
 const busqueda = ref('')
 const clientes = ref([])
@@ -297,10 +295,10 @@ const buscar = async () => {
   busquedaRealizada.value = true
   
   try {
-    // Buscar por cédula primero
-    const resCedula = await axios.get(`${API_URL}/clientes/buscar/${busqueda.value}`)
-    if (resCedula.data.encontrado) {
-      clientes.value = [resCedula.data]
+    // ✅ Usar api.get
+    const data = await api.get(`/clientes/buscar/${busqueda.value}`)
+    if (data.encontrado) {
+      clientes.value = [data]
       cargando.value = false
       return
     }
@@ -309,16 +307,17 @@ const buscar = async () => {
   }
   
   try {
-    // Buscar por código de financiamiento
-    const resFin = await axios.get(`${API_URL}/financiamientos`)
-    const finEncontrado = resFin.data.find(f => 
+    // ✅ Usar api.get
+    const financiamientos = await api.get('/financiamientos')
+    const finEncontrado = financiamientos.find(f => 
       f.codigo.toLowerCase() === busqueda.value.toLowerCase()
     )
     
     if (finEncontrado) {
-      const resCliente = await axios.get(`${API_URL}/clientes/${finEncontrado.cliente_id}`)
-      if (!resCliente.data.error) {
-        clientes.value = [resCliente.data]
+      // ✅ Usar api.get
+      const cliente = await api.get(`/clientes/${finEncontrado.cliente_id}`)
+      if (!cliente.error) {
+        clientes.value = [cliente]
         cargando.value = false
         return
       }
@@ -328,9 +327,9 @@ const buscar = async () => {
   }
   
   try {
-    // Buscar por nombre (filtrar todos los clientes)
-    const resTodos = await axios.get(`${API_URL}/clientes`)
-    const filtrados = resTodos.data.filter(c => 
+    // ✅ Usar api.get
+    const todos = await api.get('/clientes')
+    const filtrados = todos.filter(c => 
       c.nombre.toLowerCase().includes(busqueda.value.toLowerCase())
     )
     clientes.value = filtrados
@@ -345,8 +344,9 @@ const buscar = async () => {
 const cargarTodos = async () => {
   cargando.value = true
   try {
-    const res = await axios.get(`${API_URL}/clientes`)
-    clientes.value = res.data
+    // ✅ Usar api.get
+    const data = await api.get('/clientes')
+    clientes.value = data
   } catch (e) {
     console.error('Error cargando clientes:', e)
   } finally {
@@ -359,8 +359,9 @@ const verDetalle = async (cliente) => {
   dialogDetalle.value = true
   
   try {
-    const res = await axios.get(`${API_URL}/financiamientos`)
-    financiamientosCliente.value = res.data.filter(f => f.cliente_id === cliente.id)
+    // ✅ Usar api.get
+    const financiamientos = await api.get('/financiamientos')
+    financiamientosCliente.value = financiamientos.filter(f => f.cliente_id === cliente.id)
   } catch (e) {
     console.error('Error cargando financiamientos:', e)
     financiamientosCliente.value = []
@@ -369,8 +370,9 @@ const verDetalle = async (cliente) => {
 
 const verCuotas = async (finId) => {
   try {
-    const res = await axios.get(`${API_URL}/financiamientos/${finId}/cuotas`)
-    cuotas.value = res.data
+    // ✅ Usar api.get
+    const data = await api.get(`/financiamientos/${finId}/cuotas`)
+    cuotas.value = data
     dialogCuotas.value = true
   } catch (e) {
     console.error('Error cargando cuotas:', e)

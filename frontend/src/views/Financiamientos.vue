@@ -276,10 +276,8 @@
 
 <script setup>
 import { ref, computed, onMounted, nextTick } from 'vue'
-import axios from 'axios'
+import { api } from '@/config/api'  // ✅ Usar 'api'
 import Chart from 'chart.js/auto'
-
-import { API_URL } from '@/config/api'
 
 const financiamientos = ref([])
 const financiamientosFiltrados = ref([])
@@ -339,7 +337,6 @@ const formatearFecha = (fechaStr) => {
   return fecha.toLocaleDateString('es-VE', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
-// Calcular morosidad
 const calcularMorosidad = (fin) => {
   if (fin.estado === 'completado') {
     return { nombre: 'Al Día', color: 'success', textColor: 'white', icono: 'mdi-check-circle', descripcion: 'Financiamento completado' }
@@ -362,14 +359,12 @@ const calcularMorosidad = (fin) => {
 
 const cargarDatos = async () => {
   try {
-    // Cargar financiamientos con detalle
-    const res = await axios.get(`${API_URL}/financiamientos`)
-    const clientes = await axios.get(`${API_URL}/clientes`)
+    const financiamientosData = await api.get('/financiamientos')
+    const clientesData = await api.get('/clientes')
     
-    const datos = await Promise.all(res.data.map(async (fin) => {
-      const cliente = clientes.data.find(c => c.id === fin.cliente_id)
-      const cuotasRes = await axios.get(`${API_URL}/financiamientos/${fin.id}/cuotas`)
-      const cuotas = cuotasRes.data
+    const datos = await Promise.all(financiamientosData.map(async (fin) => {
+      const cliente = clientesData.find(c => c.id === fin.cliente_id)
+      const cuotas = await api.get(`/financiamientos/${fin.id}/cuotas`)
       
       const pagadas = cuotas.filter(c => c.estado === 'pagada').length
       const pendientes = cuotas.filter(c => c.estado === 'pendiente')
@@ -517,8 +512,8 @@ const abrirPagoEfectivo = async (fin) => {
   cuotaInfo.value = null
   
   try {
-    const res = await axios.get(`${API_URL}/financiamientos/${fin.id}/cuotas`)
-    const pendientes = res.data.filter(c => c.estado === 'pendiente')
+    const cuotas = await api.get(`/financiamientos/${fin.id}/cuotas`)
+    const pendientes = cuotas.filter(c => c.estado === 'pendiente')
     
     cuotasPendientes.value = pendientes.map(c => ({
       id: c.id,
@@ -535,7 +530,7 @@ const abrirPagoEfectivo = async (fin) => {
 
 const confirmarPagoEfectivo = async () => {
   try {
-    await axios.post(`${API_URL}/cuotas/${cuotaSeleccionada.value}/pagar-efectivo`)
+    await api.post(`/cuotas/${cuotaSeleccionada.value}/pagar-efectivo`)
     alert('✅ Pago registrado')
     dialogPago.value = false
     await cargarDatos()
@@ -545,7 +540,6 @@ const confirmarPagoEfectivo = async () => {
 }
 
 const exportarExcel = () => {
-  // Para miles de usuarios, generar CSV
   const datos = financiamientosFiltrados.value.map(f => ({
     Codigo: f.codigo,
     Cliente: f.cliente_nombre,
@@ -559,14 +553,12 @@ const exportarExcel = () => {
     Progreso: f.porcentaje_pagado + '%'
   }))
   
-  // Convertir a CSV
   const headers = Object.keys(datos[0] || {})
   const csv = [
     headers.join(','),
     ...datos.map(row => headers.map(h => `"${row[h]}"`).join(','))
   ].join('\n')
   
-  // Descargar
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
   const link = document.createElement('a')
   link.href = URL.createObjectURL(blob)
