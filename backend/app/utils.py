@@ -1,9 +1,117 @@
-# app/utils.py
+# backend/app/utils.py
+import os
 import random
 import uuid
 from datetime import datetime
+from twilio.rest import Client
 from app.config import NIVELES_CONFIG, NIVELES_CONFIG_DEFAULT
 from app.models import Cliente, Financiamiento, Cuota, NivelConfig, TasaDolar
+
+# ============ CONFIGURACIÓN TWILIO ============
+TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID')
+TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
+TWILIO_WHATSAPP_NUMBER = os.getenv('TWILIO_WHATSAPP_NUMBER', 'whatsapp:+14155238886')
+TWILIO_SMS_NUMBER = os.getenv('TWILIO_SMS_NUMBER', '+14155238886')
+
+twilio_client = None
+if TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN:
+    try:
+        twilio_client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+        print("✅ Twilio cliente inicializado")
+    except Exception as e:
+        print(f"❌ Error inicializando Twilio: {e}")
+
+# ============ FUNCIONES DE ENVÍO DE MENSAJES ============
+
+def enviar_whatsapp(telefono: str, mensaje: str):
+    """Envía mensaje por WhatsApp usando Twilio"""
+    if not twilio_client:
+        print("❌ Twilio no disponible, guardando en log...")
+        return False, "Twilio no disponible"
+    
+    try:
+        if not telefono.startswith('+'):
+            telefono = '+58' + telefono.lstrip('0')
+        
+        message = twilio_client.messages.create(
+            body=mensaje,
+            from_=TWILIO_WHATSAPP_NUMBER,
+            to=f'whatsapp:{telefono}'
+        )
+        
+        print(f"✅ WhatsApp enviado a {telefono}. SID: {message.sid}")
+        return True, message.sid
+        
+    except Exception as e:
+        print(f"❌ Error enviando WhatsApp: {e}")
+        return False, str(e)
+
+def enviar_sms(telefono: str, mensaje: str):
+    """Envía mensaje por SMS usando Twilio (fallback)"""
+    if not twilio_client:
+        print("❌ Twilio no disponible, guardando en log...")
+        return False, "Twilio no disponible"
+    
+    try:
+        if not telefono.startswith('+'):
+            telefono = '+58' + telefono.lstrip('0')
+        
+        message = twilio_client.messages.create(
+            body=mensaje,
+            from_=TWILIO_SMS_NUMBER,
+            to=telefono
+        )
+        
+        print(f"✅ SMS enviado a {telefono}. SID: {message.sid}")
+        return True, message.sid
+        
+    except Exception as e:
+        print(f"❌ Error enviando SMS: {e}")
+        return False, str(e)
+
+def enviar_pin_cliente(telefono: str, nombre: str, cedula: str, pin: str):
+    """Envía el PIN al cliente por WhatsApp (con fallback a SMS)"""
+    mensaje = f"""🎉 *¡Bienvenido a FinanCoop, {nombre}!*
+
+🔑 *Tu PIN de acceso es:* {pin}
+
+📋 *Tus datos:*
+🆔 Cédula: {cedula}
+📞 Teléfono: {telefono}
+
+✅ *Próximos pasos:*
+1. Descarga la app FinanCoop
+2. Ingresa con tu cédula y PIN
+3. Comienza a comprar en tiendas afiliadas
+
+⚠️ *Importante:*
+- Tu deuda se mantiene en USD
+- Pagas en Bs al tipo de cambio del día
+- Tienes 3 días de gracia
+
+📱 *¿Dudas?* Visita tu tienda Cecosesola más cercana.
+
+¡Gracias por confiar en FinanCoop! 🚀"""
+    
+    # Intentar WhatsApp primero
+    exito, resultado = enviar_whatsapp(telefono, mensaje)
+    
+    # Si falla, intentar SMS
+    if not exito:
+        print("⚠️ WhatsApp falló, intentando SMS...")
+        mensaje_sms = f"FinanCoop: Tu PIN es {pin}. Usa tu cédula {cedula} para ingresar a la app."
+        exito_sms, _ = enviar_sms(telefono, mensaje_sms)
+        
+        if exito_sms:
+            print("✅ SMS enviado como fallback")
+            return True
+        else:
+            print("❌ Todos los canales fallaron")
+            return False
+    
+    return True
+
+# ============ FUNCIONES DE NEGOCIO ============
 
 def calcular_nivel(score: int):
     for nivel, config in NIVELES_CONFIG.items():
@@ -48,10 +156,10 @@ def recalcular_cuotas_pendientes(db, nueva_tasa: float):
     
     recalculados = 0
     for fin in financiamientos:
-        fin.monto_total_usd = fin.monto_total_bs / nueva_tasa
-        fin.monto_entrada_usd = fin.monto_entrada_bs / nueva_tasa
-        fin.monto_financia_usd = fin.monto_financia_bs / nueva_tasa
-        fin.monto_cuota_usd = fin.monto_cuota_bs / nueva_tasa
+        fin.monto_total_bs = fin.monto_total_usd * nueva_tasa
+        fin.monto_entrada_bs = fin.monto_entrada_usd * nueva_tasa
+        fin.monto_financia_bs = fin.monto_financia_usd * nueva_tasa
+        fin.monto_cuota_bs = fin.monto_cuota_usd * nueva_tasa
         
         cuotas = db.query(Cuota).filter(
             Cuota.financiamiento_id == fin.id,
@@ -59,9 +167,9 @@ def recalcular_cuotas_pendientes(db, nueva_tasa: float):
         ).all()
         
         for c in cuotas:
-            c.monto_base_usd = c.monto_base_bs / nueva_tasa
-            c.monto_interes_mora_usd = c.monto_interes_mora_bs / nueva_tasa
-            c.monto_total_usd = c.monto_total_bs / nueva_tasa
+            c.monto_base_bs = c.monto_base_usd * nueva_tasa
+            c.monto_interes_mora_bs = c.monto_interes_mora_usd * nueva_tasa
+            c.monto_total_bs = c.monto_total_usd * nueva_tasa
         
         recalculados += len(cuotas)
     
@@ -72,6 +180,9 @@ def calcular_usado_disponible(cliente_id: int, db):
     tasa = obtener_tasa_actual(db)
     
     cliente = db.query(Cliente).filter(Cliente.id == cliente_id).first()
+    if not cliente:
+        return {}
+    
     nivel, config = calcular_nivel(cliente.score)
     
     limite_usd = config["monto_max_usd"]

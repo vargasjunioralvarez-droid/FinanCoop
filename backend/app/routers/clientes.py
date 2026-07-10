@@ -1,121 +1,45 @@
 # backend/app/routers/clientes.py
-from fastapi import APIRouter, Depends, HTTPException, Query, File, UploadFile, Form
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from typing import Optional
-import base64
-import random
-from datetime import datetime
-
 from app.database import get_db
 from app.models import Cliente, Financiamiento, Cuota
-from app.schemas import ClienteCreate, LoginApp
+from app.schemas import ClienteCreate
 from app.utils import (
-    generar_pin, generar_token, calcular_nivel, 
-    actualizar_score_cliente, calcular_usado_disponible,
-    enviar_pin_cliente, obtener_tasa_actual
+    calcular_nivel, actualizar_score_cliente, generar_pin, 
+    calcular_usado_disponible, obtener_tasa_actual
 )
+from datetime import datetime
 
-router = APIRouter(prefix="/clientes", tags=["clientes"])
+router = APIRouter(prefix="/clientes", tags=["Clientes"])
 
-@router.post("/")
-async def crear_cliente(
-    nombre: str = Form(...),
-    cedula: str = Form(...),
-    telefono: str = Form(...),
-    email: str = Form(""),
-    direccion: str = Form(""),
-    referencia_nombre: str = Form(""),
-    referencia_telefono: str = Form(""),
-    referencia_parentesco: str = Form(""),
-    cedula_foto: Optional[UploadFile] = File(None),
-    db: Session = Depends(get_db)
-):
-    try:
-        print(f"📝 Registrando cliente: {nombre}, {cedula}")
-        
-        # Verificar si existe
-        existe = db.query(Cliente).filter(Cliente.cedula == cedula).first()
-        if existe:
-            return JSONResponse(
-                status_code=400,
-                content={"success": False, "error": f"Cliente con cédula {cedula} ya existe"}
-            )
-        
-        # Crear cliente
-        db_cliente = Cliente(
-            nombre=nombre,
-            cedula=cedula,
-            telefono=telefono,
-            email=email,
-            direccion=direccion,
-            referencia_nombre=referencia_nombre,
-            referencia_telefono=referencia_telefono,
-            referencia_parentesco=referencia_parentesco,
-        )
-        db_cliente.pin = generar_pin()
-        db.add(db_cliente)
-        db.commit()
-        db.refresh(db_cliente)
-        
-        print(f"✅ Cliente creado con ID: {db_cliente.id}, PIN: {db_cliente.pin}")
-        
-        # Procesar foto de cédula (opcional)
-        foto_guardada = False
-        if cedula_foto:
-            try:
-                print(f"📸 Procesando foto: {cedula_foto.filename}")
-                contenido = await cedula_foto.read()
-                foto_base64 = base64.b64encode(contenido).decode('utf-8')
-                db_cliente.cedula_foto = foto_base64
-                db.commit()
-                foto_guardada = True
-                print(f"📸 Foto guardada: {len(contenido)} bytes")
-            except Exception as e:
-                print(f"❌ Error procesando foto: {e}")
-        
-        # ENVIAR PIN POR WHATSAPP/SMS
-        try:
-            enviado = enviar_pin_cliente(
-                telefono=db_cliente.telefono,
-                nombre=db_cliente.nombre,
-                cedula=db_cliente.cedula,
-                pin=db_cliente.pin
-            )
-            
-            if enviado:
-                mensaje_extra = " ✅ PIN enviado por WhatsApp"
-            else:
-                mensaje_extra = " ⚠️ No se pudo enviar el PIN (revisa logs)"
-        except Exception as e:
-            print(f"❌ Error enviando PIN: {e}")
-            mensaje_extra = " ⚠️ Error enviando PIN"
-        
-        return {
-            "success": True,
-            "cliente": {
-                "id": db_cliente.id,
-                "nombre": db_cliente.nombre,
-                "cedula": db_cliente.cedula,
-                "telefono": db_cliente.telefono,
-                "email": db_cliente.email,
-                "direccion": db_cliente.direccion
-            },
-            "pin_generado": db_cliente.pin,
-            "foto_guardada": foto_guardada,
-            "mensaje": f"Cliente creado. PIN para app: {db_cliente.pin}{mensaje_extra}"
-        }
-        
-    except Exception as e:
-        print(f"❌ Error en registro: {e}")
-        import traceback
-        traceback.print_exc()
-        return JSONResponse(
-            status_code=500,
-            content={"success": False, "error": str(e)}
-        )
+@router.post("")
+def crear_cliente(cliente: ClienteCreate, db: Session = Depends(get_db)):
+    existe = db.query(Cliente).filter(Cliente.cedula == cliente.cedula).first()
+    if existe:
+        return {"error": "Cliente ya existe", "cliente": existe}
+    
+    db_cliente = Cliente(
+        nombre=cliente.nombre,
+        cedula=cliente.cedula,
+        telefono=cliente.telefono,
+        email=cliente.email,
+        direccion=cliente.direccion,
+        referencia_nombre=cliente.referencia_nombre,
+        referencia_telefono=cliente.referencia_telefono,
+        referencia_parentesco=cliente.referencia_parentesco,
+    )
+    db_cliente.pin = generar_pin()
+    db.add(db_cliente)
+    db.commit()
+    db.refresh(db_cliente)
+    
+    return {
+        "cliente": db_cliente,
+        "pin_generado": db_cliente.pin,
+        "mensaje": "Cliente creado. PIN para app: " + db_cliente.pin
+    }
 
-@router.get("/")
+@router.get("")
 def listar_clientes(db: Session = Depends(get_db)):
     return db.query(Cliente).all()
 
@@ -253,9 +177,10 @@ def estado_cuenta_cliente(id: int, db: Session = Depends(get_db)):
 @router.get("/{id}/nivel-propuesta")
 def propuesta_financiamiento(
     id: int, 
-    monto_total_bs: float = Query(..., gt=0, description="Monto total en Bolívares"), 
+    monto_total_bs: float = Query(..., gt=0, description="Monto total en Bolívares"),
     db: Session = Depends(get_db)
 ):
+    """Calcula la propuesta de financiamiento para un cliente"""
     cliente = db.query(Cliente).filter(Cliente.id == id).first()
     if not cliente:
         return {"error": "Cliente no encontrado"}
@@ -266,8 +191,8 @@ def propuesta_financiamiento(
     
     disponible = calcular_usado_disponible(id, db)
     
-    # ✅ CORRECCIÓN: monto_total_bs ya es un float, no un objeto Query
-    monto_total_usd = monto_total_bs / tasa  # ✅ Esto funciona correctamente
+    # ✅ CORRECCIÓN: monto_total_bs ya es un float (gracias a Query)
+    monto_total_usd = monto_total_bs / tasa
     
     if not disponible["puede_comprar"]:
         return {
@@ -298,7 +223,6 @@ def propuesta_financiamiento(
     entrada_bs = monto_total_bs * (config["entrada_pct"] / 100)
     financia_bs = monto_total_bs - entrada_bs
     
-    # Recalcular referencias en USD
     monto_total_usd_ref = monto_total_bs / tasa
     entrada_usd_ref = entrada_bs / tasa
     financia_usd_ref = financia_bs / tasa
