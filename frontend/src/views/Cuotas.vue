@@ -31,6 +31,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import axios from 'axios'
+import { API_URL } from '@/config/api'  // ✅ Importar AQUÍ (fuera de las funciones)
 
 const props = defineProps(['id'])
 const cuotas = ref([])
@@ -47,7 +48,8 @@ const headers = [
 
 const cargar = async () => {
   try {
-    import { API_URL } from '@/config/api'
+    // ✅ Usar API_URL correctamente
+    const res = await axios.get(`${API_URL}/financiamientos/${props.id}/cuotas`)
     cuotas.value = res.data
   } catch (error) {
     console.error('Error cargando cuotas:', error)
@@ -56,8 +58,9 @@ const cargar = async () => {
 
 const pagar = async (cuotaId) => {
   try {
-const res = await axios.get(`${API_URL}/financiamientos/${props.id}/cuotas`)
-await axios.post(`${API_URL}/cuotas/${cuotaId}/pagar`)
+    // ✅ Usar API_URL correctamente
+    await axios.post(`${API_URL}/cuotas/${cuotaId}/pagar`)
+    await cargar()  // Recargar la lista después de pagar
   } catch (error) {
     console.error('Error pagando:', error)
   }
