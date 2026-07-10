@@ -279,7 +279,7 @@ import { ref, computed, onMounted, nextTick } from 'vue'
 import axios from 'axios'
 import Chart from 'chart.js/auto'
 
-const API_URL = 'http://localhost:8000'
+import { API_URL } from '@/config/api'
 
 const financiamientos = ref([])
 const financiamientosFiltrados = ref([])

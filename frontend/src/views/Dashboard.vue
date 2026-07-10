@@ -241,7 +241,7 @@
 import { ref, onMounted, computed } from 'vue'
 import axios from 'axios'
 
-const API_URL = 'http://localhost:8000'
+import { API_URL } from '@/config/api'
 
 const stats = ref({
   clientes: 0,

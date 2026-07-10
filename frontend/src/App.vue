@@ -125,7 +125,9 @@ const tasaActual = ref(40.0)
 
 const cargarTasa = async () => {
   try {
-    const res = await axios.get('http://localhost:8000/config/tasa-dolar')
+    import { API_URL } from '@/config/api'
+
+const res = await axios.get(`${API_URL}/config/tasa-dolar`)
     tasaActual.value = res.data.tasa
   } catch (e) {
     console.error('Error cargando tasa:', e)

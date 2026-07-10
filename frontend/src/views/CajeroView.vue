@@ -334,7 +334,7 @@
 import { ref, computed, onMounted } from 'vue'
 import axios from 'axios'
 
-const API_URL = 'http://localhost:8000'
+import { API_URL } from '@/config/api'
 
 const paso = ref(1)
 const busquedaCedula = ref('')

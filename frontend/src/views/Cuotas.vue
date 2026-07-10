@@ -47,7 +47,7 @@ const headers = [
 
 const cargar = async () => {
   try {
-    const res = await axios.get(`http://localhost:8000/financiamientos/${props.id}/cuotas`)
+    import { API_URL } from '@/config/api'
     cuotas.value = res.data
   } catch (error) {
     console.error('Error cargando cuotas:', error)
@@ -56,8 +56,8 @@ const cargar = async () => {
 
 const pagar = async (cuotaId) => {
   try {
-    await axios.post(`http://localhost:8000/cuotas/${cuotaId}/pagar`)
-    cargar()
+const res = await axios.get(`${API_URL}/financiamientos/${props.id}/cuotas`)
+await axios.post(`${API_URL}/cuotas/${cuotaId}/pagar`)
   } catch (error) {
     console.error('Error pagando:', error)
   }
