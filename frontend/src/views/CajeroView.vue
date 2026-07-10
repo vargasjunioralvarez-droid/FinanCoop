@@ -1,4 +1,4 @@
-<<template>
+<template>
   <v-container>
     <v-row>
       <v-col cols="12">
@@ -34,9 +34,9 @@
                 
                 <!-- Datos de contacto -->
                 <div class="text-caption mt-2">
-                  <v-icon size="small">mdi-phone</v-icon> {{ clienteEncontrado.telefono }}<<br>
+                  <v-icon size="small">mdi-phone</v-icon> {{ clienteEncontrado.telefono }}<br>
                   <v-icon size="small" v-if="clienteEncontrado.direccion">mdi-map-marker</v-icon> 
-                  {{ clienteEncontrado.direccion }}<<br>
+                  {{ clienteEncontrado.direccion }}<br>
                   <v-icon size="small" v-if="clienteEncontrado.referencia_nombre">mdi-account-check</v-icon>
                   Ref: {{ clienteEncontrado.referencia_nombre }} ({{ clienteEncontrado.referencia_parentesco }}) - {{ clienteEncontrado.referencia_telefono }}
                 </div>
@@ -332,9 +332,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import axios from 'axios'
-
-import { API_URL } from '@/config/api'
+import { api } from '@/config/api'  // ✅ Usar 'api' en lugar de axios directamente
 
 const paso = ref(1)
 const busquedaCedula = ref('')
@@ -395,8 +393,9 @@ const formatearNumero = (num) => {
 
 onMounted(async () => {
   try {
-    const res = await axios.get(`${API_URL}/config/tasa-dolar`)
-    tasaDolar.value = res.data.tasa
+    // ✅ Usar api.get
+    const data = await api.get('/config/tasa-dolar')
+    tasaDolar.value = data.tasa
   } catch (e) {
     console.error('Error cargando tasa:', e)
   }
@@ -406,19 +405,20 @@ const buscarCliente = async () => {
   if (!busquedaCedula.value) return
   
   try {
-    const res = await axios.get(`${API_URL}/clientes/buscar/${busquedaCedula.value}`)
+    // ✅ Usar api.get
+    const data = await api.get(`/clientes/buscar/${busquedaCedula.value}`)
     
-    if (res.data.error || !res.data.encontrado) {
+    if (data.error || !data.encontrado) {
       clienteEncontrado.value = null
       clienteNoEncontrado.value = true
       nuevoCliente.value.cedula = busquedaCedula.value
     } else {
       // Verificar si tiene deudas vencidas
-      const estadoRes = await axios.get(`${API_URL}/clientes/${res.data.id}/estado-cuenta`)
-      const estado = estadoRes.data
+      // ✅ Usar api.get
+      const estado = await api.get(`/clientes/${data.id}/estado-cuenta`)
       
       clienteEncontrado.value = {
-        ...res.data,
+        ...data,
         bloqueado: estado.bloqueado,
         deudas_vencidas: estado.deudas_vencidas,
         deuda_vencida_bs: estado.deuda_vencida_bs
@@ -440,7 +440,8 @@ const registrarCliente = async () => {
   }
   
   try {
-    const res = await axios.post(`${API_URL}/clientes`, {
+    // ✅ Usar api.post
+    const data = await api.post('/clientes', {
       nombre: nuevoCliente.value.nombre,
       cedula: busquedaCedula.value,
       telefono: nuevoCliente.value.telefono,
@@ -451,13 +452,13 @@ const registrarCliente = async () => {
       referencia_parentesco: nuevoCliente.value.referencia_parentesco
     })
     
-    if (res.data.error) {
-      alert('Error: ' + res.data.error)
+    if (data.error) {
+      alert('Error: ' + data.error)
       return
     }
     
-    if (res.data.pin_generado) {
-      alert(`Cliente registrado. PIN para app: ${res.data.pin_generado}`)
+    if (data.pin_generado) {
+      alert(`Cliente registrado. PIN para app: ${data.pin_generado}`)
     }
     
     await buscarCliente()
@@ -472,12 +473,13 @@ const calcularPropuesta = async () => {
   if (!montoTotalBS.value || parseFloat(montoTotalBS.value) <= 0 || !clienteEncontrado.value) return
   
   try {
-    const res = await axios.get(
-      `${API_URL}/clientes/${clienteEncontrado.value.id}/nivel-propuesta?monto_total_bs=${montoTotalBS.value}`
+    // ✅ Usar api.get
+    const data = await api.get(
+      `/clientes/${clienteEncontrado.value.id}/nivel-propuesta?monto_total_bs=${montoTotalBS.value}`
     )
-    propuesta.value = res.data
-    cuotasSeleccionadas.value = res.data.cuotas_sugeridas
-    requiereAprobacion.value = res.data.requiere_aprobacion
+    propuesta.value = data
+    cuotasSeleccionadas.value = data.cuotas_sugeridas
+    requiereAprobacion.value = data.requiere_aprobacion
   } catch (e) {
     console.error('Error calculando propuesta:', e)
   }
@@ -491,19 +493,20 @@ const fechaCuota = (n) => {
 
 const crearFinanciamiento = async () => {
   try {
-    const res = await axios.post(`${API_URL}/financiamientos`, {
+    // ✅ Usar api.post
+    const data = await api.post('/financiamientos', {
       cliente_id: clienteEncontrado.value.id,
       descripcion: descripcion.value,
       monto_total_bs: parseFloat(montoTotalBS.value),
       cuotas_solicitadas: cuotasSeleccionadas.value
     })
     
-    if (res.data.error) {
-      alert('Error: ' + res.data.error)
+    if (data.error) {
+      alert('Error: ' + data.error)
       return
     }
     
-    resultado.value = res.data
+    resultado.value = data
     paso.value = 4
     
   } catch (e) {
@@ -533,5 +536,10 @@ const resetear = () => {
   descripcion.value = ''
   resultado.value = {}
   requiereAprobacion.value = false
+}
+
+const mostrarDeudasVencidas = () => {
+  // TODO: Implementar diálogo para mostrar deudas vencidas
+  alert('Función en desarrollo: Mostrar deudas vencidas')
 }
 </script>

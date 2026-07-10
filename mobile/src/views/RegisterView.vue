@@ -176,9 +176,9 @@
                     </div>
                     <div v-else class="text-caption text-success mb-2">✅ Foto cargada</div>
                     
-                    <v-btn :color="fotoCedula ? 'success' : 'primary'" rounded="pill" size="small" @click="tomarFotoCedula">
+                    <v-btn :color="fotoCedula ? 'success' : 'primary'" rounded="pill" size="small" @click="mostrarOpcionesFoto">
                       <v-icon start size="16">{{ fotoCedula ? 'mdi-refresh' : 'mdi-camera' }}</v-icon>
-                      {{ fotoCedula ? 'Cambiar' : 'Tomar Foto' }}
+                      {{ fotoCedula ? 'Cambiar' : 'Subir Foto' }}
                     </v-btn>
 
                     <div v-if="fotoCedula" class="mt-2">
@@ -325,11 +325,33 @@ const validarPaso = (paso) => {
   }
 }
 
-const tomarFotoCedula = () => {
+// ✅ Mostrar opciones: Cámara o Galería
+const mostrarOpcionesFoto = () => {
+  // En dispositivos móviles, mostrar un diálogo nativo
+  if (window.confirm('¿Quieres tomar una foto con la cámara?')) {
+    // Si el usuario confirma, abre la cámara
+    tomarFotoCedula(true)
+  } else {
+    // Si cancela, abre la galería
+    tomarFotoCedula(false)
+  }
+}
+
+// ✅ Función para tomar foto o seleccionar de galería
+const tomarFotoCedula = (usarCamara = false) => {
   const input = document.createElement('input')
   input.type = 'file'
   input.accept = 'image/*'
-  input.capture = 'environment'
+  
+  // Si usamos cámara, agregamos el atributo capture
+  if (usarCamara) {
+    input.capture = 'environment' // Usa la cámara trasera
+    // input.capture = 'user' // Usa la cámara frontal
+  }
+  
+  // En móviles, el atributo capture puede no funcionar en todos los navegadores
+  // Por eso, siempre mostramos el selector de archivos como fallback
+  
   input.onchange = (e) => {
     const file = e.target.files[0]
     if (file) {
@@ -344,6 +366,41 @@ const tomarFotoCedula = () => {
   }
   input.click()
 }
+
+// ✅ Función alternativa: Usar la API de Capacitor para cámara (más nativo)
+// Si tienes Capacitor instalado, puedes usar esta función en lugar de la anterior
+/*
+import { Camera, CameraResultType, CameraSource } from '@capacitor/camera'
+
+const tomarFotoCedula = async (usarCamara = false) => {
+  try {
+    const image = await Camera.getPhoto({
+      quality: 90,
+      allowEditing: false,
+      resultType: CameraResultType.Uri,
+      source: usarCamara ? CameraSource.Camera : CameraSource.Photos
+    })
+    if (image && image.webPath) {
+      // Convertir a base64
+      const response = await fetch(image.webPath)
+      const blob = await response.blob()
+      const file = new File([blob], 'cedula.jpg', { type: 'image/jpeg' })
+      
+      const reader = new FileReader()
+      reader.onload = (ev) => {
+        fotoCedula.value = ev.target.result
+        registro.cedula_foto = file
+        console.log('📸 Foto de cédula tomada con Capacitor')
+      }
+      reader.readAsDataURL(file)
+    }
+  } catch (error) {
+    console.error('Error al tomar foto con Capacitor:', error)
+    // Fallback al método tradicional
+    tomarFotoCedulaTradicional(usarCamara)
+  }
+}
+*/
 
 const enviarRegistro = async () => {
   if (!validarPaso(1) || !validarPaso(2) || !validarPaso(3)) {
