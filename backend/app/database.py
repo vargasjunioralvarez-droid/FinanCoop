@@ -1,11 +1,20 @@
-# app/database.py
+# backend/app/database.py
+import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
+from dotenv import load_dotenv
 
-# PostgreSQL
-SQLALCHEMY_DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/financash_db"
+# Cargar variables de entorno
+load_dotenv()
 
-engine = create_engine(SQLALCHEMY_DATABASE_URL)
+# Usar variable de entorno o fallback para desarrollo local
+DATABASE_URL = os.getenv(
+    "DATABASE_URL", 
+    "postgresql://postgres:postgres@localhost:5433/financash_db"
+)
+
+# Configuración del engine
+engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()

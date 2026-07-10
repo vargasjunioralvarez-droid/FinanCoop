@@ -1,4 +1,5 @@
-# app/main.py
+# backend/app/main.py
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import engine, Base, get_db
@@ -9,18 +10,37 @@ from datetime import datetime
 
 app = FastAPI(title="FinanCash API", version="4.0")
 
+# ==================== CONFIGURACIÓN CORS ====================
+# Orígenes permitidos
+origins = [
+    # Desarrollo local (Vite)
+    "http://localhost:5173",
+    "http://localhost:5174",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:5174",
+    
+    # App móvil (IP local - IMPORTANTE)
+    "http://100.65.250.89:5174",
+    "http://192.168.10.122:5174",
+    "http://192.168.10.122:8000",
+    
+    # Producción (Render)
+    "https://financash-frontend.onrender.com",
+    "https://financash-backend.onrender.com",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Crear tablas
+# ==================== CREAR TABLAS ====================
 Base.metadata.create_all(bind=engine)
 
-# Inicializar datos
+# ==================== INICIALIZAR DATOS ====================
 def init_db():
     db = next(get_db())
     
@@ -49,31 +69,34 @@ def init_db():
         db.add(tasa)
     
     # Configuración pagos
-    config = db.query(ConfiguracionPago).first()
-    if not config:
-        config = ConfiguracionPago(
+    config_pago = db.query(ConfiguracionPago).first()
+    if not config_pago:
+        config_pago = ConfiguracionPago(
             banco_pago_movil="Banco de Venezuela",
             telefono_pago_movil="04121234567",
             cedula_pago_movil="V12345678",
             banco_transferencia="Banco Mercantil",
             cuenta_transferencia="01051234567890123456"
         )
-        db.add(config)
+        db.add(config_pago)
     
     db.commit()
     db.close()
 
-# Routers
+# ==================== ROUTERS ====================
 app.include_router(clientes_router)
 app.include_router(financiamientos_router)
 app.include_router(pagos_router)
 app.include_router(config_router)
 app.include_router(app_mobile_router)
 
+# ==================== EVENTO STARTUP ====================
 @app.on_event("startup")
 def startup():
     init_db()
 
+# ==================== EJECUCIÓN ====================
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    port = int(os.getenv("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
