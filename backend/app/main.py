@@ -11,7 +11,7 @@ from datetime import datetime
 app = FastAPI(title="FinanCash API", version="4.0")
 
 # ==================== CONFIGURACIÓN CORS ====================
-# Orígenes permitidos
+# Orígenes permitidos (frontend + app móvil + producción)
 origins = [
     # Desarrollo local (Vite)
     "http://localhost:5173",
@@ -24,9 +24,14 @@ origins = [
     "http://192.168.10.122:5174",
     "http://192.168.10.122:8000",
     
+    # Capacitor (app móvil nativa)
+    "capacitor://localhost",
+    "https://localhost",
+    
     # Producción (Render)
     "https://financash-frontend.onrender.com",
     "https://financash-backend.onrender.com",
+    "https://financoop.onrender.com",
 ]
 
 app.add_middleware(
