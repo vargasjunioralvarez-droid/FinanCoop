@@ -120,14 +120,14 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import axios from 'axios'
+import { API_URL } from '@/config/api'  // ✅ Importación al principio
 
 const tasaActual = ref(40.0)
 
 const cargarTasa = async () => {
   try {
-    import { API_URL } from '@/config/api'
-
-const res = await axios.get(`${API_URL}/config/tasa-dolar`)
+    // ✅ Usar API_URL directamente (ya importado)
+    const res = await axios.get(`${API_URL}/config/tasa-dolar`)
     tasaActual.value = res.data.tasa
   } catch (e) {
     console.error('Error cargando tasa:', e)
@@ -136,7 +136,7 @@ const res = await axios.get(`${API_URL}/config/tasa-dolar`)
 
 onMounted(() => {
   cargarTasa()
-  setInterval(cargarTasa, 300000)
+  setInterval(cargarTasa, 300000) // Actualizar cada 5 minutos
 })
 </script>
 
