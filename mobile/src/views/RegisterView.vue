@@ -3,7 +3,6 @@
     <v-row justify="center" align="center" class="min-vh-100">
       <v-col cols="12" sm="8" md="6" lg="5">
         <v-card class="register-card" elevation="4" rounded="xl">
-          <!-- Logo y título -->
           <v-card-title class="text-center py-3">
             <v-img src="/icons/icon-192x192.png" width="50" class="mx-auto mb-1" contain />
             <h1 class="text-h6 font-weight-bold">FinanCoop</h1>
@@ -13,7 +12,6 @@
           <v-divider />
 
           <v-card-text class="pa-3">
-            <!-- Stepper -->
             <v-stepper v-model="paso" class="bg-transparent" flat>
               <v-stepper-header>
                 <v-stepper-item :complete="paso > 1" :value="1" color="primary" size="small">
@@ -46,7 +44,6 @@
                     hide-details
                     class="mb-2"
                   />
-
                   <v-text-field
                     v-model="registro.cedula"
                     label="Cédula *"
@@ -57,8 +54,6 @@
                     hide-details
                     class="mb-2"
                   />
-
-                  <!-- ✅ TELÉFONO CON CÓDIGO DE PAÍS -->
                   <div class="d-flex mb-2">
                     <v-select
                       v-model="codigoPais"
@@ -84,7 +79,6 @@
                       placeholder="4121234567"
                     />
                   </div>
-
                   <v-text-field
                     v-model="registro.email"
                     label="Email (opcional)"
@@ -95,7 +89,6 @@
                     hide-details
                     class="mb-2"
                   />
-
                   <v-textarea
                     v-model="registro.direccion"
                     label="Dirección completa *"
@@ -108,7 +101,6 @@
                     class="mb-2"
                     placeholder="Calle, urbanización, ciudad"
                   />
-
                   <div class="d-flex justify-end mt-2">
                     <v-btn color="primary" rounded="pill" size="small" @click="paso++" :disabled="!validarPaso(1)">
                       Siguiente
@@ -129,7 +121,6 @@
                     hide-details
                     class="mb-2"
                   />
-
                   <v-text-field
                     v-model="registro.referencia_telefono"
                     label="Teléfono de referencia *"
@@ -140,7 +131,6 @@
                     hide-details
                     class="mb-2"
                   />
-
                   <v-select
                     v-model="registro.referencia_parentesco"
                     :items="['Familiar', 'Amigo', 'Vecino', 'Compañero de trabajo', 'Otro']"
@@ -152,7 +142,6 @@
                     hide-details
                     class="mb-2"
                   />
-
                   <div class="d-flex justify-space-between mt-2">
                     <v-btn variant="text" size="small" @click="paso--">
                       <v-icon start size="16">mdi-chevron-left</v-icon>
@@ -261,15 +250,17 @@ import { ref, reactive, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useFinanCash } from '@/composables/useFinanCash'
 
+// ✅ IMPORTAMOS CAPACITOR CAMERA
+import { Camera, CameraResultType, CameraSource } from '@capacitor/camera'
+
 const router = useRouter()
 const { registrarCliente } = useFinanCash()
 
 const paso = ref(1)
 const enviando = ref(false)
 const fotoCedula = ref(null)
-const codigoPais = ref('+58') // 🇻🇪 Venezuela por defecto
+const codigoPais = ref('+58')
 
-// ✅ Lista de códigos de país más comunes
 const codigosPaises = [
   { nombre: '🇻🇪 Venezuela', codigo: '+58' },
   { nombre: '🇨🇴 Colombia', codigo: '+57' },
@@ -301,7 +292,6 @@ const registro = reactive({
   cedula_foto: null
 })
 
-// ✅ Computed: teléfono completo con código de país
 const telefonoCompleto = computed(() => {
   if (!registro.telefono) return ''
   return `${codigoPais.value}${registro.telefono}`
@@ -325,63 +315,19 @@ const validarPaso = (paso) => {
   }
 }
 
-// ✅ Mostrar opciones: Cámara o Galería
-const mostrarOpcionesFoto = () => {
-  // En dispositivos móviles, mostrar un diálogo nativo
-  if (window.confirm('¿Quieres tomar una foto con la cámara?')) {
-    // Si el usuario confirma, abre la cámara
-    tomarFotoCedula(true)
-  } else {
-    // Si cancela, abre la galería
-    tomarFotoCedula(false)
-  }
-}
-
-// ✅ Función para tomar foto o seleccionar de galería
-const tomarFotoCedula = (usarCamara = false) => {
-  const input = document.createElement('input')
-  input.type = 'file'
-  input.accept = 'image/*'
-  
-  // Si usamos cámara, agregamos el atributo capture
-  if (usarCamara) {
-    input.capture = 'environment' // Usa la cámara trasera
-    // input.capture = 'user' // Usa la cámara frontal
-  }
-  
-  // En móviles, el atributo capture puede no funcionar en todos los navegadores
-  // Por eso, siempre mostramos el selector de archivos como fallback
-  
-  input.onchange = (e) => {
-    const file = e.target.files[0]
-    if (file) {
-      const reader = new FileReader()
-      reader.onload = (ev) => {
-        fotoCedula.value = ev.target.result
-        registro.cedula_foto = file
-        console.log('📸 Foto de cédula seleccionada:', file.name)
-      }
-      reader.readAsDataURL(file)
-    }
-  }
-  input.click()
-}
-
-// ✅ Función alternativa: Usar la API de Capacitor para cámara (más nativo)
-// Si tienes Capacitor instalado, puedes usar esta función en lugar de la anterior
-/*
-import { Camera, CameraResultType, CameraSource } from '@capacitor/camera'
-
-const tomarFotoCedula = async (usarCamara = false) => {
+// ✅ FUNCIÓN PRINCIPAL: Muestra opciones y usa Capacitor Camera
+const mostrarOpcionesFoto = async () => {
   try {
     const image = await Camera.getPhoto({
-      quality: 90,
+      quality: 80,
       allowEditing: false,
       resultType: CameraResultType.Uri,
-      source: usarCamara ? CameraSource.Camera : CameraSource.Photos
+      source: CameraSource.Prompt, // 📌 ESTO ES CLAVE: da a elegir entre cámara y galería
+      width: 800,
+      height: 800
     })
+    
     if (image && image.webPath) {
-      // Convertir a base64
       const response = await fetch(image.webPath)
       const blob = await response.blob()
       const file = new File([blob], 'cedula.jpg', { type: 'image/jpeg' })
@@ -390,17 +336,36 @@ const tomarFotoCedula = async (usarCamara = false) => {
       reader.onload = (ev) => {
         fotoCedula.value = ev.target.result
         registro.cedula_foto = file
-        console.log('📸 Foto de cédula tomada con Capacitor')
+        console.log('📸 Foto seleccionada con Capacitor')
       }
       reader.readAsDataURL(file)
     }
   } catch (error) {
-    console.error('Error al tomar foto con Capacitor:', error)
-    // Fallback al método tradicional
-    tomarFotoCedulaTradicional(usarCamara)
+    console.error('Error al tomar foto:', error)
+    // Fallback si Capacitor no funciona
+    tomarFotoTradicional()
   }
 }
-*/
+
+// ✅ FALLBACK: Método tradicional por si Capacitor falla
+const tomarFotoTradicional = () => {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = 'image/*'
+  input.onchange = (e) => {
+    const file = e.target.files[0]
+    if (file) {
+      const reader = new FileReader()
+      reader.onload = (ev) => {
+        fotoCedula.value = ev.target.result
+        registro.cedula_foto = file
+        console.log('📸 Foto seleccionada (fallback):', file.name)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+  input.click()
+}
 
 const enviarRegistro = async () => {
   if (!validarPaso(1) || !validarPaso(2) || !validarPaso(3)) {
@@ -411,13 +376,12 @@ const enviarRegistro = async () => {
   enviando.value = true
   
   try {
-    // ✅ Teléfono completo con código de país
     const telefonoCompletoValue = `${codigoPais.value}${registro.telefono}`
     
     const formData = new FormData()
     formData.append('nombre', registro.nombre.trim())
     formData.append('cedula', registro.cedula.trim())
-    formData.append('telefono', telefonoCompletoValue) // ✅ Enviamos con código de país
+    formData.append('telefono', telefonoCompletoValue)
     formData.append('email', (registro.email || '').trim())
     formData.append('direccion', registro.direccion.trim())
     formData.append('referencia_nombre', registro.referencia_nombre.trim())
@@ -426,17 +390,11 @@ const enviarRegistro = async () => {
     
     if (registro.cedula_foto) {
       formData.append('cedula_foto', registro.cedula_foto)
-      console.log('📸 Enviando foto:', registro.cedula_foto.name)
     }
     
-    console.log('📤 Enviando registro...')
-    console.log('📞 Teléfono completo:', telefonoCompletoValue)
-    
     const result = await registrarCliente(formData)
-    console.log('📥 Respuesta registro:', result)
     
     if (result.success) {
-      console.log('✅ Registro exitoso, PIN:', result.pin)
       if (result.pin) {
         localStorage.setItem('financoop_pin_temp', result.pin)
       }
@@ -465,7 +423,6 @@ const enviarRegistro = async () => {
   border-radius: 20px !important;
 }
 
-/* ✅ Estilos para el campo de teléfono con código */
 .codigo-pais {
   flex-shrink: 0;
   margin-right: 8px;

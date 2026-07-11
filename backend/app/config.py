@@ -1,4 +1,5 @@
 # app/config.py
+import os
 import enum
 
 class EstadoFinanciamiento(str, enum.Enum):
@@ -73,3 +74,26 @@ NIVELES_CONFIG_DEFAULT = {
 
 # Variable global que se modifica en runtime
 NIVELES_CONFIG = dict(NIVELES_CONFIG_DEFAULT)
+
+# ============================================================
+# ✅ CONFIGURACIÓN DE CLOUDFLARE IMAGES
+# ============================================================
+
+# Credenciales de Cloudflare Images
+CLOUDFLARE_ACCOUNT_ID = os.getenv("CLOUDFLARE_ACCOUNT_ID", "")
+CLOUDFLARE_API_TOKEN = os.getenv("CLOUDFLARE_API_TOKEN", "")
+
+# URL base para la API de Cloudflare Images
+CLOUDFLARE_IMAGES_URL = f"https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/images/v1"
+
+# URL pública de las imágenes (se genera automáticamente)
+# Ejemplo: https://imagedelivery.net/{ACCOUNT_HASH}/{IMAGE_ID}/{VARIANT}
+CLOUDFLARE_DELIVERY_URL = f"https://imagedelivery.net/{CLOUDFLARE_ACCOUNT_ID}"
+
+# Verificar que las credenciales están configuradas
+CLOUDFLARE_CONFIGURADO = bool(CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN)
+
+if CLOUDFLARE_CONFIGURADO:
+    print("✅ Cloudflare Images configurado correctamente")
+else:
+    print("⚠️ Cloudflare Images NO configurado (faltan credenciales)")

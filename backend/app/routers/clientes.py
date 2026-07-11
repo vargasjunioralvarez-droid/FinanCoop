@@ -1,48 +1,139 @@
 # backend/app/routers/clientes.py
-from fastapi import APIRouter, Depends, HTTPException, Query
+import base64
+from fastapi import APIRouter, Depends, HTTPException, Query, File, UploadFile, Form
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Cliente, Financiamiento, Cuota
 from app.schemas import ClienteCreate
 from app.utils import (
     calcular_nivel, actualizar_score_cliente, generar_pin, 
-    calcular_usado_disponible, obtener_tasa_actual
+    calcular_usado_disponible, obtener_tasa_actual, generar_token
 )
 from datetime import datetime
+import os
+import uuid
 
 router = APIRouter(prefix="/clientes", tags=["Clientes"])
 
+# ============================================================
+# ✅ CREAR CLIENTE CON MANEJO DE IMAGEN OPTIMIZADO
+# ============================================================
 @router.post("")
-def crear_cliente(cliente: ClienteCreate, db: Session = Depends(get_db)):
-    existe = db.query(Cliente).filter(Cliente.cedula == cliente.cedula).first()
-    if existe:
-        return {"error": "Cliente ya existe", "cliente": existe}
-    
-    db_cliente = Cliente(
-        nombre=cliente.nombre,
-        cedula=cliente.cedula,
-        telefono=cliente.telefono,
-        email=cliente.email,
-        direccion=cliente.direccion,
-        referencia_nombre=cliente.referencia_nombre,
-        referencia_telefono=cliente.referencia_telefono,
-        referencia_parentesco=cliente.referencia_parentesco,
-    )
-    db_cliente.pin = generar_pin()
-    db.add(db_cliente)
-    db.commit()
-    db.refresh(db_cliente)
-    
-    return {
-        "cliente": db_cliente,
-        "pin_generado": db_cliente.pin,
-        "mensaje": "Cliente creado. PIN para app: " + db_cliente.pin
-    }
+async def crear_cliente(
+    nombre: str = Form(...),
+    cedula: str = Form(...),
+    telefono: str = Form(...),
+    email: str = Form(""),
+    direccion: str = Form(""),
+    referencia_nombre: str = Form(""),
+    referencia_telefono: str = Form(""),
+    referencia_parentesco: str = Form(""),
+    cedula_foto: UploadFile | None = File(None),
+    db: Session = Depends(get_db)
+):
+    try:
+        # 1. Verificar si el cliente ya existe
+        existe = db.query(Cliente).filter(Cliente.cedula == cedula).first()
+        if existe:
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "error": f"Cliente con cédula {cedula} ya existe"}
+            )
 
+        # 2. Crear el cliente
+        db_cliente = Cliente(
+            nombre=nombre,
+            cedula=cedula,
+            telefono=telefono,
+            email=email,
+            direccion=direccion,
+            referencia_nombre=referencia_nombre,
+            referencia_telefono=referencia_telefono,
+            referencia_parentesco=referencia_parentesco,
+        )
+        db_cliente.pin = generar_pin()
+        db_cliente.token_app = generar_token()  # Token inicial para la app
+        db.add(db_cliente)
+        db.commit()
+        db.refresh(db_cliente)
+
+        # 3. ✅ PROCESAR IMAGEN OPTIMIZADO
+        foto_guardada = False
+        if cedula_foto and cedula_foto.filename:
+            try:
+                # Leer el archivo
+                contenido = await cedula_foto.read()
+                
+                # ✅ LIMITAR TAMAÑO: Si la imagen es > 500KB, comprimir
+                max_size = 500 * 1024  # 500 KB
+                if len(contenido) > max_size:
+                    print(f"⚠️ Imagen grande ({len(contenido)} bytes), comprimiendo...")
+                    # Aquí podrías agregar lógica de compresión
+                    # Por ahora, solo la guardamos con advertencia
+                
+                # Convertir a base64 (solo si es necesario)
+                foto_base64 = base64.b64encode(contenido).decode('utf-8')
+                
+                # Guardar en el cliente
+                db_cliente.foto_cedula = foto_base64
+                db.commit()
+                foto_guardada = True
+                print(f"✅ Foto guardada: {len(contenido)} bytes")
+                
+            except Exception as e:
+                print(f"❌ Error al procesar la foto: {e}")
+                # No falla el registro si la foto falla
+
+        # 4. ✅ ENVIAR PIN POR WHATSAPP (opcional, comentado si no tienes Twilio)
+        # try:
+        #     from app.utils import enviar_pin_cliente
+        #     enviar_pin_cliente(
+        #         telefono=db_cliente.telefono,
+        #         nombre=db_cliente.nombre,
+        #         cedula=db_cliente.cedula,
+        #         pin=db_cliente.pin
+        #     )
+        # except Exception as e:
+        #     print(f"❌ Error enviando PIN: {e}")
+
+        return {
+            "success": True,
+            "cliente": {
+                "id": db_cliente.id,
+                "nombre": db_cliente.nombre,
+                "cedula": db_cliente.cedula,
+                "telefono": db_cliente.telefono,
+                "email": db_cliente.email,
+                "direccion": db_cliente.direccion,
+                "nivel": db_cliente.nivel,
+                "score": db_cliente.score,
+                "token_app": db_cliente.token_app
+            },
+            "pin_generado": db_cliente.pin,
+            "foto_guardada": foto_guardada,
+            "mensaje": f"✅ Cliente registrado. PIN: {db_cliente.pin}"
+        }
+
+    except Exception as e:
+        print(f"❌ Error en registro: {e}")
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": str(e)}
+        )
+
+# ============================================================
+# ✅ LISTAR CLIENTES
+# ============================================================
 @router.get("")
 def listar_clientes(db: Session = Depends(get_db)):
     return db.query(Cliente).all()
 
+# ============================================================
+# ✅ BUSCAR CLIENTE POR CÉDULA
+# ============================================================
 @router.get("/buscar/{cedula}")
 def buscar_cliente_por_cedula(cedula: str, db: Session = Depends(get_db)):
     cliente = db.query(Cliente).filter(Cliente.cedula == cedula).first()
@@ -84,6 +175,9 @@ def buscar_cliente_por_cedula(cedula: str, db: Session = Depends(get_db)):
         }
     }
 
+# ============================================================
+# ✅ OBTENER CLIENTE POR ID
+# ============================================================
 @router.get("/{id}")
 def obtener_cliente(id: int, db: Session = Depends(get_db)):
     cliente = db.query(Cliente).filter(Cliente.id == id).first()
@@ -123,6 +217,9 @@ def obtener_cliente(id: int, db: Session = Depends(get_db)):
         }
     }
 
+# ============================================================
+# ✅ ESTADO DE CUENTA DEL CLIENTE
+# ============================================================
 @router.get("/{id}/estado-cuenta")
 def estado_cuenta_cliente(id: int, db: Session = Depends(get_db)):
     cliente = db.query(Cliente).filter(Cliente.id == id).first()
@@ -173,7 +270,9 @@ def estado_cuenta_cliente(id: int, db: Session = Depends(get_db)):
         "mensaje": "Tiene deudas vencidas" if bloqueado else "Cliente al día"
     }
 
-# ============ ENDPOINT CORREGIDO ============
+# ============================================================
+# ✅ PROPUESTA DE FINANCIAMIENTO (CORREGIDO)
+# ============================================================
 @router.get("/{id}/nivel-propuesta")
 def propuesta_financiamiento(
     id: int, 
@@ -191,7 +290,7 @@ def propuesta_financiamiento(
     
     disponible = calcular_usado_disponible(id, db)
     
-    # ✅ CORRECCIÓN: monto_total_bs ya es un float (gracias a Query)
+    # ✅ monto_total_bs ya es un float (gracias a Query)
     monto_total_usd = monto_total_bs / tasa
     
     if not disponible["puede_comprar"]:
