@@ -5,7 +5,8 @@ from app.database import get_db
 from app.models import Cliente, Financiamiento, Cuota
 from app.utils import (
     calcular_nivel, actualizar_score_cliente, generar_pin, 
-    calcular_usado_disponible, obtener_tasa_actual, generar_token
+    calcular_usado_disponible, obtener_tasa_actual, generar_token,
+    enviar_pin_cliente  # ✅ IMPORTAR FUNCIÓN DE TWILIO
 )
 from datetime import datetime
 import httpx
@@ -53,7 +54,7 @@ async def subir_imagen_cloudflare(archivo_bytes: bytes, nombre_archivo: str) -> 
         return None
 
 # ============================================================
-# ✅ CREAR CLIENTE - CON CLOUDFLARE
+# ✅ CREAR CLIENTE - CON CLOUDFLARE Y TWILIO
 # ============================================================
 @router.post("")
 async def crear_cliente(
@@ -83,7 +84,6 @@ async def crear_cliente(
                 print(f"✅ URL de la foto: {url_cedula}")
             except Exception as e:
                 print(f"❌ Error al subir foto a Cloudflare: {e}")
-                # Si falla Cloudflare, continuamos sin foto
 
         # Crear el cliente
         db_cliente = Cliente(
@@ -95,7 +95,7 @@ async def crear_cliente(
             referencia_nombre=referencia_nombre,
             referencia_telefono=referencia_telefono,
             referencia_parentesco=referencia_parentesco,
-            url_cedula=url_cedula,  # ✅ Guardar URL de Cloudflare
+            url_cedula=url_cedula,
             pin=generar_pin(),
             token_app=generar_token()
         )
@@ -103,6 +103,21 @@ async def crear_cliente(
         db.add(db_cliente)
         db.commit()
         db.refresh(db_cliente)
+
+        # ✅ ENVIAR PIN POR WHATSAPP/SMS CON TWILIO
+        try:
+            enviado = enviar_pin_cliente(
+                telefono=db_cliente.telefono,
+                nombre=db_cliente.nombre,
+                cedula=db_cliente.cedula,
+                pin=db_cliente.pin
+            )
+            if enviado:
+                print(f"✅ PIN enviado a {db_cliente.telefono}")
+            else:
+                print(f"⚠️ No se pudo enviar PIN a {db_cliente.telefono}")
+        except Exception as e:
+            print(f"❌ Error enviando PIN: {e}")
 
         return {
             "success": True,
