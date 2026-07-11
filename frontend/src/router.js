@@ -16,36 +16,24 @@ import AdminLoginView from '@/views/AdminLogin.vue'
 import UsuariosView from '@/views/UsuariosView.vue'
 import ClientesAdminView from '@/views/ClientesAdmin.vue'
 
-// ✅ IMPORTAR LoginView
-import LoginView from '@/views/LoginView.vue'
-
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     // ============================================================
-    // 🔓 RUTAS PÚBLICAS
+    // 🔓 RUTAS PÚBLICAS (LOGIN ÚNICO)
     // ============================================================
     {
-      path: '/login',
-      component: LoginView,
-      meta: { public: true }
+      path: '/',
+      redirect: '/login'
     },
     {
-      path: '/admin-login',
+      path: '/login',
       component: AdminLoginView,
       meta: { public: true }
     },
 
     // ============================================================
-    // 🏠 REDIRECCIÓN
-    // ============================================================
-    {
-      path: '/',
-      redirect: '/inicio'
-    },
-
-    // ============================================================
-    // 🔒 RUTAS DE CLIENTE
+    // 🔒 RUTAS DE CLIENTE (requieren autenticación)
     // ============================================================
     {
       path: '/inicio',
@@ -90,7 +78,7 @@ const router = createRouter({
     },
 
     // ============================================================
-    // 👑 RUTAS DE ADMINISTRADOR
+    // 👑 RUTAS DE ADMINISTRADOR (requieren rol admin)
     // ============================================================
     {
       path: '/usuarios',
@@ -122,8 +110,8 @@ router.beforeEach((to, from, next) => {
   // 1. RUTAS DE ADMINISTRADOR
   if (requiresAdmin) {
     if (!adminToken || adminRol !== 'admin') {
-      console.log('⛔ Requiere rol admin, redirigiendo a admin-login')
-      next('/admin-login')
+      console.log('⛔ Requiere rol admin, redirigiendo a login')
+      next('/login')
       return
     }
     next()
@@ -143,12 +131,14 @@ router.beforeEach((to, from, next) => {
 
   // 3. RUTAS PÚBLICAS
   if (isPublic) {
-    if (token && to.path !== '/login') {
+    // Si tiene token de cliente, redirigir a inicio
+    if (token) {
       console.log('🔓 Pública pero con token, redirigiendo a /inicio')
       next('/inicio')
       return
     }
-    if (adminToken && to.path === '/admin-login') {
+    // Si tiene token de admin, redirigir a usuarios
+    if (adminToken) {
       console.log('🔓 Pública pero con admin token, redirigiendo a /usuarios')
       next('/usuarios')
       return
