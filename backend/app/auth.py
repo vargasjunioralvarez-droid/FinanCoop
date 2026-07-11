@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from app.database import get_db
 from app.models import Cliente, Usuario
 import os
-import bcrypt  # ✅ AGREGAR IMPORT
+import bcrypt
 
 SECRET_KEY = os.getenv("SECRET_KEY", "supersecretkey")
 ALGORITHM = "HS256"

@@ -5,31 +5,25 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.database import engine, Base, get_db
 from app.models import NivelConfig, TasaDolar, ConfiguracionPago
 from app.config import NIVELES_CONFIG_DEFAULT
-from app.routers import clientes_router, financiamientos_router, pagos_router, config_router, app_mobile_router
+from app.routers import (
+    clientes_router, financiamientos_router, pagos_router, 
+    config_router, app_mobile_router, admin_router, auth_router  # ✅ AGREGAR auth_router
+)
 from datetime import datetime
-from app.routers import admin_router
 
 app = FastAPI(title="FinanCash API", version="4.0")
 
 # ==================== CONFIGURACIÓN CORS ====================
-# Orígenes permitidos (frontend + app móvil + producción)
 origins = [
-    # Desarrollo local (Vite)
     "http://localhost:5173",
     "http://localhost:5174",
     "http://127.0.0.1:5173",
     "http://127.0.0.1:5174",
-    
-    # App móvil (IP local - IMPORTANTE)
     "http://100.65.250.89:5174",
     "http://192.168.10.122:5174",
     "http://192.168.10.122:8000",
-    
-    # Capacitor (app móvil nativa)
     "capacitor://localhost",
     "https://localhost",
-    
-    # Producción (Render)
     "https://financash-frontend.onrender.com",
     "https://financash-backend.onrender.com",
     "https://financoop.onrender.com",
@@ -50,7 +44,6 @@ Base.metadata.create_all(bind=engine)
 def init_db():
     db = next(get_db())
     
-    # Niveles
     for nivel_key, config in NIVELES_CONFIG_DEFAULT.items():
         existe = db.query(NivelConfig).filter(NivelConfig.nivel == nivel_key).first()
         if not existe:
@@ -68,13 +61,11 @@ def init_db():
             )
             db.add(nc)
     
-    # Tasa inicial
     tasa = db.query(TasaDolar).order_by(TasaDolar.id.desc()).first()
     if not tasa:
         tasa = TasaDolar(tasa=40.0, fuente="manual")
         db.add(tasa)
     
-    # Configuración pagos
     config_pago = db.query(ConfiguracionPago).first()
     if not config_pago:
         config_pago = ConfiguracionPago(
@@ -95,7 +86,8 @@ app.include_router(financiamientos_router)
 app.include_router(pagos_router)
 app.include_router(config_router)
 app.include_router(app_mobile_router)
-app.include_router(admin_router)
+app.include_router(admin_router)  # ✅ AGREGAR
+app.include_router(auth_router)   # ✅ AGREGAR
 
 # ==================== EVENTO STARTUP ====================
 @app.on_event("startup")
