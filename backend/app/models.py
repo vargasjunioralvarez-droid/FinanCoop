@@ -157,3 +157,14 @@ class ConfiguracionPago(Base):
     
     correo_zelle = Column(String(100), nullable=True)
     correo_binance = Column(String(100), nullable=True)
+
+class Usuario(Base):
+    __tablename__ = "usuarios"
+    id = Column(Integer, primary_key=True)
+    username = Column(String(50), unique=True, nullable=False)
+    password = Column(String(200), nullable=False)  # Hash de la contraseña
+    rol = Column(String(20), default="usuario")  # admin, cajero, usuario
+    nombre = Column(String(100))
+    email = Column(String(100))
+    activo = Column(Boolean, default=True)
+    creado_en = Column(DateTime, default=datetime.now)

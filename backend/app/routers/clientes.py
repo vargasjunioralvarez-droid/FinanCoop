@@ -1,13 +1,14 @@
 # backend/app/routers/clientes.py
-from fastapi import APIRouter, Depends, HTTPException, Query, Form, File, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Query, Form, File, UploadFile, status
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Cliente, Financiamiento, Cuota
 from app.utils import (
     calcular_nivel, actualizar_score_cliente, generar_pin, 
     calcular_usado_disponible, obtener_tasa_actual, generar_token,
-    enviar_pin_cliente  # ✅ IMPORTAR FUNCIÓN DE TWILIO
+    enviar_pin_cliente
 )
+from app.auth import get_current_admin, get_current_cliente
 from datetime import datetime
 import httpx
 import os
@@ -21,40 +22,26 @@ CLOUDFLARE_ACCOUNT_ID = os.getenv("CLOUDFLARE_ACCOUNT_ID", "")
 CLOUDFLARE_API_TOKEN = os.getenv("CLOUDFLARE_API_TOKEN", "")
 
 async def subir_imagen_cloudflare(archivo_bytes: bytes, nombre_archivo: str) -> str | None:
-    """Sube una imagen a Cloudflare Images y devuelve la URL pública"""
     try:
         url = f"https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/images/v1"
-        
-        files = {
-            'file': (nombre_archivo, archivo_bytes, 'image/jpeg')
-        }
-        
-        headers = {
-            'Authorization': f'Bearer {CLOUDFLARE_API_TOKEN}'
-        }
+        files = {'file': (nombre_archivo, archivo_bytes, 'image/jpeg')}
+        headers = {'Authorization': f'Bearer {CLOUDFLARE_API_TOKEN}'}
         
         async with httpx.AsyncClient() as client:
             response = await client.post(url, headers=headers, files=files, timeout=30.0)
-            
             if response.status_code == 200:
                 result = response.json()
                 if result.get('success'):
                     image_url = result['result']['variants'][0]
                     print(f"✅ Imagen subida a Cloudflare: {image_url}")
                     return image_url
-                else:
-                    print(f"❌ Error Cloudflare: {result.get('errors')}")
-                    return None
-            else:
-                print(f"❌ Error HTTP: {response.status_code}")
-                return None
-                
+            return None
     except Exception as e:
         print(f"❌ Error subiendo a Cloudflare: {e}")
         return None
 
 # ============================================================
-# ✅ CREAR CLIENTE - CON CLOUDFLARE Y TWILIO
+# ✅ CREAR CLIENTE (PÚBLICO - SIN AUTENTICACIÓN)
 # ============================================================
 @router.post("")
 async def crear_cliente(
@@ -70,28 +57,21 @@ async def crear_cliente(
     db: Session = Depends(get_db)
 ):
     try:
-        # Verificar si el cliente ya existe
         existe = db.query(Cliente).filter(Cliente.cedula == cedula).first()
         if existe:
             return {"error": f"Cliente con cédula {cedula} ya existe"}
 
-        # ✅ SUBIR FOTO A CLOUDFLARE DESDE EL BACKEND
         url_cedula = ""
         if cedula_foto and cedula_foto.filename:
             try:
                 contenido = await cedula_foto.read()
                 url_cedula = await subir_imagen_cloudflare(contenido, cedula_foto.filename)
-                print(f"✅ URL de la foto: {url_cedula}")
             except Exception as e:
                 print(f"❌ Error al subir foto a Cloudflare: {e}")
 
-        # Crear el cliente
         db_cliente = Cliente(
-            nombre=nombre,
-            cedula=cedula,
-            telefono=telefono,
-            email=email,
-            direccion=direccion,
+            nombre=nombre, cedula=cedula, telefono=telefono,
+            email=email, direccion=direccion,
             referencia_nombre=referencia_nombre,
             referencia_telefono=referencia_telefono,
             referencia_parentesco=referencia_parentesco,
@@ -104,7 +84,6 @@ async def crear_cliente(
         db.commit()
         db.refresh(db_cliente)
 
-        # ✅ ENVIAR PIN POR WHATSAPP/SMS CON TWILIO
         try:
             enviado = enviar_pin_cliente(
                 telefono=db_cliente.telefono,
@@ -112,10 +91,6 @@ async def crear_cliente(
                 cedula=db_cliente.cedula,
                 pin=db_cliente.pin
             )
-            if enviado:
-                print(f"✅ PIN enviado a {db_cliente.telefono}")
-            else:
-                print(f"⚠️ No se pudo enviar PIN a {db_cliente.telefono}")
         except Exception as e:
             print(f"❌ Error enviando PIN: {e}")
 
@@ -141,14 +116,17 @@ async def crear_cliente(
         return {"error": str(e), "success": False}
 
 # ============================================================
-# ✅ LISTAR CLIENTES
+# ✅ LISTAR CLIENTES (SOLO ADMIN)
 # ============================================================
 @router.get("")
-def listar_clientes(db: Session = Depends(get_db)):
+def listar_clientes(
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_admin)
+):
     return db.query(Cliente).all()
 
 # ============================================================
-# ✅ BUSCAR CLIENTE POR CÉDULA
+# ✅ BUSCAR CLIENTE POR CÉDULA (PÚBLICO)
 # ============================================================
 @router.get("/buscar/{cedula}")
 def buscar_cliente_por_cedula(cedula: str, db: Session = Depends(get_db)):
@@ -161,7 +139,6 @@ def buscar_cliente_por_cedula(cedula: str, db: Session = Depends(get_db)):
     
     nivel, config = calcular_nivel(cliente.score)
     tasa = obtener_tasa_actual(db)
-    
     disponible = calcular_usado_disponible(cliente.id, db)
     
     return {
@@ -193,13 +170,17 @@ def buscar_cliente_por_cedula(cedula: str, db: Session = Depends(get_db)):
     }
 
 # ============================================================
-# ✅ OBTENER CLIENTE POR ID
+# ✅ OBTENER CLIENTE POR ID (SOLO ADMIN)
 # ============================================================
 @router.get("/{id}")
-def obtener_cliente(id: int, db: Session = Depends(get_db)):
+def obtener_cliente(
+    id: int,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_admin)
+):
     cliente = db.query(Cliente).filter(Cliente.id == id).first()
     if not cliente:
-        return {"error": "Cliente no encontrado"}
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
     
     actualizar_score_cliente(cliente, db)
     db.refresh(cliente)
@@ -236,7 +217,54 @@ def obtener_cliente(id: int, db: Session = Depends(get_db)):
     }
 
 # ============================================================
-# ✅ ESTADO DE CUENTA DEL CLIENTE
+# ✅ EDITAR CLIENTE (SOLO ADMIN)
+# ============================================================
+@router.put("/{id}")
+def editar_cliente(
+    id: int,
+    nombre: str = Form(None),
+    telefono: str = Form(None),
+    email: str = Form(None),
+    direccion: str = Form(None),
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_admin)
+):
+    cliente = db.query(Cliente).filter(Cliente.id == id).first()
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+    
+    if nombre:
+        cliente.nombre = nombre
+    if telefono:
+        cliente.telefono = telefono
+    if email:
+        cliente.email = email
+    if direccion:
+        cliente.direccion = direccion
+    
+    db.commit()
+    db.refresh(cliente)
+    return {"mensaje": "Cliente actualizado", "cliente": cliente}
+
+# ============================================================
+# ✅ ELIMINAR CLIENTE (SOLO ADMIN)
+# ============================================================
+@router.delete("/{id}")
+def eliminar_cliente(
+    id: int,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_admin)
+):
+    cliente = db.query(Cliente).filter(Cliente.id == id).first()
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+    
+    db.delete(cliente)
+    db.commit()
+    return {"mensaje": "Cliente eliminado", "id": id}
+
+# ============================================================
+# ✅ ESTADO DE CUENTA (PÚBLICO)
 # ============================================================
 @router.get("/{id}/estado-cuenta")
 def estado_cuenta_cliente(id: int, db: Session = Depends(get_db)):
@@ -245,7 +273,6 @@ def estado_cuenta_cliente(id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Cliente no encontrado")
     
     hoy = datetime.now()
-    
     cuotas_vencidas = db.query(Cuota).join(Financiamiento).filter(
         Financiamiento.cliente_id == id,
         Cuota.estado == "pendiente",
@@ -254,7 +281,6 @@ def estado_cuenta_cliente(id: int, db: Session = Depends(get_db)):
     
     deuda_vencida_bs = sum(c.monto_total_bs for c in cuotas_vencidas)
     deuda_vencida_usd = sum(c.monto_total_usd for c in cuotas_vencidas)
-    
     bloqueado = len(cuotas_vencidas) > 0
     
     riesgo = "bajo"
@@ -289,7 +315,7 @@ def estado_cuenta_cliente(id: int, db: Session = Depends(get_db)):
     }
 
 # ============================================================
-# ✅ PROPUESTA DE FINANCIAMIENTO
+# ✅ PROPUESTA DE FINANCIAMIENTO (PÚBLICO)
 # ============================================================
 @router.get("/{id}/nivel-propuesta")
 def propuesta_financiamiento(
@@ -304,9 +330,7 @@ def propuesta_financiamiento(
     tasa = obtener_tasa_actual(db)
     actualizar_score_cliente(cliente, db)
     nivel, config = calcular_nivel(cliente.score)
-    
     disponible = calcular_usado_disponible(id, db)
-    
     monto_total_usd = monto_total_bs / tasa
     
     if not disponible["puede_comprar"]:
@@ -337,7 +361,6 @@ def propuesta_financiamiento(
     
     entrada_bs = monto_total_bs * (config["entrada_pct"] / 100)
     financia_bs = monto_total_bs - entrada_bs
-    
     monto_total_usd_ref = monto_total_bs / tasa
     entrada_usd_ref = entrada_bs / tasa
     financia_usd_ref = financia_bs / tasa
@@ -346,7 +369,6 @@ def propuesta_financiamiento(
     for cuotas_num in range(config["cuotas_base"], config["cuotas_max"] + 1):
         monto_cuota_bs = financia_bs / cuotas_num
         monto_cuota_usd_ref = monto_cuota_bs / tasa
-        
         opciones.append({
             "cuotas": cuotas_num,
             "monto_cuota_bs": round(monto_cuota_bs, 2),
@@ -355,9 +377,6 @@ def propuesta_financiamiento(
             "frecuencia": "quincenal",
             "label": f"{cuotas_num} cuotas - BS {round(monto_cuota_bs, 2)} cada una"
         })
-    
-    cuotas_sugeridas = config["cuotas_base"]
-    requiere_aprobacion = False
     
     return {
         "cliente": {
@@ -383,9 +402,9 @@ def propuesta_financiamiento(
         "monto_financia_usd": round(financia_usd_ref, 2),
         "cuotas_base": config["cuotas_base"],
         "cuotas_max": config["cuotas_max"],
-        "cuotas_sugeridas": cuotas_sugeridas,
+        "cuotas_sugeridas": config["cuotas_base"],
         "mora_diaria": config["mora_diaria"],
         "aprobacion_extra": config["aprobacion_extra"],
-        "requiere_aprobacion": requiere_aprobacion,
+        "requiere_aprobacion": False,
         "opciones_cuotas": opciones
     }

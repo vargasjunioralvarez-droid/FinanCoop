@@ -1,26 +1,93 @@
-# app/auth.py
-from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError, jwt
+# backend/app/routers/auth.py
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
+from datetime import timedelta
 from app.database import get_db
-from app.models import Cliente
+from app.models import Usuario, Cliente
+from app.auth import create_access_token, get_current_cliente, get_current_admin
+from app.utils import generar_token
+import bcrypt
 import os
 
-SECRET_KEY = os.getenv("SECRET_KEY", "supersecretkey")
-ALGORITHM = "HS256"
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="app/login")
+router = APIRouter(prefix="/auth", tags=["Autenticación"])
 
-def get_current_cliente(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        cliente_id = payload.get("sub")
-        if cliente_id is None:
-            raise HTTPException(status_code=401, detail="Token inválido")
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Token inválido")
+def hash_password(password: str) -> str:
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
+
+# ============================================================
+# ✅ LOGIN PARA CLIENTES (APP MÓVIL)
+# ============================================================
+@router.post("/login-cliente")
+def login_cliente(cedula: str, pin: str, db: Session = Depends(get_db)):
+    cliente = db.query(Cliente).filter(Cliente.cedula == cedula).first()
+    if not cliente or cliente.pin != pin:
+        raise HTTPException(status_code=401, detail="Credenciales incorrectas")
     
-    cliente = db.query(Cliente).filter(Cliente.id == cliente_id).first()
-    if not cliente:
-        raise HTTPException(status_code=404, detail="Usuario no encontrado")
-    return cliente
+    # Actualizar último acceso
+    cliente.ultimo_acceso = datetime.now()
+    db.commit()
+    
+    # Crear token
+    token = create_access_token(data={"sub": str(cliente.id), "rol": "cliente"})
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "cliente": {
+            "id": cliente.id,
+            "nombre": cliente.nombre,
+            "cedula": cliente.cedula,
+            "nivel": cliente.nivel,
+            "score": cliente.score
+        }
+    }
+
+# ============================================================
+# ✅ LOGIN PARA ADMINISTRADORES (PANEL WEB)
+# ============================================================
+@router.post("/login")
+def login_admin(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    usuario = db.query(Usuario).filter(Usuario.username == form_data.username).first()
+    if not usuario or not verify_password(form_data.password, usuario.password):
+        raise HTTPException(status_code=401, detail="Credenciales incorrectas")
+    if not usuario.activo:
+        raise HTTPException(status_code=403, detail="Usuario inactivo")
+    
+    token = create_access_token(data={"sub": usuario.username, "rol": usuario.rol})
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "rol": usuario.rol,
+        "username": usuario.username,
+        "nombre": usuario.nombre
+    }
+
+# ============================================================
+# ✅ REGISTRO DE ADMINISTRADOR (SOLO PARA PRIMERA VEZ)
+# ============================================================
+@router.post("/registro")
+def registrar_usuario(username: str, password: str, rol: str = "usuario", db: Session = Depends(get_db)):
+    existe = db.query(Usuario).filter(Usuario.username == username).first()
+    if existe:
+        raise HTTPException(status_code=400, detail="El usuario ya existe")
+    
+    nuevo = Usuario(
+        username=username,
+        password=hash_password(password),
+        rol=rol,
+        nombre=username
+    )
+    db.add(nuevo)
+    db.commit()
+    return {"mensaje": "Usuario creado", "username": username, "rol": rol}
+
+# ============================================================
+# ✅ VERIFICAR TOKEN
+# ============================================================
+@router.get("/verificar")
+def verificar_token(current_user: Usuario = Depends(get_current_admin)):
+    return {"valid": True, "username": current_user.username, "rol": current_user.rol}

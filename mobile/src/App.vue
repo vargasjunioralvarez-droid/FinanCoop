@@ -3,8 +3,8 @@
     <!-- REGISTRO (sin layout) -->
     <router-view v-if="route.path === '/registro' || route.path === '/registro-exitoso'" />
 
-    <!-- LOGIN (sin layout) -->
-    <router-view v-else-if="route.path === '/login' || !token" />
+    <!-- LOGIN (sin layout) cuando NO hay token o la ruta es login -->
+    <router-view v-else-if="route.path === '/login' || !tokenValido" />
 
     <!-- DASHBOARD CON ROUTER -->
     <div v-else class="app-content">
@@ -202,6 +202,35 @@ const router = useRouter()
 const mostrarAyuda = ref(false)
 const tema = ref(localStorage.getItem('financoop_theme') || 'light')
 const scrolled = ref(false)
+const tokenValido = ref(false)
+const verificandoToken = ref(true)
+
+// ✅ FUNCIÓN PARA VALIDAR EL TOKEN
+const validarToken = async () => {
+  const tokenGuardado = localStorage.getItem('financoop_token')
+  
+  if (!tokenGuardado) {
+    tokenValido.value = false
+    verificandoToken.value = false
+    return
+  }
+
+  try {
+    // Intentar cargar datos con el token
+    await cargarDatos()
+    tokenValido.value = true
+  } catch (error) {
+    console.log('❌ Token inválido o expirado')
+    localStorage.removeItem('financoop_token')
+    tokenValido.value = false
+    // Si está en una ruta protegida, redirigir a login
+    if (route.path !== '/login' && route.path !== '/registro' && route.path !== '/registro-exitoso') {
+      router.push('/login')
+    }
+  } finally {
+    verificandoToken.value = false
+  }
+}
 
 // Tab activo basado en la ruta actual
 const activeTab = computed(() => {
@@ -230,9 +259,38 @@ const onScroll = () => {
   scrolled.value = window.scrollY > 10
 }
 
-onMounted(() => {
-  console.log('📱 App montada, token:', !!token.value)
+onMounted(async () => {
+  console.log('📱 App montada, validando token...')
+  await validarToken()
   window.addEventListener('scroll', onScroll)
+  
+  // Si no hay token válido y no está en rutas públicas, redirigir a login
+  if (!tokenValido.value && !['/login', '/registro', '/registro-exitoso'].includes(route.path)) {
+    router.push('/login')
+  }
+})
+
+// ✅ Watcher para cuando cambie la ruta
+watch(route, async (newRoute) => {
+  // Si la ruta es login o registro, no hacer nada
+  if (['/login', '/registro', '/registro-exitoso'].includes(newRoute.path)) {
+    return
+  }
+  
+  // Si no hay token válido y la ruta no es pública, redirigir a login
+  if (!tokenValido.value) {
+    router.push('/login')
+  }
+})
+
+// ✅ Watcher para cambios en el token
+watch(token, (newToken) => {
+  if (!newToken) {
+    tokenValido.value = false
+    if (!['/login', '/registro', '/registro-exitoso'].includes(route.path)) {
+      router.push('/login')
+    }
+  }
 })
 </script>
 
