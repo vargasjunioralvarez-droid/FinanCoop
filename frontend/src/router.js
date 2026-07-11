@@ -20,7 +20,7 @@ const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     // ============================================================
-    // 🔓 RUTAS PÚBLICAS (LOGIN ÚNICO)
+    // 🔓 RUTAS PÚBLICAS
     // ============================================================
     {
       path: '/',
@@ -33,27 +33,27 @@ const router = createRouter({
     },
 
     // ============================================================
-    // 🔒 RUTAS DE CLIENTE (requieren autenticación)
+    // 🔒 RUTAS DE CLIENTE
     // ============================================================
     {
       path: '/inicio',
       component: Dashboard,
-      meta: { requiresAuth: true, tab: 'inicio' }
+      meta: { requiresAuth: true }
     },
     {
       path: '/cajero',
       component: CajeroView,
-      meta: { requiresAuth: true, tab: 'cajero' }
+      meta: { requiresAuth: true }
     },
     {
       path: '/clientes',
       component: Clientes,
-      meta: { requiresAuth: true, tab: 'clientes' }
+      meta: { requiresAuth: true }
     },
     {
       path: '/financiamientos',
       component: Financiamientos,
-      meta: { requiresAuth: true, tab: 'financiamientos' }
+      meta: { requiresAuth: true }
     },
     {
       path: '/cuotas/:id',
@@ -64,21 +64,21 @@ const router = createRouter({
     {
       path: '/conciliacion',
       component: ConciliacionView,
-      meta: { requiresAuth: true, tab: 'conciliacion' }
+      meta: { requiresAuth: true }
     },
     {
       path: '/configuracion',
       component: ConfiguracionView,
-      meta: { requiresAuth: true, tab: 'configuracion' }
+      meta: { requiresAuth: true }
     },
     {
       path: '/niveles',
       component: NivelesView,
-      meta: { requiresAuth: true, tab: 'niveles' }
+      meta: { requiresAuth: true }
     },
 
     // ============================================================
-    // 👑 RUTAS DE ADMINISTRADOR (requieren rol admin)
+    // 👑 RUTAS DE ADMIN
     // ============================================================
     {
       path: '/usuarios',
@@ -94,53 +94,47 @@ const router = createRouter({
 })
 
 // ============================================================
-// ✅ GUARDIA DE NAVEGACIÓN
+// ✅ GUARDIA DE NAVEGACIÓN (SIMPLIFICADA)
 // ============================================================
 router.beforeEach((to, from, next) => {
   const token = localStorage.getItem('financoop_token')
   const adminToken = localStorage.getItem('admin_token')
   const adminRol = localStorage.getItem('admin_rol')
 
-  const isPublic = to.meta.public
-  const requiresAuth = to.meta.requiresAuth
-  const requiresAdmin = to.meta.requiresAdmin
+  console.log('🛣️ Navegando a:', to.path)
+  console.log('🔑 Token cliente:', !!token)
+  console.log('🔑 Token admin:', !!adminToken)
 
-  console.log('🛣️ Navegando a:', to.path, 'Token:', !!token, 'AdminToken:', !!adminToken)
-
-  // 1. RUTAS DE ADMINISTRADOR
-  if (requiresAdmin) {
-    if (!adminToken || adminRol !== 'admin') {
-      console.log('⛔ Requiere rol admin, redirigiendo a login')
-      next('/login')
+  // Si es ruta pública → permitir
+  if (to.meta.public) {
+    // Si tiene token de admin, redirigir a usuarios
+    if (adminToken && to.path === '/login') {
+      next('/usuarios')
       return
     }
-    next()
-    return
-  }
-
-  // 2. RUTAS DE CLIENTE
-  if (requiresAuth) {
-    if (!token) {
-      console.log('⛔ Requiere autenticación, redirigiendo a login')
-      next('/login')
-      return
-    }
-    next()
-    return
-  }
-
-  // 3. RUTAS PÚBLICAS
-  if (isPublic) {
     // Si tiene token de cliente, redirigir a inicio
-    if (token) {
-      console.log('🔓 Pública pero con token, redirigiendo a /inicio')
+    if (token && to.path === '/login') {
       next('/inicio')
       return
     }
-    // Si tiene token de admin, redirigir a usuarios
-    if (adminToken) {
-      console.log('🔓 Pública pero con admin token, redirigiendo a /usuarios')
-      next('/usuarios')
+    next()
+    return
+  }
+
+  // Si requiere admin
+  if (to.meta.requiresAdmin) {
+    if (!adminToken || adminRol !== 'admin') {
+      next('/login')
+      return
+    }
+    next()
+    return
+  }
+
+  // Si requiere autenticación
+  if (to.meta.requiresAuth) {
+    if (!token) {
+      next('/login')
       return
     }
     next()
