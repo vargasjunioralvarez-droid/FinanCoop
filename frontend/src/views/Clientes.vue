@@ -64,12 +64,26 @@
           </template>
           
           <template v-slot:item.acciones="{ item }">
-            <v-btn 
-              icon="mdi-eye" 
-              size="small" 
-              color="info"
-              @click="verDetalle(item)"
-            ></v-btn>
+            <div class="d-flex gap-1">
+              <v-btn 
+                icon="mdi-eye" 
+                size="small" 
+                color="info"
+                @click="verDetalle(item)"
+              ></v-btn>
+              <v-btn 
+                icon="mdi-pencil" 
+                size="small" 
+                color="primary"
+                @click="editarCliente(item)"
+              ></v-btn>
+              <v-btn 
+                icon="mdi-delete" 
+                size="small" 
+                color="error"
+                @click="eliminarCliente(item)"
+              ></v-btn>
+            </div>
           </template>
         </v-data-table>
       </v-col>
@@ -81,7 +95,24 @@
       </v-col>
     </v-row>
     
-    <!-- Dialog: Detalle del Cliente -->
+    <!-- Dialog: Editar Cliente -->
+    <v-dialog v-model="dialogEditar" max-width="500">
+      <v-card>
+        <v-card-title>✏️ Editar Cliente</v-card-title>
+        <v-card-text>
+          <v-text-field v-model="clienteEditando.nombre" label="Nombre" variant="outlined" />
+          <v-text-field v-model="clienteEditando.telefono" label="Teléfono" variant="outlined" />
+          <v-text-field v-model="clienteEditando.email" label="Email" variant="outlined" />
+          <v-textarea v-model="clienteEditando.direccion" label="Dirección" variant="outlined" rows="2" />
+        </v-card-text>
+        <v-card-actions>
+          <v-btn @click="dialogEditar = false">Cancelar</v-btn>
+          <v-btn color="primary" @click="guardarEdicion" :loading="guardando">Guardar</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Dialog: Detalle del Cliente (igual que antes) -->
     <v-dialog v-model="dialogDetalle" max-width="600">
       <v-card v-if="clienteSeleccionado">
         <v-card-title class="text-h5">
@@ -225,17 +256,23 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { api } from '@/config/api'  // ✅ Usar 'api' en lugar de axios
+import { api } from '@/config/api'
 
 const busqueda = ref('')
 const clientes = ref([])
 const cargando = ref(false)
+const guardando = ref(false)
 const busquedaRealizada = ref(false)
 const dialogDetalle = ref(false)
 const dialogCuotas = ref(false)
+const dialogEditar = ref(false)
 const clienteSeleccionado = ref(null)
+const clienteEditando = ref(null)
 const financiamientosCliente = ref([])
 const cuotas = ref([])
+
+const token = localStorage.getItem('admin_token')
+const esAdmin = !!token
 
 const headers = [
   { title: 'Nombre', key: 'nombre', sortable: true },
@@ -295,26 +332,20 @@ const buscar = async () => {
   busquedaRealizada.value = true
   
   try {
-    // ✅ Usar api.get
     const data = await api.get(`/clientes/buscar/${busqueda.value}`)
     if (data.encontrado) {
       clientes.value = [data]
       cargando.value = false
       return
     }
-  } catch (e) {
-    // No encontrado por cédula, continuar
-  }
+  } catch (e) {}
   
   try {
-    // ✅ Usar api.get
     const financiamientos = await api.get('/financiamientos')
     const finEncontrado = financiamientos.find(f => 
       f.codigo.toLowerCase() === busqueda.value.toLowerCase()
     )
-    
     if (finEncontrado) {
-      // ✅ Usar api.get
       const cliente = await api.get(`/clientes/${finEncontrado.cliente_id}`)
       if (!cliente.error) {
         clientes.value = [cliente]
@@ -322,12 +353,9 @@ const buscar = async () => {
         return
       }
     }
-  } catch (e) {
-    // Error buscando financiamiento
-  }
+  } catch (e) {}
   
   try {
-    // ✅ Usar api.get
     const todos = await api.get('/clientes')
     const filtrados = todos.filter(c => 
       c.nombre.toLowerCase().includes(busqueda.value.toLowerCase())
@@ -344,7 +372,6 @@ const buscar = async () => {
 const cargarTodos = async () => {
   cargando.value = true
   try {
-    // ✅ Usar api.get
     const data = await api.get('/clientes')
     clientes.value = data
   } catch (e) {
@@ -359,18 +386,15 @@ const verDetalle = async (cliente) => {
   dialogDetalle.value = true
   
   try {
-    // ✅ Usar api.get
     const financiamientos = await api.get('/financiamientos')
     financiamientosCliente.value = financiamientos.filter(f => f.cliente_id === cliente.id)
   } catch (e) {
-    console.error('Error cargando financiamientos:', e)
     financiamientosCliente.value = []
   }
 }
 
 const verCuotas = async (finId) => {
   try {
-    // ✅ Usar api.get
     const data = await api.get(`/financiamientos/${finId}/cuotas`)
     cuotas.value = data
     dialogCuotas.value = true
@@ -379,7 +403,58 @@ const verCuotas = async (finId) => {
   }
 }
 
+const editarCliente = (cliente) => {
+  clienteEditando.value = { ...cliente }
+  dialogEditar.value = true
+}
+
+const guardarEdicion = async () => {
+  guardando.value = true
+  try {
+    const formData = new FormData()
+    formData.append('nombre', clienteEditando.value.nombre)
+    formData.append('telefono', clienteEditando.value.telefono)
+    formData.append('email', clienteEditando.value.email || '')
+    formData.append('direccion', clienteEditando.value.direccion || '')
+    
+    await api.put(`/clientes/${clienteEditando.value.id}`, formData, {
+      headers: { 
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'multipart/form-data'
+      }
+    })
+    
+    alert('Cliente actualizado')
+    dialogEditar.value = false
+    await cargarTodos()
+  } catch (error) {
+    console.error('Error actualizando cliente:', error)
+    alert('Error al actualizar cliente')
+  } finally {
+    guardando.value = false
+  }
+}
+
+const eliminarCliente = async (cliente) => {
+  if (!confirm(`¿Eliminar a ${cliente.nombre}?`)) return
+  
+  try {
+    await api.delete(`/clientes/${cliente.id}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+    alert('Cliente eliminado')
+    await cargarTodos()
+  } catch (error) {
+    console.error('Error eliminando cliente:', error)
+    alert('Error al eliminar cliente')
+  }
+}
+
 onMounted(() => {
+  if (!esAdmin) {
+    alert('Debes iniciar sesión como administrador')
+    return
+  }
   cargarTodos()
 })
 </script>
