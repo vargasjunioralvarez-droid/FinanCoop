@@ -1,7 +1,5 @@
 # backend/app/routers/clientes.py
-import base64
-from fastapi import APIRouter, Depends, HTTPException, Query, File, UploadFile, Form
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, HTTPException, Query, Form
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Cliente, Financiamiento, Cuota
@@ -11,13 +9,11 @@ from app.utils import (
     calcular_usado_disponible, obtener_tasa_actual, generar_token
 )
 from datetime import datetime
-import os
-import uuid
 
 router = APIRouter(prefix="/clientes", tags=["Clientes"])
 
 # ============================================================
-# ✅ CREAR CLIENTE CON MANEJO DE IMAGEN OPTIMIZADO
+# ✅ CREAR CLIENTE - RECIBE URL DE CLOUDFLARE (NO LA IMAGEN)
 # ============================================================
 @router.post("")
 async def crear_cliente(
@@ -29,19 +25,16 @@ async def crear_cliente(
     referencia_nombre: str = Form(""),
     referencia_telefono: str = Form(""),
     referencia_parentesco: str = Form(""),
-    cedula_foto: UploadFile | None = File(None),
+    url_cedula: str = Form(""),  # ✅ RECIBE LA URL, NO LA IMAGEN
     db: Session = Depends(get_db)
 ):
     try:
-        # 1. Verificar si el cliente ya existe
+        # Verificar si el cliente ya existe
         existe = db.query(Cliente).filter(Cliente.cedula == cedula).first()
         if existe:
-            return JSONResponse(
-                status_code=400,
-                content={"success": False, "error": f"Cliente con cédula {cedula} ya existe"}
-            )
+            return {"error": f"Cliente con cédula {cedula} ya existe"}
 
-        # 2. Crear el cliente
+        # Crear el cliente - SOLO GUARDA LA URL
         db_cliente = Cliente(
             nombre=nombre,
             cedula=cedula,
@@ -51,51 +44,14 @@ async def crear_cliente(
             referencia_nombre=referencia_nombre,
             referencia_telefono=referencia_telefono,
             referencia_parentesco=referencia_parentesco,
+            url_cedula=url_cedula,  # ✅ GUARDA LA URL
+            pin=generar_pin(),
+            token_app=generar_token()
         )
-        db_cliente.pin = generar_pin()
-        db_cliente.token_app = generar_token()  # Token inicial para la app
+        
         db.add(db_cliente)
         db.commit()
         db.refresh(db_cliente)
-
-        # 3. ✅ PROCESAR IMAGEN OPTIMIZADO
-        foto_guardada = False
-        if cedula_foto and cedula_foto.filename:
-            try:
-                # Leer el archivo
-                contenido = await cedula_foto.read()
-                
-                # ✅ LIMITAR TAMAÑO: Si la imagen es > 500KB, comprimir
-                max_size = 500 * 1024  # 500 KB
-                if len(contenido) > max_size:
-                    print(f"⚠️ Imagen grande ({len(contenido)} bytes), comprimiendo...")
-                    # Aquí podrías agregar lógica de compresión
-                    # Por ahora, solo la guardamos con advertencia
-                
-                # Convertir a base64 (solo si es necesario)
-                foto_base64 = base64.b64encode(contenido).decode('utf-8')
-                
-                # Guardar en el cliente
-                db_cliente.foto_cedula = foto_base64
-                db.commit()
-                foto_guardada = True
-                print(f"✅ Foto guardada: {len(contenido)} bytes")
-                
-            except Exception as e:
-                print(f"❌ Error al procesar la foto: {e}")
-                # No falla el registro si la foto falla
-
-        # 4. ✅ ENVIAR PIN POR WHATSAPP (opcional, comentado si no tienes Twilio)
-        # try:
-        #     from app.utils import enviar_pin_cliente
-        #     enviar_pin_cliente(
-        #         telefono=db_cliente.telefono,
-        #         nombre=db_cliente.nombre,
-        #         cedula=db_cliente.cedula,
-        #         pin=db_cliente.pin
-        #     )
-        # except Exception as e:
-        #     print(f"❌ Error enviando PIN: {e}")
 
         return {
             "success": True,
@@ -107,22 +63,15 @@ async def crear_cliente(
                 "email": db_cliente.email,
                 "direccion": db_cliente.direccion,
                 "nivel": db_cliente.nivel,
-                "score": db_cliente.score,
-                "token_app": db_cliente.token_app
+                "score": db_cliente.score
             },
             "pin_generado": db_cliente.pin,
-            "foto_guardada": foto_guardada,
             "mensaje": f"✅ Cliente registrado. PIN: {db_cliente.pin}"
         }
 
     except Exception as e:
         print(f"❌ Error en registro: {e}")
-        import traceback
-        traceback.print_exc()
-        return JSONResponse(
-            status_code=500,
-            content={"success": False, "error": str(e)}
-        )
+        return {"error": str(e), "success": False}
 
 # ============================================================
 # ✅ LISTAR CLIENTES
@@ -162,6 +111,7 @@ def buscar_cliente_por_cedula(cedula: str, db: Session = Depends(get_db)):
         "score": cliente.score,
         "nivel": cliente.nivel,
         "total_compras": cliente.total_compras,
+        "url_cedula": cliente.url_cedula,  # ✅ DEVUELVE LA URL
         "limite_disponible": disponible,
         "nivel_config": {
             "monto_max_usd": config["monto_max_usd"],
@@ -204,6 +154,7 @@ def obtener_cliente(id: int, db: Session = Depends(get_db)):
         "score": cliente.score,
         "nivel": cliente.nivel,
         "total_compras": cliente.total_compras,
+        "url_cedula": cliente.url_cedula,  # ✅ DEVUELVE LA URL
         "limite_disponible": disponible,
         "nivel_config": {
             "monto_max_usd": config["monto_max_usd"],
@@ -271,7 +222,7 @@ def estado_cuenta_cliente(id: int, db: Session = Depends(get_db)):
     }
 
 # ============================================================
-# ✅ PROPUESTA DE FINANCIAMIENTO (CORREGIDO)
+# ✅ PROPUESTA DE FINANCIAMIENTO
 # ============================================================
 @router.get("/{id}/nivel-propuesta")
 def propuesta_financiamiento(
@@ -279,7 +230,6 @@ def propuesta_financiamiento(
     monto_total_bs: float = Query(..., gt=0, description="Monto total en Bolívares"),
     db: Session = Depends(get_db)
 ):
-    """Calcula la propuesta de financiamiento para un cliente"""
     cliente = db.query(Cliente).filter(Cliente.id == id).first()
     if not cliente:
         return {"error": "Cliente no encontrado"}
@@ -290,7 +240,6 @@ def propuesta_financiamiento(
     
     disponible = calcular_usado_disponible(id, db)
     
-    # ✅ monto_total_bs ya es un float (gracias a Query)
     monto_total_usd = monto_total_bs / tasa
     
     if not disponible["puede_comprar"]:
