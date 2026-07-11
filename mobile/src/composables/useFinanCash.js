@@ -1,7 +1,6 @@
 import { ref, computed } from 'vue'
 
-// ✅ Usar variable de entorno (funciona en local y producción)
-const API_URL = 'https://financoop.onrender.com'
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 // ============ ESTADO GLOBAL ============
 const token = ref(localStorage.getItem('financoop_token') || null)
@@ -301,7 +300,6 @@ async function registrarCliente(formData) {
   try {
     const url = `${API_URL}/clientes`
     console.log('📤 Enviando a:', url)
-    console.log('📞 Teléfono en formData:', formData.get('telefono'))
     
     const res = await fetch(url, {
       method: 'POST',

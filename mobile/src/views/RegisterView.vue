@@ -257,7 +257,7 @@ const { registrarCliente } = useFinanCash()
 const paso = ref(1)
 const enviando = ref(false)
 const fotoCedula = ref(null)
-const fotoFile = ref(null)  // ✅ Guardar el archivo para subir a Cloudflare
+const fotoFile = ref(null)
 const codigoPais = ref('+58')
 
 const codigosPaises = [
@@ -315,50 +315,6 @@ const validarPaso = (paso) => {
 }
 
 // ============================================================
-// ✅ SUBIR IMAGEN A CLOUDFLARE
-// ============================================================
-const CLOUDFLARE_ACCOUNT_ID = import.meta.env.VITE_CLOUDFLARE_ACCOUNT_ID || ''
-const CLOUDFLARE_API_TOKEN = import.meta.env.VITE_CLOUDFLARE_API_TOKEN || ''
-
-const subirImagenCloudflare = async (file) => {
-  try {
-    const formData = new FormData()
-    formData.append('file', file)
-    formData.append('metadata', JSON.stringify({
-      tipo: 'cedula',
-      cedula: registro.cedula,
-      cliente: registro.nombre
-    }))
-
-    const response = await fetch(
-      `https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/images/v1`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${CLOUDFLARE_API_TOKEN}`
-        },
-        body: formData
-      }
-    )
-
-    const data = await response.json()
-    
-    if (data.success) {
-      // ✅ Obtener la URL pública
-      const imageUrl = data.result.variants[0]
-      console.log('📸 Imagen subida a Cloudflare:', imageUrl)
-      return { success: true, url: imageUrl }
-    } else {
-      console.error('❌ Error Cloudflare:', data.errors)
-      return { success: false, error: data.errors }
-    }
-  } catch (error) {
-    console.error('❌ Error subiendo a Cloudflare:', error)
-    return { success: false, error: error.message }
-  }
-}
-
-// ============================================================
 // ✅ TOMAR FOTO CON CAPACITOR
 // ============================================================
 const mostrarOpcionesFoto = async () => {
@@ -380,7 +336,7 @@ const mostrarOpcionesFoto = async () => {
       const reader = new FileReader()
       reader.onload = (ev) => {
         fotoCedula.value = ev.target.result
-        fotoFile.value = file  // ✅ Guardar el archivo para Cloudflare
+        fotoFile.value = file
         registro.cedula_foto = file
         console.log('📸 Foto seleccionada con Capacitor')
       }
@@ -414,7 +370,7 @@ const tomarFotoTradicional = () => {
 }
 
 // ============================================================
-// ✅ ENVIAR REGISTRO (CON CLOUDFLARE)
+// ✅ ENVIAR REGISTRO
 // ============================================================
 const enviarRegistro = async () => {
   if (!validarPaso(1) || !validarPaso(2) || !validarPaso(3)) {
@@ -425,22 +381,6 @@ const enviarRegistro = async () => {
   enviando.value = true
   
   try {
-    let urlFoto = ''
-    
-    // ✅ 1. SUBIR LA FOTO A CLOUDFLARE
-    if (fotoFile.value) {
-      const result = await subirImagenCloudflare(fotoFile.value)
-      if (result.success) {
-        urlFoto = result.url
-        console.log('✅ Foto subida a Cloudflare:', urlFoto)
-      } else {
-        alert('Error al subir la foto: ' + (result.error || 'Error desconocido'))
-        enviando.value = false
-        return
-      }
-    }
-    
-    // ✅ 2. ENVIAR REGISTRO CON LA URL DE LA FOTO
     const telefonoCompletoValue = `${codigoPais.value}${registro.telefono}`
     
     const formData = new FormData()
@@ -452,7 +392,12 @@ const enviarRegistro = async () => {
     formData.append('referencia_nombre', registro.referencia_nombre.trim())
     formData.append('referencia_telefono', registro.referencia_telefono.trim())
     formData.append('referencia_parentesco', registro.referencia_parentesco.trim())
-    formData.append('url_cedula', urlFoto)  // ✅ ENVIAR URL, NO LA IMAGEN
+    
+    // ✅ Enviar la foto al backend (él la subirá a Cloudflare)
+    if (fotoFile.value) {
+      formData.append('cedula_foto', fotoFile.value)
+      console.log('📸 Enviando foto al backend:', fotoFile.value.name)
+    }
     
     const result = await registrarCliente(formData)
     
