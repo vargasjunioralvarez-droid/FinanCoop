@@ -1,6 +1,7 @@
 # backend/app/routers/auth.py
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from datetime import datetime
 import logging
@@ -16,10 +17,20 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["Autenticación"])
 
 # ============================================================
-# ✅ LOGIN PARA CLIENTES (APP MÓVIL)
+# ✅ MODELO PARA LOGIN DE CLIENTE (JSON body)
+# ============================================================
+class LoginClienteRequest(BaseModel):
+    cedula: str
+    pin: str
+
+# ============================================================
+# ✅ LOGIN PARA CLIENTES (APP MÓVIL) - CORREGIDO PARA JSON
 # ============================================================
 @router.post("/login-cliente")
-def login_cliente(cedula: str, pin: str, db: Session = Depends(get_db)):
+def login_cliente(request: LoginClienteRequest, db: Session = Depends(get_db)):
+    cedula = request.cedula
+    pin = request.pin
+    
     logger.info(f"🚀 [BACKEND] Login cliente - Cédula: {cedula}")
     
     cliente = db.query(Cliente).filter(Cliente.cedula == cedula).first()
@@ -55,7 +66,7 @@ def login_cliente(cedula: str, pin: str, db: Session = Depends(get_db)):
     return response
 
 # ============================================================
-# ✅ LOGIN PARA ADMINISTRADORES (PANEL WEB)
+# ✅ LOGIN PARA ADMINISTRADORES (PANEL WEB) - SIN CAMBIOS
 # ============================================================
 @router.post("/login")
 def login_admin(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
