@@ -8,7 +8,7 @@ from app.utils import (
     calcular_usado_disponible, obtener_tasa_actual, generar_token,
     enviar_pin_cliente
 )
-from app.auth import get_current_admin, get_current_cliente  # ✅ AGREGADA
+from app.auth import get_current_admin, get_current_user
 from datetime import datetime
 import httpx
 import os
@@ -116,12 +116,12 @@ async def crear_cliente(
         return {"error": str(e), "success": False}
 
 # ============================================================
-# ✅ LISTAR CLIENTES (SOLO ADMIN)
+# ✅ LISTAR CLIENTES - CUALQUIER USUARIO AUTENTICADO
 # ============================================================
 @router.get("")
 def listar_clientes(
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_admin)
+    current_user = Depends(get_current_user)
 ):
     return db.query(Cliente).all()
 
@@ -170,13 +170,13 @@ def buscar_cliente_por_cedula(cedula: str, db: Session = Depends(get_db)):
     }
 
 # ============================================================
-# ✅ OBTENER CLIENTE POR ID (SOLO ADMIN)
+# ✅ OBTENER CLIENTE POR ID - CUALQUIER USUARIO AUTENTICADO
 # ============================================================
 @router.get("/{id}")
 def obtener_cliente(
     id: int,
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_admin)
+    current_user = Depends(get_current_user)
 ):
     cliente = db.query(Cliente).filter(Cliente.id == id).first()
     if not cliente:
@@ -217,7 +217,7 @@ def obtener_cliente(
     }
 
 # ============================================================
-# ✅ EDITAR CLIENTE (SOLO ADMIN)
+# ✅ EDITAR CLIENTE - SOLO ADMIN
 # ============================================================
 @router.put("/{id}")
 def editar_cliente(
@@ -247,7 +247,7 @@ def editar_cliente(
     return {"mensaje": "Cliente actualizado", "cliente": cliente}
 
 # ============================================================
-# ✅ ELIMINAR CLIENTE (SOLO ADMIN)
+# ✅ ELIMINAR CLIENTE - SOLO ADMIN
 # ============================================================
 @router.delete("/{id}")
 def eliminar_cliente(

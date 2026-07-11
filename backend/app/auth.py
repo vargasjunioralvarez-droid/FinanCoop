@@ -24,20 +24,37 @@ def create_access_token(data: dict, expires_delta: timedelta = None):
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
-def get_current_cliente(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+# ============================================================
+# ✅ CUALQUIER USUARIO AUTENTICADO (admin, cajero, usuario)
+# ============================================================
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        cliente_id = payload.get("sub")
-        if cliente_id is None:
+        username = payload.get("sub")
+        if username is None:
             raise HTTPException(status_code=401, detail="Token inválido")
     except JWTError:
         raise HTTPException(status_code=401, detail="Token inválido")
     
-    cliente = db.query(Cliente).filter(Cliente.id == int(cliente_id)).first()
-    if not cliente:
-        raise HTTPException(status_code=404, detail="Usuario no encontrado")
-    return cliente
+    # Buscar en Usuario primero (admin, cajero, usuario del sistema)
+    usuario = db.query(Usuario).filter(Usuario.username == username).first()
+    if usuario and usuario.activo:
+        return usuario
+    
+    # Si no es usuario del sistema, buscar en Cliente
+    try:
+        cliente_id = int(username)
+        cliente = db.query(Cliente).filter(Cliente.id == cliente_id).first()
+        if cliente:
+            return cliente
+    except ValueError:
+        pass
+    
+    raise HTTPException(status_code=401, detail="Usuario no encontrado")
 
+# ============================================================
+# ✅ SOLO ADMINISTRADORES
+# ============================================================
 def get_current_admin(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
@@ -52,6 +69,23 @@ def get_current_admin(token: str = Depends(oauth2_scheme), db: Session = Depends
     if not usuario or not usuario.activo:
         raise HTTPException(status_code=403, detail="Usuario no autorizado")
     return usuario
+
+# ============================================================
+# ✅ CLIENTES (para la app móvil)
+# ============================================================
+def get_current_cliente(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        cliente_id = payload.get("sub")
+        if cliente_id is None:
+            raise HTTPException(status_code=401, detail="Token inválido")
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Token inválido")
+    
+    cliente = db.query(Cliente).filter(Cliente.id == int(cliente_id)).first()
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    return cliente
 
 # ============================================================
 # ✅ FUNCIONES PARA HASH DE CONTRASEÑAS
