@@ -16,16 +16,8 @@ import AdminLoginView from '@/views/AdminLogin.vue'
 import UsuariosView from '@/views/UsuariosView.vue'
 import ClientesAdminView from '@/views/ClientesAdmin.vue'
 
-// ✅ IMPORTAR VISTAS DE AUTENTICACIÓN Y REGISTRO
-import LoginView from '@/views/LoginView.vue'
-import RegisterView from '@/views/RegisterView.vue'
-import RegisterSuccessView from '@/views/RegisterSuccessView.vue'
-
-// ✅ VISTAS DE LA APP MÓVIL (PAGAR, EXPLORAR, PERFIL, ETC.)
-import CuotasView from '@/views/CuotasView.vue'
-import PagarView from '@/views/PagarView.vue'
-import ExplorarView from '@/views/ExplorarView.vue'
-import PerfilView from '@/views/PerfilView.vue'
+// ✅ NOTA: RegisterView y RegisterSuccessView NO EXISTEN
+// Las rutas de registro están en la app móvil, no en la web
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -36,16 +28,6 @@ const router = createRouter({
     {
       path: '/login',
       component: LoginView,
-      meta: { public: true }
-    },
-    {
-      path: '/registro',
-      component: RegisterView,
-      meta: { public: true }
-    },
-    {
-      path: '/registro-exitoso/:cedula?',
-      component: RegisterSuccessView,
       meta: { public: true }
     },
     {
@@ -106,26 +88,6 @@ const router = createRouter({
       component: NivelesView,
       meta: { requiresAuth: true, tab: 'niveles' }
     },
-    {
-      path: '/cuotas',
-      component: CuotasView,
-      meta: { requiresAuth: true, tab: 'cuotas' }
-    },
-    {
-      path: '/pagar',
-      component: PagarView,
-      meta: { requiresAuth: true, tab: 'pagar' }
-    },
-    {
-      path: '/explorar',
-      component: ExplorarView,
-      meta: { requiresAuth: true, tab: 'explorar' }
-    },
-    {
-      path: '/perfil',
-      component: PerfilView,
-      meta: { requiresAuth: true, tab: 'perfil' }
-    },
 
     // ============================================================
     // 👑 RUTAS DE ADMINISTRADOR
@@ -168,7 +130,7 @@ router.beforeEach((to, from, next) => {
     return
   }
 
-  // 2. RUTAS DE CLIENTE (requieren autenticación)
+  // 2. RUTAS DE CLIENTE
   if (requiresAuth) {
     if (!token) {
       console.log('⛔ Requiere autenticación, redirigiendo a login')
@@ -181,13 +143,11 @@ router.beforeEach((to, from, next) => {
 
   // 3. RUTAS PÚBLICAS
   if (isPublic) {
-    // Si tiene token de cliente, redirigir a dashboard
-    if (token && to.path !== '/login' && to.path !== '/registro' && to.path !== '/registro-exitoso') {
+    if (token && to.path !== '/login') {
       console.log('🔓 Pública pero con token, redirigiendo a /inicio')
       next('/inicio')
       return
     }
-    // Si tiene token de admin, redirigir a usuarios
     if (adminToken && to.path === '/admin-login') {
       console.log('🔓 Pública pero con admin token, redirigiendo a /usuarios')
       next('/usuarios')
