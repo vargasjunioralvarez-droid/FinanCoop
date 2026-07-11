@@ -8,6 +8,7 @@ from app.utils import (
     calcular_usado_disponible, obtener_tasa_actual, generar_token,
     enviar_pin_cliente
 )
+from app.auth import get_current_admin, get_current_cliente  # ✅ AGREGADA
 from datetime import datetime
 import httpx
 import os
