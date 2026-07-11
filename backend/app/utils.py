@@ -26,7 +26,7 @@ if TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN:
 def enviar_whatsapp(telefono: str, mensaje: str):
     """Envía mensaje por WhatsApp usando Twilio"""
     if not twilio_client:
-        print("❌ Twilio no disponible, guardando en log...")
+        print("❌ Twilio no disponible")
         return False, "Twilio no disponible"
     
     try:
@@ -47,9 +47,9 @@ def enviar_whatsapp(telefono: str, mensaje: str):
         return False, str(e)
 
 def enviar_sms(telefono: str, mensaje: str):
-    """Envía mensaje por SMS usando Twilio (fallback)"""
+    """Envía mensaje por SMS usando Twilio"""
     if not twilio_client:
-        print("❌ Twilio no disponible, guardando en log...")
+        print("❌ Twilio no disponible")
         return False, "Twilio no disponible"
     
     try:
@@ -70,8 +70,15 @@ def enviar_sms(telefono: str, mensaje: str):
         return False, str(e)
 
 def enviar_pin_cliente(telefono: str, nombre: str, cedula: str, pin: str):
-    """Envía el PIN al cliente por WhatsApp (con fallback a SMS)"""
-    mensaje = f"""🎉 *¡Bienvenido a FinanCoop, {nombre}!*
+    """
+    Envía el PIN al cliente.
+    1. Primero intenta SMS (más confiable en Venezuela)
+    2. Luego intenta WhatsApp
+    3. Siempre devuelve el PIN para mostrar en pantalla
+    """
+    mensaje_sms = f"FinanCoop: Tu PIN es {pin}. Usa tu cedula {cedula} para ingresar a la app."
+    
+    mensaje_whatsapp = f"""🎉 *¡Bienvenido a FinanCoop, {nombre}!*
 
 🔑 *Tu PIN de acceso es:* {pin}
 
@@ -93,23 +100,48 @@ def enviar_pin_cliente(telefono: str, nombre: str, cedula: str, pin: str):
 
 ¡Gracias por confiar en FinanCoop! 🚀"""
     
-    # Intentar WhatsApp primero
-    exito, resultado = enviar_whatsapp(telefono, mensaje)
+    resultado = {
+        "sms_enviado": False,
+        "whatsapp_enviado": False,
+        "sms_sid": None,
+        "whatsapp_sid": None,
+        "pin": pin,
+        "mensaje": ""
+    }
     
-    # Si falla, intentar SMS
-    if not exito:
-        print("⚠️ WhatsApp falló, intentando SMS...")
-        mensaje_sms = f"FinanCoop: Tu PIN es {pin}. Usa tu cédula {cedula} para ingresar a la app."
-        exito_sms, _ = enviar_sms(telefono, mensaje_sms)
-        
-        if exito_sms:
-            print("✅ SMS enviado como fallback")
-            return True
+    # 1. Intentar SMS primero (más confiable)
+    print(f"📱 Intentando SMS a {telefono}...")
+    exito_sms, sid_sms = enviar_sms(telefono, mensaje_sms)
+    
+    if exito_sms:
+        resultado["sms_enviado"] = True
+        resultado["sms_sid"] = sid_sms
+        resultado["mensaje"] = f"✅ SMS enviado a {telefono}"
+        print(f"✅ SMS exitoso: {sid_sms}")
+    else:
+        print(f"⚠️ SMS falló, intentando WhatsApp...")
+    
+    # 2. Intentar WhatsApp (incluso si SMS funcionó, para asegurar)
+    print(f"📱 Intentando WhatsApp a {telefono}...")
+    exito_wa, sid_wa = enviar_whatsapp(telefono, mensaje_whatsapp)
+    
+    if exito_wa:
+        resultado["whatsapp_enviado"] = True
+        resultado["whatsapp_sid"] = sid_wa
+        if resultado["sms_enviado"]:
+            resultado["mensaje"] += f" | WhatsApp también enviado: {sid_wa}"
         else:
-            print("❌ Todos los canales fallaron")
-            return False
+            resultado["mensaje"] = f"✅ WhatsApp enviado: {sid_wa}"
+        print(f"✅ WhatsApp exitoso: {sid_wa}")
+    else:
+        if not resultado["sms_enviado"]:
+            resultado["mensaje"] = f"⚠️ No se pudo enviar SMS ni WhatsApp. PIN: {pin}"
+            print(f"❌ Todos los canales fallaron")
+        else:
+            resultado["mensaje"] += " | WhatsApp no disponible"
     
-    return True
+    # Siempre devolver el PIN para mostrar en pantalla
+    return resultado
 
 # ============ FUNCIONES DE NEGOCIO ============
 

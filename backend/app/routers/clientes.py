@@ -84,8 +84,10 @@ async def crear_cliente(
         db.commit()
         db.refresh(db_cliente)
 
+        # ✅ ENVIAR PIN (SMS primero, WhatsApp fallback)
+        resultado_envio = None
         try:
-            enviado = enviar_pin_cliente(
+            resultado_envio = enviar_pin_cliente(
                 telefono=db_cliente.telefono,
                 nombre=db_cliente.nombre,
                 cedula=db_cliente.cedula,
@@ -94,7 +96,8 @@ async def crear_cliente(
         except Exception as e:
             print(f"❌ Error enviando PIN: {e}")
 
-        return {
+        # ✅ CONSTRUIR RESPUESTA CON DETALLE DEL ENVÍO
+        respuesta = {
             "success": True,
             "cliente": {
                 "id": db_cliente.id,
@@ -108,8 +111,23 @@ async def crear_cliente(
                 "url_cedula": db_cliente.url_cedula
             },
             "pin_generado": db_cliente.pin,
+            "envio": {
+                "sms_enviado": False,
+                "whatsapp_enviado": False,
+                "mensaje": "No se pudo enviar el PIN"
+            },
             "mensaje": f"✅ Cliente registrado. PIN: {db_cliente.pin}"
         }
+
+        # Agregar resultado del envío si existe
+        if resultado_envio:
+            respuesta["envio"] = {
+                "sms_enviado": resultado_envio.get("sms_enviado", False),
+                "whatsapp_enviado": resultado_envio.get("whatsapp_enviado", False),
+                "mensaje": resultado_envio.get("mensaje", "")
+            }
+
+        return respuesta
 
     except Exception as e:
         print(f"❌ Error en registro: {e}")
