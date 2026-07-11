@@ -38,11 +38,8 @@ class Cliente(Base):
     referencia_telefono = Column(String(20), default="")
     referencia_parentesco = Column(String(30), default="")
     
-    # ✅ NUEVA COLUMNA PARA LA URL DE LA FOTO (Cloudflare)
+    # ✅ URL de Cloudflare (no la imagen en base64)
     url_cedula = Column(String(500), nullable=True)
-    
-    # ❌ ELIMINAR ESTA LÍNEA (ya no se usa)
-    # foto_cedula = Column(String(200), nullable=True)
     
     score = Column(Integer, default=0)
     nivel = Column(String(20), default="nuevo")
@@ -140,7 +137,7 @@ class Pago(Base):
     banco_origen = Column(String(50), nullable=True)
     telefono_pago = Column(String(20), nullable=True)
     cedula_pago = Column(String(20), nullable=True)
-    comprobante = Column(String(200), nullable=True)  # Para comprobantes de pago
+    comprobante = Column(String(200), nullable=True)
     
     conciliado_por = Column(String(50), nullable=True)
 

@@ -1,19 +1,59 @@
 # backend/app/routers/clientes.py
-from fastapi import APIRouter, Depends, HTTPException, Query, Form
+from fastapi import APIRouter, Depends, HTTPException, Query, Form, File, UploadFile
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Cliente, Financiamiento, Cuota
-from app.schemas import ClienteCreate
 from app.utils import (
     calcular_nivel, actualizar_score_cliente, generar_pin, 
     calcular_usado_disponible, obtener_tasa_actual, generar_token
 )
 from datetime import datetime
+import httpx
+import os
 
 router = APIRouter(prefix="/clientes", tags=["Clientes"])
 
 # ============================================================
-# ✅ CREAR CLIENTE - RECIBE URL DE CLOUDFLARE (NO LA IMAGEN)
+# ✅ CONFIGURACIÓN DE CLOUDFLARE
+# ============================================================
+CLOUDFLARE_ACCOUNT_ID = os.getenv("CLOUDFLARE_ACCOUNT_ID", "")
+CLOUDFLARE_API_TOKEN = os.getenv("CLOUDFLARE_API_TOKEN", "")
+
+async def subir_imagen_cloudflare(archivo_bytes: bytes, nombre_archivo: str) -> str | None:
+    """Sube una imagen a Cloudflare Images y devuelve la URL pública"""
+    try:
+        url = f"https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/images/v1"
+        
+        files = {
+            'file': (nombre_archivo, archivo_bytes, 'image/jpeg')
+        }
+        
+        headers = {
+            'Authorization': f'Bearer {CLOUDFLARE_API_TOKEN}'
+        }
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.post(url, headers=headers, files=files, timeout=30.0)
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result.get('success'):
+                    image_url = result['result']['variants'][0]
+                    print(f"✅ Imagen subida a Cloudflare: {image_url}")
+                    return image_url
+                else:
+                    print(f"❌ Error Cloudflare: {result.get('errors')}")
+                    return None
+            else:
+                print(f"❌ Error HTTP: {response.status_code}")
+                return None
+                
+    except Exception as e:
+        print(f"❌ Error subiendo a Cloudflare: {e}")
+        return None
+
+# ============================================================
+# ✅ CREAR CLIENTE - CON CLOUDFLARE
 # ============================================================
 @router.post("")
 async def crear_cliente(
@@ -25,7 +65,7 @@ async def crear_cliente(
     referencia_nombre: str = Form(""),
     referencia_telefono: str = Form(""),
     referencia_parentesco: str = Form(""),
-    url_cedula: str = Form(""),  # ✅ RECIBE LA URL, NO LA IMAGEN
+    cedula_foto: UploadFile | None = File(None),
     db: Session = Depends(get_db)
 ):
     try:
@@ -34,7 +74,18 @@ async def crear_cliente(
         if existe:
             return {"error": f"Cliente con cédula {cedula} ya existe"}
 
-        # Crear el cliente - SOLO GUARDA LA URL
+        # ✅ SUBIR FOTO A CLOUDFLARE DESDE EL BACKEND
+        url_cedula = ""
+        if cedula_foto and cedula_foto.filename:
+            try:
+                contenido = await cedula_foto.read()
+                url_cedula = await subir_imagen_cloudflare(contenido, cedula_foto.filename)
+                print(f"✅ URL de la foto: {url_cedula}")
+            except Exception as e:
+                print(f"❌ Error al subir foto a Cloudflare: {e}")
+                # Si falla Cloudflare, continuamos sin foto
+
+        # Crear el cliente
         db_cliente = Cliente(
             nombre=nombre,
             cedula=cedula,
@@ -44,7 +95,7 @@ async def crear_cliente(
             referencia_nombre=referencia_nombre,
             referencia_telefono=referencia_telefono,
             referencia_parentesco=referencia_parentesco,
-            url_cedula=url_cedula,  # ✅ GUARDA LA URL
+            url_cedula=url_cedula,  # ✅ Guardar URL de Cloudflare
             pin=generar_pin(),
             token_app=generar_token()
         )
@@ -63,7 +114,8 @@ async def crear_cliente(
                 "email": db_cliente.email,
                 "direccion": db_cliente.direccion,
                 "nivel": db_cliente.nivel,
-                "score": db_cliente.score
+                "score": db_cliente.score,
+                "url_cedula": db_cliente.url_cedula
             },
             "pin_generado": db_cliente.pin,
             "mensaje": f"✅ Cliente registrado. PIN: {db_cliente.pin}"
@@ -111,7 +163,7 @@ def buscar_cliente_por_cedula(cedula: str, db: Session = Depends(get_db)):
         "score": cliente.score,
         "nivel": cliente.nivel,
         "total_compras": cliente.total_compras,
-        "url_cedula": cliente.url_cedula,  # ✅ DEVUELVE LA URL
+        "url_cedula": cliente.url_cedula,
         "limite_disponible": disponible,
         "nivel_config": {
             "monto_max_usd": config["monto_max_usd"],
@@ -154,7 +206,7 @@ def obtener_cliente(id: int, db: Session = Depends(get_db)):
         "score": cliente.score,
         "nivel": cliente.nivel,
         "total_compras": cliente.total_compras,
-        "url_cedula": cliente.url_cedula,  # ✅ DEVUELVE LA URL
+        "url_cedula": cliente.url_cedula,
         "limite_disponible": disponible,
         "nivel_config": {
             "monto_max_usd": config["monto_max_usd"],
