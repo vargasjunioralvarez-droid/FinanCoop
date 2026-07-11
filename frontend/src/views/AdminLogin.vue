@@ -77,12 +77,13 @@ const login = async () => {
     const data = await res.json()
 
     if (data.access_token) {
+      // Guardar token y datos del admin
       localStorage.setItem('admin_token', data.access_token)
       localStorage.setItem('admin_rol', data.rol)
       localStorage.setItem('admin_username', data.username)
       
-      alert('✅ Login exitoso')
-      router.push('/usuarios')
+      // ✅ Usar router.push para redirigir
+      await router.push('/usuarios')
     } else {
       alert('❌ Credenciales incorrectas')
     }
