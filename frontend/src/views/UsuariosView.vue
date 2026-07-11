@@ -114,7 +114,11 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { api } from '@/config/api'
+
+const API_URL = import.meta.env.VITE_API_URL || 'https://financoop.onrender.com'
+
+// ✅ OBTENER TOKEN DIRECTAMENTE
+const token = localStorage.getItem('admin_token')
 
 const usuarios = ref([])
 const cargando = ref(false)
@@ -143,23 +147,104 @@ const headers = [
   { title: 'Acciones', key: 'acciones', sortable: false }
 ]
 
-const token = localStorage.getItem('admin_token')
+// ============================================================
+// ✅ FUNCIÓN PARA PETICIONES CON TOKEN
+// ============================================================
+const apiCall = async (url, options = {}) => {
+  const token = localStorage.getItem('admin_token')
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+      ...options.headers
+    }
+  })
+  
+  if (!response.ok) {
+    if (response.status === 401) {
+      localStorage.removeItem('admin_token')
+      localStorage.removeItem('admin_rol')
+      localStorage.removeItem('admin_username')
+      window.location.href = '/admin-login'
+    }
+    const error = await response.json()
+    throw new Error(error.detail || 'Error en la petición')
+  }
+  
+  return response.json()
+}
 
+// ============================================================
+// ✅ CARGAR USUARIOS
+// ============================================================
 const cargarUsuarios = async () => {
   cargando.value = true
   try {
-    const data = await api.get('/admin/usuarios', {
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
+    const data = await apiCall(`${API_URL}/admin/usuarios`)
     usuarios.value = data
+    console.log('✅ Usuarios cargados:', usuarios.value)
   } catch (error) {
     console.error('Error cargando usuarios:', error)
-    alert('Error al cargar usuarios')
+    alert('Error al cargar usuarios: ' + error.message)
   } finally {
     cargando.value = false
   }
 }
 
+// ============================================================
+// ✅ GUARDAR USUARIO
+// ============================================================
+const guardarUsuario = async () => {
+  if (!formUsuario.value.username) {
+    alert('El nombre de usuario es obligatorio')
+    return
+  }
+
+  guardando.value = true
+  try {
+    const url = usuarioEditando.value 
+      ? `${API_URL}/admin/usuarios/${usuarioEditando.value.id}`
+      : `${API_URL}/admin/usuarios`
+    
+    const method = usuarioEditando.value ? 'PUT' : 'POST'
+    
+    const data = await apiCall(url, {
+      method,
+      body: JSON.stringify(formUsuario.value)
+    })
+    
+    alert(usuarioEditando.value ? '✅ Usuario actualizado' : '✅ Usuario creado')
+    dialogUsuario.value = false
+    await cargarUsuarios()
+  } catch (error) {
+    console.error('Error guardando usuario:', error)
+    alert('❌ Error: ' + error.message)
+  } finally {
+    guardando.value = false
+  }
+}
+
+// ============================================================
+// ✅ ELIMINAR USUARIO
+// ============================================================
+const confirmarEliminar = async () => {
+  try {
+    await apiCall(`${API_URL}/admin/usuarios/${usuarioAEliminar.value.id}`, {
+      method: 'DELETE'
+    })
+    alert('✅ Usuario eliminado')
+    dialogEliminar.value = false
+    await cargarUsuarios()
+  } catch (error) {
+    console.error('Error eliminando usuario:', error)
+    alert('❌ Error al eliminar usuario')
+  }
+}
+
+// ============================================================
+// ✅ FUNCIONES DE UI
+// ============================================================
 const abrirDialogCrear = () => {
   usuarioEditando.value = null
   formUsuario.value = {
@@ -186,62 +271,20 @@ const editarUsuario = (usuario) => {
   dialogUsuario.value = true
 }
 
-const guardarUsuario = async () => {
-  if (!formUsuario.value.username) {
-    alert('El nombre de usuario es obligatorio')
-    return
-  }
-
-  guardando.value = true
-  try {
-    const url = usuarioEditando.value 
-      ? `/admin/usuarios/${usuarioEditando.value.id}`
-      : '/admin/usuarios'
-    
-    const method = usuarioEditando.value ? 'PUT' : 'POST'
-    
-    const data = await api({ 
-      method,
-      url,
-      headers: { 'Authorization': `Bearer ${token}` },
-      data: formUsuario.value
-    })
-    
-    alert(usuarioEditando.value ? 'Usuario actualizado' : 'Usuario creado')
-    dialogUsuario.value = false
-    await cargarUsuarios()
-  } catch (error) {
-    console.error('Error guardando usuario:', error)
-    alert(error.response?.data?.detail || 'Error al guardar usuario')
-  } finally {
-    guardando.value = false
-  }
-}
-
 const eliminarUsuario = (usuario) => {
   usuarioAEliminar.value = usuario
   dialogEliminar.value = true
 }
 
-const confirmarEliminar = async () => {
-  try {
-    await api.delete(`/admin/usuarios/${usuarioAEliminar.value.id}`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
-    alert('Usuario eliminado')
-    dialogEliminar.value = false
-    await cargarUsuarios()
-  } catch (error) {
-    console.error('Error eliminando usuario:', error)
-    alert('Error al eliminar usuario')
-  }
-}
-
+// ============================================================
+// ✅ MOUNTED
+// ============================================================
 onMounted(() => {
   if (!token) {
     alert('Debes iniciar sesión como administrador')
     return
   }
+  console.log('🔑 Token de admin:', token)
   cargarUsuarios()
 })
 </script>
