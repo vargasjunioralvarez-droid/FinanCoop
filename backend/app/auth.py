@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from app.database import get_db
 from app.models import Cliente, Usuario
 import os
+import bcrypt  # ✅ AGREGAR IMPORT
 
 SECRET_KEY = os.getenv("SECRET_KEY", "supersecretkey")
 ALGORITHM = "HS256"
@@ -51,3 +52,13 @@ def get_current_admin(token: str = Depends(oauth2_scheme), db: Session = Depends
     if not usuario or not usuario.activo:
         raise HTTPException(status_code=403, detail="Usuario no autorizado")
     return usuario
+
+# ============================================================
+# ✅ FUNCIONES PARA HASH DE CONTRASEÑAS
+# ============================================================
+def hash_password(password: str) -> str:
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
