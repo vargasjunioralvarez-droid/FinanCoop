@@ -4,6 +4,7 @@ import random
 import uuid
 from datetime import datetime
 from twilio.rest import Client
+from twilio.base.exceptions import TwilioRestException
 from app.config import NIVELES_CONFIG, NIVELES_CONFIG_DEFAULT
 from app.models import Cliente, Financiamiento, Cuota, NivelConfig, TasaDolar
 
@@ -21,18 +22,77 @@ if TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN:
     except Exception as e:
         print(f"❌ Error inicializando Twilio: {e}")
 
+# ============ FUNCIONES AUXILIARES ============
+
+def normalizar_telefono(telefono: str) -> str:
+    """
+    Normaliza un número de teléfono venezolano al formato internacional.
+    
+    Ejemplos:
+        04121580659 → +584121580659
+        0412-1580659 → +584121580659
+        +584121580659 → +584121580659 (sin cambios)
+        +5804121580659 → +584121580659 (corrige el 0 extra)
+    """
+    if not telefono:
+        return ""
+    
+    # Eliminar espacios, guiones y otros caracteres no numéricos
+    limpio = ''.join(c for c in telefono if c.isdigit() or c == '+')
+    
+    # Si ya tiene formato internacional correcto
+    if limpio.startswith('+58') and len(limpio) == 13:
+        return limpio
+    
+    # Si tiene +580 (formato incorrecto con 0 extra)
+    if limpio.startswith('+580') and len(limpio) == 14:
+        return '+58' + limpio[4:]
+    
+    # Si empieza con 0 (formato local venezolano)
+    if limpio.startswith('0') and len(limpio) == 11:
+        return '+58' + limpio[1:]
+    
+    # Si empieza con 4 (sin 0 inicial)
+    if limpio.startswith('4') and len(limpio) == 10:
+        return '+58' + limpio
+    
+    # Si ya tiene + pero no es +58
+    if limpio.startswith('+'):
+        return limpio
+    
+    # Por defecto, asumir que es venezolano y agregar +58
+    if len(limpio) == 10 and limpio.startswith('4'):
+        return '+58' + limpio
+    
+    return limpio
+
+def es_numero_valido(telefono: str) -> bool:
+    """Verifica si el número tiene formato válido para Venezuela."""
+    if not telefono:
+        return False
+    
+    # Debe tener +58 seguido de 10 dígitos (total 13 caracteres)
+    if telefono.startswith('+58') and len(telefono) == 13:
+        operadora = telefono[3:5]  # 41, 42, 412, 414, 416, 424, 426
+        return operadora in ['41', '42', '412', '414', '416', '424', '426']
+    
+    return False
+
 # ============ FUNCIONES DE ENVÍO DE MENSAJES ============
 
 def enviar_whatsapp(telefono: str, mensaje: str):
-    """Envía mensaje por WhatsApp usando Twilio"""
+    """Envía mensaje por WhatsApp usando Twilio."""
     if not twilio_client:
         print("❌ Twilio no disponible")
         return False, "Twilio no disponible"
     
+    telefono = normalizar_telefono(telefono)
+    
+    if not es_numero_valido(telefono):
+        print(f"❌ Número inválido: {telefono}")
+        return False, f"Número inválido: {telefono}"
+    
     try:
-        if not telefono.startswith('+'):
-            telefono = '+58' + telefono.lstrip('0')
-        
         message = twilio_client.messages.create(
             body=mensaje,
             from_=TWILIO_WHATSAPP_NUMBER,
@@ -42,20 +102,39 @@ def enviar_whatsapp(telefono: str, mensaje: str):
         print(f"✅ WhatsApp enviado a {telefono}. SID: {message.sid}")
         return True, message.sid
         
+    except TwilioRestException as e:
+        error_msg = str(e)
+        if "63016" in error_msg:
+            error_msg = "El usuario no ha iniciado conversación con el sandbox. Debe enviar 'join <palabra>' primero."
+        elif "63018" in error_msg:
+            error_msg = "El número de destino no tiene WhatsApp o no es válido."
+        elif "429" in str(e.status):
+            error_msg = "Límite de mensajes diarios excedido."
+        
+        print(f"❌ Error WhatsApp: {error_msg}")
+        return False, error_msg
     except Exception as e:
-        print(f"❌ Error enviando WhatsApp: {e}")
+        print(f"❌ Error WhatsApp: {e}")
         return False, str(e)
 
 def enviar_sms(telefono: str, mensaje: str):
-    """Envía mensaje por SMS usando Twilio"""
+    """Envía mensaje por SMS usando Twilio."""
     if not twilio_client:
         print("❌ Twilio no disponible")
         return False, "Twilio no disponible"
     
+    telefono = normalizar_telefono(telefono)
+    
+    if not es_numero_valido(telefono):
+        print(f"❌ Número inválido: {telefono}")
+        return False, f"Número inválido: {telefono}"
+    
+    # Verificar si el número de SMS es válido (no el de WhatsApp sandbox)
+    if TWILIO_SMS_NUMBER == '+14155238886':
+        print("⚠️ TWILIO_SMS_NUMBER es el número de WhatsApp Sandbox, no sirve para SMS")
+        return False, "Número de SMS no configurado correctamente"
+    
     try:
-        if not telefono.startswith('+'):
-            telefono = '+58' + telefono.lstrip('0')
-        
         message = twilio_client.messages.create(
             body=mensaje,
             from_=TWILIO_SMS_NUMBER,
@@ -65,17 +144,28 @@ def enviar_sms(telefono: str, mensaje: str):
         print(f"✅ SMS enviado a {telefono}. SID: {message.sid}")
         return True, message.sid
         
+    except TwilioRestException as e:
+        error_msg = str(e)
+        if "400" in str(e.status) and "From" in error_msg:
+            error_msg = "El número de Twilio no está configurado correctamente para SMS."
+        elif "429" in str(e.status):
+            error_msg = "Límite de mensajes diarios excedido."
+        
+        print(f"❌ Error SMS: {error_msg}")
+        return False, error_msg
     except Exception as e:
-        print(f"❌ Error enviando SMS: {e}")
+        print(f"❌ Error SMS: {e}")
         return False, str(e)
 
 def enviar_pin_cliente(telefono: str, nombre: str, cedula: str, pin: str):
     """
     Envía el PIN al cliente.
-    1. Primero intenta SMS (más confiable en Venezuela)
-    2. Luego intenta WhatsApp
+    1. Primero intenta WhatsApp (más barato y confiable en Venezuela)
+    2. Si WhatsApp falla, intenta SMS
     3. Siempre devuelve el PIN para mostrar en pantalla
     """
+    telefono = normalizar_telefono(telefono)
+    
     mensaje_sms = f"FinanCoop: Tu PIN es {pin}. Usa tu cedula {cedula} para ingresar a la app."
     
     mensaje_whatsapp = f"""🎉 *¡Bienvenido a FinanCoop, {nombre}!*
@@ -106,39 +196,42 @@ def enviar_pin_cliente(telefono: str, nombre: str, cedula: str, pin: str):
         "sms_sid": None,
         "whatsapp_sid": None,
         "pin": pin,
-        "mensaje": ""
+        "mensaje": "",
+        "telefono_normalizado": telefono
     }
     
-    # 1. Intentar SMS primero (más confiable)
-    print(f"📱 Intentando SMS a {telefono}...")
-    exito_sms, sid_sms = enviar_sms(telefono, mensaje_sms)
-    
-    if exito_sms:
-        resultado["sms_enviado"] = True
-        resultado["sms_sid"] = sid_sms
-        resultado["mensaje"] = f"✅ SMS enviado a {telefono}"
-        print(f"✅ SMS exitoso: {sid_sms}")
-    else:
-        print(f"⚠️ SMS falló, intentando WhatsApp...")
-    
-    # 2. Intentar WhatsApp (incluso si SMS funcionó, para asegurar)
+    # 1. Intentar WhatsApp primero (más barato en Venezuela)
     print(f"📱 Intentando WhatsApp a {telefono}...")
     exito_wa, sid_wa = enviar_whatsapp(telefono, mensaje_whatsapp)
     
     if exito_wa:
         resultado["whatsapp_enviado"] = True
         resultado["whatsapp_sid"] = sid_wa
-        if resultado["sms_enviado"]:
-            resultado["mensaje"] += f" | WhatsApp también enviado: {sid_wa}"
-        else:
-            resultado["mensaje"] = f"✅ WhatsApp enviado: {sid_wa}"
+        resultado["mensaje"] = f"✅ WhatsApp enviado a {telefono}"
         print(f"✅ WhatsApp exitoso: {sid_wa}")
     else:
-        if not resultado["sms_enviado"]:
-            resultado["mensaje"] = f"⚠️ No se pudo enviar SMS ni WhatsApp. PIN: {pin}"
-            print(f"❌ Todos los canales fallaron")
+        print(f"⚠️ WhatsApp falló: {sid_wa}")
+    
+    # 2. Intentar SMS solo si WhatsApp falló
+    if not resultado["whatsapp_enviado"]:
+        print(f"📱 Intentando SMS a {telefono}...")
+        exito_sms, sid_sms = enviar_sms(telefono, mensaje_sms)
+        
+        if exito_sms:
+            resultado["sms_enviado"] = True
+            resultado["sms_sid"] = sid_sms
+            resultado["mensaje"] = f"✅ SMS enviado a {telefono}"
+            print(f"✅ SMS exitoso: {sid_sms}")
         else:
-            resultado["mensaje"] += " | WhatsApp no disponible"
+            print(f"⚠️ SMS también falló: {sid_sms}")
+    
+    # Si ninguno funcionó, mostrar mensaje claro
+    if not resultado["whatsapp_enviado"] and not resultado["sms_enviado"]:
+        resultado["mensaje"] = (
+            f"⚠️ No se pudo enviar el mensaje a {telefono}. "
+            f"El PIN es: {pin}. Por favor, guárdalo o comunícalo al cliente."
+        )
+        print(f"❌ Todos los canales fallaron. PIN: {pin}")
     
     # Siempre devolver el PIN para mostrar en pantalla
     return resultado
