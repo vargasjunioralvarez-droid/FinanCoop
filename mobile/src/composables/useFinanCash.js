@@ -1,6 +1,6 @@
 import { ref, computed } from 'vue'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const API_URL = 'https://financoop.onrender.com'
 
 // ============ ESTADO GLOBAL ============
 const token = ref(localStorage.getItem('financoop_token') || null)

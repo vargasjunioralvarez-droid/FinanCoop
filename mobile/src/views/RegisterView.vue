@@ -165,9 +165,10 @@
                     </div>
                     <div v-else class="text-caption text-success mb-2">✅ Foto cargada</div>
                     
-                    <v-btn :color="fotoCedula ? 'success' : 'primary'" rounded="pill" size="small" @click="mostrarOpcionesFoto">
-                      <v-icon start size="16">{{ fotoCedula ? 'mdi-refresh' : 'mdi-camera' }}</v-icon>
-                      {{ fotoCedula ? 'Cambiar' : 'Subir Foto' }}
+                    <!-- ✅ BOTÓN PARA PC (SELECTOR DE ARCHIVO) -->
+                    <v-btn :color="fotoCedula ? 'success' : 'primary'" rounded="pill" size="small" @click="abrirSelectorArchivos">
+                      <v-icon start size="16">{{ fotoCedula ? 'mdi-refresh' : 'mdi-file-upload' }}</v-icon>
+                      {{ fotoCedula ? 'Cambiar' : 'Seleccionar Archivo' }}
                     </v-btn>
 
                     <div v-if="fotoCedula" class="mt-2">
@@ -249,7 +250,6 @@
 import { ref, reactive, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useFinanCash } from '@/composables/useFinanCash'
-import { Camera, CameraResultType, CameraSource } from '@capacitor/camera'
 
 const router = useRouter()
 const { registrarCliente } = useFinanCash()
@@ -314,50 +314,9 @@ const validarPaso = (paso) => {
   }
 }
 
-// ============================================================
-// ✅ TOMAR FOTO CON CAPACITOR
-// ============================================================
-const mostrarOpcionesFoto = async () => {
-  console.log('📸 Abriendo selector de foto...')
-  try {
-    const image = await Camera.getPhoto({
-      quality: 80,
-      allowEditing: false,
-      resultType: CameraResultType.Uri,
-      source: CameraSource.Prompt,
-      width: 800,
-      height: 800
-    })
-    
-    if (image && image.webPath) {
-      console.log('📸 Imagen capturada, webPath:', image.webPath)
-      const response = await fetch(image.webPath)
-      const blob = await response.blob()
-      console.log('📸 Blob creado, tamaño:', blob.size, 'bytes')
-      const file = new File([blob], 'cedula.jpg', { type: 'image/jpeg' })
-      console.log('📸 Archivo creado:', file.name, file.size, 'bytes')
-      
-      const reader = new FileReader()
-      reader.onload = (ev) => {
-        fotoCedula.value = ev.target.result
-        fotoFile.value = file
-        registro.cedula_foto = file
-        console.log('📸 Foto seleccionada con Capacitor, guardada en fotoFile')
-      }
-      reader.readAsDataURL(file)
-    } else {
-      console.log('⚠️ No se obtuvo imagen')
-    }
-  } catch (error) {
-    console.error('❌ Error al tomar foto con Capacitor:', error)
-    console.log('📸 Intentando fallback...')
-    tomarFotoTradicional()
-  }
-}
-
-// ✅ FALLBACK: Método tradicional
-const tomarFotoTradicional = () => {
-  console.log('📸 Usando fallback tradicional...')
+// ✅ FUNCIÓN PARA PC: Abrir selector de archivos
+const abrirSelectorArchivos = () => {
+  console.log('📸 Abriendo selector de archivos (PC)...')
   const input = document.createElement('input')
   input.type = 'file'
   input.accept = 'image/*'
@@ -370,7 +329,7 @@ const tomarFotoTradicional = () => {
         fotoCedula.value = ev.target.result
         fotoFile.value = file
         registro.cedula_foto = file
-        console.log('📸 Foto seleccionada (fallback):', file.name)
+        console.log('📸 Foto seleccionada (PC):', file.name)
       }
       reader.readAsDataURL(file)
     }
