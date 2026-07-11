@@ -95,10 +95,8 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { useFinanCash } from '@/composables/useFinanCash'
 
 const router = useRouter()
-const { iniciarSesion } = useFinanCash()
 
 // Estado del formulario
 const tipoLogin = ref('cliente')
@@ -124,15 +122,28 @@ const loginCliente = async () => {
 
   cargandoCliente.value = true
   try {
-    const success = await iniciarSesion(cedula.value, pin.value)
-    if (success) {
-      router.push('/inicio')
+    const response = await fetch('https://financoop.onrender.com/app/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cedula: cedula.value, pin: pin.value })
+    })
+
+    const data = await response.json()
+
+    if (data.token) {
+      localStorage.setItem('financoop_token', data.token)
+      localStorage.setItem('financoop_usuario', JSON.stringify(data.cliente))
+      
+      // Guardar también para el interceptor
+      localStorage.setItem('usuario', JSON.stringify(data.cliente))
+      
+      await router.push('/inicio')
     } else {
       alert('❌ Credenciales incorrectas')
     }
   } catch (error) {
-    console.error('Error en login:', error)
-    alert('❌ Error de conexión')
+    console.error('Error en login cliente:', error)
+    alert('❌ Error de conexión con el servidor')
   } finally {
     cargandoCliente.value = false
   }
@@ -166,12 +177,12 @@ const loginAdmin = async () => {
       localStorage.setItem('admin_username', data.username)
       
       alert('✅ Login exitoso')
-      router.push('/usuarios')
+      await router.push('/usuarios')
     } else {
       alert('❌ Credenciales incorrectas')
     }
   } catch (error) {
-    console.error('Error en login:', error)
+    console.error('Error en login admin:', error)
     alert('❌ Error de conexión')
   } finally {
     cargandoAdmin.value = false
