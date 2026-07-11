@@ -1,16 +1,6 @@
 // frontend/src/router.js
 import { createRouter, createWebHistory } from 'vue-router'
 
-// Importar vistas principales
-import InicioView from '@/views/InicioView.vue'
-import CuotasView from '@/views/CuotasView.vue'
-import PagarView from '@/views/PagarView.vue'
-import ExplorarView from '@/views/ExplorarView.vue'
-import PerfilView from '@/views/PerfilView.vue'
-import LoginView from '@/views/LoginView.vue'
-import RegisterView from '@/views/RegisterView.vue'
-import RegisterSuccessView from '@/views/RegisterSuccessView.vue'
-
 // ADMIN - Vistas de administración
 import AdminLoginView from '@/views/AdminLogin.vue'
 import UsuariosView from '@/views/UsuariosView.vue'
