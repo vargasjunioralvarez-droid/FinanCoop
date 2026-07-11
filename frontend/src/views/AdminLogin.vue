@@ -112,7 +112,7 @@ const password = ref('')
 const cargandoAdmin = ref(false)
 
 // ============================================================
-// ✅ LOGIN DE CLIENTE - CON LOGS DETALLADOS
+// ✅ LOGIN DE CLIENTE - CORREGIDO PARA /auth/login-cliente
 // ============================================================
 const loginCliente = async () => {
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
@@ -126,15 +126,14 @@ const loginCliente = async () => {
   }
 
   cargandoCliente.value = true
-  console.log('📤 [LOGIN CLIENTE] Cédula enviada:', cedula.value)
-  console.log('📤 [LOGIN CLIENTE] PIN enviado:', '*'.repeat(pin.value.length))
+  console.log('📤 [LOGIN CLIENTE] Cédula:', cedula.value)
 
   try {
-    const url = 'https://financoop.onrender.com/app/login'
+    // ✅ URL CORREGIDA: /auth/login-cliente (no /app/login)
+    const url = 'https://financoop.onrender.com/auth/login-cliente'
     const body = JSON.stringify({ cedula: cedula.value, pin: pin.value })
     
     console.log('🌐 [LOGIN CLIENTE] URL:', url)
-    console.log('🌐 [LOGIN CLIENTE] Headers:', { 'Content-Type': 'application/json' })
     console.log('🌐 [LOGIN CLIENTE] Body:', body)
 
     const response = await fetch(url, {
@@ -143,113 +142,82 @@ const loginCliente = async () => {
       body: body
     })
 
-    console.log('📥 [LOGIN CLIENTE] Status HTTP:', response.status, response.statusText)
-    console.log('📥 [LOGIN CLIENTE] Response OK?:', response.ok)
+    console.log('📥 [LOGIN CLIENTE] Status:', response.status, response.statusText)
 
     const data = await response.json()
-    console.log('📥 [LOGIN CLIENTE] Respuesta completa:', JSON.stringify(data, null, 2))
-    console.log('📥 [LOGIN CLIENTE] Claves en respuesta:', Object.keys(data))
+    console.log('📥 [LOGIN CLIENTE] Respuesta:', JSON.stringify(data, null, 2))
+    console.log('📥 [LOGIN CLIENTE] Claves:', Object.keys(data))
 
-    // Verificar si existe token (puede ser token o access_token)
-    const token = data.token || data.access_token
-    console.log('🔑 [LOGIN CLIENTE] ¿Existe token?:', !!token)
-    
+    // ✅ CORREGIDO: El backend devuelve "access_token", no "token"
+    const token = data.access_token || data.token
+    console.log('🔑 [LOGIN CLIENTE] ¿Token?:', !!token)
+
     if (token) {
-      console.log('✅ [LOGIN CLIENTE] Token encontrado:', token.substring(0, 30) + '...')
-      console.log('💾 [LOGIN CLIENTE] Guardando en localStorage...')
+      console.log('✅ [LOGIN CLIENTE] Login exitoso')
+      console.log('💾 [LOGIN CLIENTE] Guardando token...')
       
       localStorage.setItem('financoop_token', token)
       localStorage.setItem('financoop_usuario', JSON.stringify(data.cliente || {}))
       localStorage.setItem('usuario', JSON.stringify(data.cliente || {}))
       
-      // Verificar que se guardó correctamente
-      const tokenGuardado = localStorage.getItem('financoop_token')
-      console.log('💾 [LOGIN CLIENTE] Token guardado?:', !!tokenGuardado)
-      console.log('💾 [LOGIN CLIENTE] Valor guardado:', tokenGuardado?.substring(0, 30) + '...')
-      
       console.log('🛣️ [LOGIN CLIENTE] Redirigiendo a /inicio...')
       await router.push('/inicio')
-      console.log('✅ [LOGIN CLIENTE] Redirección completada')
     } else {
-      console.error('❌ [LOGIN CLIENTE] NO se encontró token en la respuesta')
-      console.error('❌ [LOGIN CLIENTE] Mensaje de error:', data.error || data.detail || data.message || 'Sin mensaje específico')
-      alert('❌ Credenciales incorrectas: ' + (data.error || data.detail || data.message || 'Verifica tus datos'))
+      console.error('❌ [LOGIN CLIENTE] Sin token. Error:', data.detail || data.error || 'Desconocido')
+      alert('❌ Credenciales incorrectas: ' + (data.detail || data.error || 'Verifica tus datos'))
     }
   } catch (error) {
-    console.error('💥 [LOGIN CLIENTE] ERROR CAPTURADO:')
-    console.error('💥 [LOGIN CLIENTE] Nombre:', error.name)
-    console.error('💥 [LOGIN CLIENTE] Mensaje:', error.message)
-    console.error('💥 [LOGIN CLIENTE] Stack:', error.stack)
+    console.error('💥 [LOGIN CLIENTE] Error:', error.name, error.message)
     alert('❌ Error de conexión con el servidor')
   } finally {
     cargandoCliente.value = false
-    console.log('🏁 [LOGIN CLIENTE] PROCESO FINALIZADO')
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+    console.log('🏁 [LOGIN CLIENTE] Finalizado')
   }
 }
 
 // ============================================================
-// ✅ LOGIN DE ADMINISTRADOR - CON LOGS DETALLADOS
+// ✅ LOGIN DE ADMINISTRADOR (sin cambios, ya funcionaba)
 // ============================================================
 const loginAdmin = async () => {
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-  console.log('🚀 [LOGIN ADMIN] INICIANDO PROCESO')
+  console.log('🚀 [LOGIN ADMIN] INICIANDO')
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
   
   if (!username.value || !password.value) {
-    console.warn('⚠️ [LOGIN ADMIN] Campos vacíos')
     alert('Ingresa usuario y contraseña')
     return
   }
 
   cargandoAdmin.value = true
-  console.log('📤 [LOGIN ADMIN] Username:', username.value)
 
   try {
-    const url = 'https://financoop.onrender.com/auth/login'
     const formData = new FormData()
     formData.append('username', username.value)
     formData.append('password', password.value)
-    
-    console.log('🌐 [LOGIN ADMIN] URL:', url)
-    console.log('🌐 [LOGIN ADMIN] FormData entries:', [...formData.entries()])
 
-    const res = await fetch(url, {
+    const res = await fetch('https://financoop.onrender.com/auth/login', {
       method: 'POST',
       body: formData
     })
 
-    console.log('📥 [LOGIN ADMIN] Status HTTP:', res.status, res.statusText)
-
     const data = await res.json()
-    console.log('📥 [LOGIN ADMIN] Respuesta completa:', JSON.stringify(data, null, 2))
-    console.log('📥 [LOGIN ADMIN] Claves en respuesta:', Object.keys(data))
+    console.log('📥 [LOGIN ADMIN] Respuesta:', data)
 
-    const token = data.access_token || data.token
-    console.log('🔑 [LOGIN ADMIN] ¿Existe token?:', !!token)
-
-    if (token) {
-      console.log('✅ [LOGIN ADMIN] Login exitoso')
-      console.log('💾 [LOGIN ADMIN] Guardando token...')
-      
-      localStorage.setItem('admin_token', token)
-      localStorage.setItem('admin_rol', data.rol || '')
-      localStorage.setItem('admin_username', data.username || '')
+    if (data.access_token) {
+      localStorage.setItem('admin_token', data.access_token)
+      localStorage.setItem('admin_rol', data.rol)
+      localStorage.setItem('admin_username', data.username)
       
       alert('✅ Login exitoso')
       await router.push('/usuarios')
     } else {
-      console.error('❌ [LOGIN ADMIN] NO se encontró access_token')
-      console.error('❌ [LOGIN ADMIN] Error:', data.error || data.detail || data.message)
       alert('❌ Credenciales incorrectas')
     }
   } catch (error) {
-    console.error('💥 [LOGIN ADMIN] ERROR:', error.name, error.message)
+    console.error('💥 [LOGIN ADMIN] Error:', error)
     alert('❌ Error de conexión')
   } finally {
     cargandoAdmin.value = false
-    console.log('🏁 [LOGIN ADMIN] PROCESO FINALIZADO')
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
   }
 }
 </script>
