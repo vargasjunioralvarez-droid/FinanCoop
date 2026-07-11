@@ -1,7 +1,7 @@
 // frontend/src/router.js
 import { createRouter, createWebHistory } from 'vue-router'
 
-// ✅ IMPORTAR VISTAS (SOLO LAS QUE EXISTEN)
+// ✅ IMPORTAR VISTAS
 import Dashboard from '@/views/Dashboard.vue'
 import CajeroView from '@/views/CajeroView.vue'
 import Clientes from '@/views/Clientes.vue'
@@ -16,8 +16,8 @@ import AdminLoginView from '@/views/AdminLogin.vue'
 import UsuariosView from '@/views/UsuariosView.vue'
 import ClientesAdminView from '@/views/ClientesAdmin.vue'
 
-// ✅ NOTA: RegisterView y RegisterSuccessView NO EXISTEN
-// Las rutas de registro están en la app móvil, no en la web
+// ✅ IMPORTAR LoginView
+import LoginView from '@/views/LoginView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -45,7 +45,7 @@ const router = createRouter({
     },
 
     // ============================================================
-    // 🔒 RUTAS DE CLIENTE (requieren autenticación)
+    // 🔒 RUTAS DE CLIENTE
     // ============================================================
     {
       path: '/inicio',
