@@ -318,6 +318,7 @@ const validarPaso = (paso) => {
 // ✅ TOMAR FOTO CON CAPACITOR
 // ============================================================
 const mostrarOpcionesFoto = async () => {
+  console.log('📸 Abriendo selector de foto...')
   try {
     const image = await Camera.getPhoto({
       quality: 80,
@@ -329,33 +330,41 @@ const mostrarOpcionesFoto = async () => {
     })
     
     if (image && image.webPath) {
+      console.log('📸 Imagen capturada, webPath:', image.webPath)
       const response = await fetch(image.webPath)
       const blob = await response.blob()
+      console.log('📸 Blob creado, tamaño:', blob.size, 'bytes')
       const file = new File([blob], 'cedula.jpg', { type: 'image/jpeg' })
+      console.log('📸 Archivo creado:', file.name, file.size, 'bytes')
       
       const reader = new FileReader()
       reader.onload = (ev) => {
         fotoCedula.value = ev.target.result
         fotoFile.value = file
         registro.cedula_foto = file
-        console.log('📸 Foto seleccionada con Capacitor')
+        console.log('📸 Foto seleccionada con Capacitor, guardada en fotoFile')
       }
       reader.readAsDataURL(file)
+    } else {
+      console.log('⚠️ No se obtuvo imagen')
     }
   } catch (error) {
-    console.error('Error al tomar foto:', error)
+    console.error('❌ Error al tomar foto con Capacitor:', error)
+    console.log('📸 Intentando fallback...')
     tomarFotoTradicional()
   }
 }
 
 // ✅ FALLBACK: Método tradicional
 const tomarFotoTradicional = () => {
+  console.log('📸 Usando fallback tradicional...')
   const input = document.createElement('input')
   input.type = 'file'
   input.accept = 'image/*'
   input.onchange = (e) => {
     const file = e.target.files[0]
     if (file) {
+      console.log('📸 Archivo seleccionado:', file.name, file.size, 'bytes')
       const reader = new FileReader()
       reader.onload = (ev) => {
         fotoCedula.value = ev.target.result
@@ -370,18 +379,31 @@ const tomarFotoTradicional = () => {
 }
 
 // ============================================================
-// ✅ ENVIAR REGISTRO
+// ✅ ENVIAR REGISTRO CON LOGS DETALLADOS
 // ============================================================
 const enviarRegistro = async () => {
+  console.log('========================================')
+  console.log('📤 INICIANDO REGISTRO...')
+  console.log('📤 Paso 1: Validando datos...')
+  
   if (!validarPaso(1) || !validarPaso(2) || !validarPaso(3)) {
+    console.log('❌ Validación fallida: faltan campos obligatorios')
     alert('Por favor completa todos los campos obligatorios')
     return
   }
+  console.log('✅ Validación aprobada')
 
   enviando.value = true
+  console.log('📤 Enviando... estado:', enviando.value)
   
   try {
+    console.log('📤 Paso 2: Preparando datos...')
     const telefonoCompletoValue = `${codigoPais.value}${registro.telefono}`
+    console.log('📞 Teléfono completo:', telefonoCompletoValue)
+    console.log('👤 Nombre:', registro.nombre)
+    console.log('🆔 Cédula:', registro.cedula)
+    console.log('📍 Dirección:', registro.direccion)
+    console.log('👥 Referencia:', registro.referencia_nombre, registro.referencia_telefono, registro.referencia_parentesco)
     
     const formData = new FormData()
     formData.append('nombre', registro.nombre.trim())
@@ -392,28 +414,43 @@ const enviarRegistro = async () => {
     formData.append('referencia_nombre', registro.referencia_nombre.trim())
     formData.append('referencia_telefono', registro.referencia_telefono.trim())
     formData.append('referencia_parentesco', registro.referencia_parentesco.trim())
+    console.log('✅ FormData preparado')
     
-    // ✅ Enviar la foto al backend (él la subirá a Cloudflare)
+    // ✅ Enviar la foto al backend
+    console.log('📸 Paso 3: Verificando foto...')
+    console.log('📸 fotoFile.value:', fotoFile.value)
     if (fotoFile.value) {
       formData.append('cedula_foto', fotoFile.value)
-      console.log('📸 Enviando foto al backend:', fotoFile.value.name)
+      console.log('📸 Foto agregada al FormData:', fotoFile.value.name, fotoFile.value.size, 'bytes')
+    } else {
+      console.log('⚠️ No hay foto para enviar')
     }
     
+    console.log('📤 Paso 4: Enviando al backend...')
+    console.log('📤 URL:', `${import.meta.env.VITE_API_URL}/clientes`)
+    
     const result = await registrarCliente(formData)
+    console.log('📥 Resultado del backend:', result)
     
     if (result.success) {
+      console.log('✅ Registro exitoso! PIN:', result.pin)
       if (result.pin) {
         localStorage.setItem('financoop_pin_temp', result.pin)
       }
       router.push('/registro-exitoso/' + encodeURIComponent(registro.cedula))
     } else {
+      console.log('❌ Error en el registro:', result.error)
       alert('Error: ' + (result.error || 'No se pudo registrar'))
     }
   } catch (err) {
-    console.error('❌ Error en registro:', err)
-    alert('Error al registrar. Intenta de nuevo.')
+    console.error('❌ ERROR EN REGISTRO:', err)
+    console.error('❌ Mensaje:', err.message)
+    console.error('❌ Stack:', err.stack)
+    alert('Error al registrar. Intenta de nuevo.\n\n' + err.message)
   } finally {
     enviando.value = false
+    console.log('📤 Registro finalizado, enviando:', enviando.value)
+    console.log('========================================')
   }
 }
 </script>
