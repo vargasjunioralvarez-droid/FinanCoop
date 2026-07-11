@@ -71,13 +71,17 @@
                 color="info"
                 @click="verDetalle(item)"
               ></v-btn>
+              <!-- ✅ SOLO ADMIN PUEDE EDITAR -->
               <v-btn 
+                v-if="esAdmin"
                 icon="mdi-pencil" 
                 size="small" 
                 color="primary"
                 @click="editarCliente(item)"
               ></v-btn>
+              <!-- ✅ SOLO ADMIN PUEDE ELIMINAR -->
               <v-btn 
+                v-if="esAdmin"
                 icon="mdi-delete" 
                 size="small" 
                 color="error"
@@ -95,7 +99,7 @@
       </v-col>
     </v-row>
     
-    <!-- Dialog: Editar Cliente -->
+    <!-- Dialog: Editar Cliente (solo admin) -->
     <v-dialog v-model="dialogEditar" max-width="500">
       <v-card>
         <v-card-title>✏️ Editar Cliente</v-card-title>
@@ -112,7 +116,7 @@
       </v-card>
     </v-dialog>
 
-    <!-- Dialog: Detalle del Cliente (igual que antes) -->
+    <!-- Dialog: Detalle del Cliente -->
     <v-dialog v-model="dialogDetalle" max-width="600">
       <v-card v-if="clienteSeleccionado">
         <v-card-title class="text-h5">
@@ -271,8 +275,8 @@ const clienteEditando = ref(null)
 const financiamientosCliente = ref([])
 const cuotas = ref([])
 
-const token = localStorage.getItem('admin_token')
-const esAdmin = !!token
+// ✅ VERIFICAR SI ES ADMIN
+const esAdmin = localStorage.getItem('admin_rol') === 'admin'
 
 const headers = [
   { title: 'Nombre', key: 'nombre', sortable: true },
@@ -411,6 +415,7 @@ const editarCliente = (cliente) => {
 const guardarEdicion = async () => {
   guardando.value = true
   try {
+    const token = localStorage.getItem('admin_token')
     const formData = new FormData()
     formData.append('nombre', clienteEditando.value.nombre)
     formData.append('telefono', clienteEditando.value.telefono)
@@ -439,6 +444,7 @@ const eliminarCliente = async (cliente) => {
   if (!confirm(`¿Eliminar a ${cliente.nombre}?`)) return
   
   try {
+    const token = localStorage.getItem('admin_token')
     await api.delete(`/clientes/${cliente.id}`, {
       headers: { 'Authorization': `Bearer ${token}` }
     })
@@ -451,10 +457,6 @@ const eliminarCliente = async (cliente) => {
 }
 
 onMounted(() => {
-  if (!esAdmin) {
-    alert('Debes iniciar sesión como administrador')
-    return
-  }
   cargarTodos()
 })
 </script>

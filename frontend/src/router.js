@@ -1,7 +1,7 @@
 // frontend/src/router.js
 import { createRouter, createWebHistory } from 'vue-router'
 
-// ✅ IMPORTAR VISTAS (SOLO LAS QUE EXISTEN)
+// Importar vistas
 import Dashboard from '@/views/Dashboard.vue'
 import CajeroView from '@/views/CajeroView.vue'
 import Clientes from '@/views/Clientes.vue'
@@ -10,13 +10,8 @@ import Cuotas from '@/views/Cuotas.vue'
 import ConciliacionView from '@/views/ConciliacionView.vue'
 import ConfiguracionView from '@/views/ConfiguracionView.vue'
 import NivelesView from '@/views/NivelesView.vue'
-
-// ✅ IMPORTAR VISTAS DE ADMIN
 import AdminLoginView from '@/views/AdminLogin.vue'
 import UsuariosView from '@/views/UsuariosView.vue'
-import ClientesAdminView from '@/views/ClientesAdmin.vue'
-
-// ✅ NOTA: NO hay InicioView.vue, se usa Dashboard
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -35,11 +30,11 @@ const router = createRouter({
     },
 
     // ============================================================
-    // 🔒 RUTAS DE CLIENTE
+    // 🔒 RUTAS PARA TODOS LOS AUTENTICADOS (admin, cajero, usuario)
     // ============================================================
     {
       path: '/inicio',
-      component: Dashboard,  // ✅ Usa Dashboard en lugar de InicioView
+      component: Dashboard,
       meta: { requiresAuth: true }
     },
     {
@@ -68,86 +63,60 @@ const router = createRouter({
       component: ConciliacionView,
       meta: { requiresAuth: true }
     },
-    {
-      path: '/configuracion',
-      component: ConfiguracionView,
-      meta: { requiresAuth: true }
-    },
-    {
-      path: '/niveles',
-      component: NivelesView,
-      meta: { requiresAuth: true }
-    },
 
     // ============================================================
-    // 👑 RUTAS DE ADMIN
+    // 👑 RUTAS SOLO PARA ADMINISTRADOR
     // ============================================================
     {
       path: '/usuarios',
       component: UsuariosView,
-      meta: { requiresAdmin: true }
+      meta: { requiresAuth: true, requiresAdmin: true }
     },
     {
-      path: '/clientes-admin',
-      component: ClientesAdminView,
-      meta: { requiresAdmin: true }
+      path: '/configuracion',
+      component: ConfiguracionView,
+      meta: { requiresAuth: true, requiresAdmin: true }
+    },
+    {
+      path: '/niveles',
+      component: NivelesView,
+      meta: { requiresAuth: true, requiresAdmin: true }
     }
   ]
 })
 
 // ============================================================
-// ✅ GUARDIA DE NAVEGACIÓN
+// ✅ GUARDIA DE NAVEGACIÓN CON ROLES
 // ============================================================
 router.beforeEach((to, from, next) => {
-  const token = localStorage.getItem('financoop_token')
-  const adminToken = localStorage.getItem('admin_token')
-  const adminRol = localStorage.getItem('admin_rol')
+  const token = localStorage.getItem('admin_token')
+  const rol = localStorage.getItem('admin_rol')
 
   const isPublic = to.meta.public
   const requiresAuth = to.meta.requiresAuth
   const requiresAdmin = to.meta.requiresAdmin
 
-  console.log('🛣️ Navegando a:', to.path)
-  console.log('🔑 Token cliente:', !!token)
-  console.log('🔑 Token admin:', !!adminToken)
-
-  // 1. RUTAS DE ADMINISTRADOR
-  if (requiresAdmin) {
-    if (!adminToken || adminRol !== 'admin') {
-      console.log('⛔ Requiere rol admin, redirigiendo a login')
-      next('/login')
-      return
-    }
-    next()
-    return
-  }
-
-  // 2. RUTAS DE CLIENTE
-  if (requiresAuth) {
-    if (!token) {
-      console.log('⛔ Requiere autenticación, redirigiendo a login')
-      next('/login')
-      return
-    }
-    next()
-    return
-  }
-
-  // 3. RUTAS PÚBLICAS
+  // 1. RUTAS PÚBLICAS (login)
   if (isPublic) {
-    // Si tiene token de cliente, redirigir a inicio
     if (token) {
-      console.log('🔓 Pública pero con token, redirigiendo a /inicio')
-      next('/inicio')
-      return
-    }
-    // Si tiene token de admin, redirigir a usuarios
-    if (adminToken) {
-      console.log('🔓 Pública pero con admin token, redirigiendo a /usuarios')
-      next('/usuarios')
+      // Ya está logueado, redirigir según rol
+      next(rol === 'admin' ? '/usuarios' : '/inicio')
       return
     }
     next()
+    return
+  }
+
+  // 2. REQUIERE AUTENTICACIÓN
+  if (!token) {
+    next('/login')
+    return
+  }
+
+  // 3. REQUIERE SER ADMIN
+  if (requiresAdmin && rol !== 'admin') {
+    alert('⛔ No tienes permisos para acceder a esta sección')
+    next('/inicio')
     return
   }
 

@@ -1,6 +1,6 @@
 <template>
   <v-app>
-    <!-- App Bar con fondo degradado -->
+    <!-- App Bar -->
     <v-app-bar 
       color="primary" 
       dark
@@ -14,12 +14,12 @@
       
       <v-spacer></v-spacer>
       
-      <!-- Botones principales con estilo mejorado -->
+      <!-- Botones para TODOS -->
       <v-btn 
-        to="/" 
+        to="/inicio" 
         variant="text" 
         class="nav-btn mx-1"
-        :class="{ 'nav-btn-active': $route.path === '/' }"
+        :class="{ 'nav-btn-active': $route.path === '/inicio' }"
       >
         <v-icon start>mdi-view-dashboard</v-icon>
         Dashboard
@@ -29,7 +29,7 @@
         to="/cajero" 
         color="success" 
         variant="elevated"
-        class="nav-btn mx-1 nav-btn-cajero"
+        class="nav-btn mx-1"
         :class="{ 'nav-btn-active': $route.path === '/cajero' }"
       >
         <v-icon start>mdi-cart-plus</v-icon>
@@ -67,8 +67,8 @@
         Conciliación
       </v-btn>
       
-      <!-- Menú Configuración con dropdown -->
-      <v-menu>
+      <!-- ✅ SOLO ADMIN: Configuración -->
+      <v-menu v-if="esAdmin">
         <template v-slot:activator="{ props }">
           <v-btn 
             v-bind="props"
@@ -82,13 +82,13 @@
           </v-btn>
         </template>
         <v-list elevation="4" rounded="lg">
-          <v-list-item to="/configuracion" :active="$route.path === '/configuracion'">
+          <v-list-item to="/configuracion">
             <template v-slot:prepend>
               <v-icon color="primary">mdi-currency-usd</v-icon>
             </template>
             <v-list-item-title>Tasa del Dólar</v-list-item-title>
           </v-list-item>
-          <v-list-item to="/niveles" :active="$route.path === '/niveles'">
+          <v-list-item to="/niveles">
             <template v-slot:prepend>
               <v-icon color="amber-darken-2">mdi-trophy</v-icon>
             </template>
@@ -96,6 +96,19 @@
           </v-list-item>
         </v-list>
       </v-menu>
+      
+      <!-- ✅ SOLO ADMIN: Usuarios -->
+      <v-btn 
+        v-if="esAdmin"
+        to="/usuarios" 
+        color="error" 
+        variant="elevated"
+        class="nav-btn mx-1"
+        :class="{ 'nav-btn-active': $route.path === '/usuarios' }"
+      >
+        <v-icon start>mdi-shield-account</v-icon>
+        Usuarios
+      </v-btn>
       
       <!-- Tasa en la barra -->
       <v-chip 
@@ -107,6 +120,15 @@
       >
         {{ tasaActual }} BS/$
       </v-chip>
+      
+      <!-- Cerrar sesión -->
+      <v-btn 
+        icon="mdi-logout" 
+        size="small"
+        class="ml-2"
+        @click="cerrarSesion"
+        title="Cerrar sesión"
+      ></v-btn>
     </v-app-bar>
     
     <v-main>
@@ -119,14 +141,18 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import axios from 'axios'
-import { API_URL } from '@/config/api'  // ✅ Importación al principio
+import { API_URL } from '@/config/api'
 
+const router = useRouter()
 const tasaActual = ref(40.0)
+
+// ✅ VERIFICAR SI ES ADMIN
+const esAdmin = localStorage.getItem('admin_rol') === 'admin'
 
 const cargarTasa = async () => {
   try {
-    // ✅ Usar API_URL directamente (ya importado)
     const res = await axios.get(`${API_URL}/config/tasa-dolar`)
     tasaActual.value = res.data.tasa
   } catch (e) {
@@ -134,9 +160,17 @@ const cargarTasa = async () => {
   }
 }
 
+const cerrarSesion = () => {
+  localStorage.removeItem('admin_token')
+  localStorage.removeItem('admin_rol')
+  localStorage.removeItem('admin_username')
+  localStorage.removeItem('admin_nombre')
+  router.push('/login')
+}
+
 onMounted(() => {
   cargarTasa()
-  setInterval(cargarTasa, 300000) // Actualizar cada 5 minutos
+  setInterval(cargarTasa, 300000)
 })
 </script>
 
@@ -163,19 +197,5 @@ onMounted(() => {
 .nav-btn-active {
   background: rgba(255,255,255,0.15) !important;
   font-weight: 600;
-}
-
-.nav-btn-cajero {
-  box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
-}
-
-.nav-btn-cajero:hover {
-  box-shadow: 0 6px 16px rgba(76, 175, 80, 0.5);
-}
-
-/* Animación para el menú dropdown */
-.v-list {
-  border-radius: 12px !important;
-  overflow: hidden;
 }
 </style>
