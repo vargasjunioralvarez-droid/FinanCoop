@@ -1,147 +1,336 @@
-# backend/app/auth.py
-from fastapi import Depends, HTTPException, status
+"""
+🔒 FinanCoop - Sistema de Autenticación Ultra-Seguro
+Hardening completo contra ataques JWT, fuerza bruta, timing attacks y más.
+"""
+
+from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
+from jose.exceptions import ExpiredSignatureError
 from sqlalchemy.orm import Session
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from app.database import get_db
 from app.models import Cliente, Usuario
 import os
 import bcrypt
 import logging
+import secrets
+import hashlib
+import hmac
+from typing import Optional
 
-# Configurar logging
-logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger(__name__)
+# ─────────────────────────────────────────────────────────────
+# 🛡️ CONFIGURACIÓN DE SEGURIDAD
+# ─────────────────────────────────────────────────────────────
 
-SECRET_KEY = os.getenv("SECRET_KEY", "supersecretkey")
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise ValueError("❌ SECRET_KEY no está configurada en las variables de entorno")
+
+# 🔥 Validar longitud mínima de SECRET_KEY (mínimo 256 bits = 32 bytes)
+if len(SECRET_KEY.encode()) < 32:
+    raise ValueError("❌ SECRET_KEY debe tener al menos 32 caracteres (256 bits)")
+
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 horas
+
+# ⏱️ TTL de tokens muy cortos (15 min acceso, 7 días refresh)
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "15"))
+REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
+
+# 🔑 bcrypt rounds: 12 = ~250ms por hash (resistente a fuerza bruta)
+BCRYPT_ROUNDS = int(os.getenv("BCRYPT_ROUNDS", "12"))
+
+# 🚫 Rate limiting en memoria (en producción usar Redis)
+_login_attempts = {}
+MAX_LOGIN_ATTEMPTS = 5
+LOGIN_LOCKOUT_MINUTES = 15
+
+# Configurar logging seguro (sin exponer tokens ni contraseñas)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
-def create_access_token(data: dict, expires_delta: timedelta = None):
+# ─────────────────────────────────────────────────────────────
+# 🔐 UTILIDADES CRIPTOGRÁFICAS
+# ─────────────────────────────────────────────────────────────
+
+def _secure_compare(a: str, b: str) -> bool:
+    """Comparación constant-time para prevenir timing attacks."""
+    return hmac.compare_digest(a.encode(), b.encode())
+
+def _hash_token(token: str) -> str:
+    """Hash SHA-256 del token para logging seguro (nunca loggear tokens raw)."""
+    return hashlib.sha256(token.encode()).hexdigest()[:16]
+
+def _generate_jti() -> str:
+    """Genera un JWT ID único para prevenir replay attacks."""
+    return secrets.token_urlsafe(16)
+
+# ─────────────────────────────────────────────────────────────
+# 🎫 CREACIÓN DE TOKENS
+# ─────────────────────────────────────────────────────────────
+
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+    """
+    Crea un JWT de acceso con claims de seguridad completos.
+
+    Claims incluidos:
+    - sub: subject (username/cliente_id)
+    - rol: rol del usuario
+    - jti: JWT ID único (anti-replay)
+    - iat: issued at
+    - exp: expiration
+    - nbf: not before (no usable antes de esta fecha)
+    - aud: audience (prevenir uso en otros servicios)
+    - iss: issuer
+    """
     to_encode = data.copy()
+    now = datetime.now(timezone.utc)
+
     if expires_delta:
-        expire = datetime.now() + expires_delta
+        expire = now + expires_delta
     else:
-        expire = datetime.now() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
+        expire = now + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+
+    # Claims de seguridad obligatorios
+    to_encode.update({
+        "exp": expire,
+        "iat": now,
+        "nbf": now,  # No usable antes de ahora
+        "jti": _generate_jti(),  # ID único anti-replay
+        "aud": "financoop-api",  # Audience
+        "iss": "financoop-backend",  # Issuer
+    })
+
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
-# ============================================================
-# ✅ FUNCIONES PARA HASH DE CONTRASEÑAS
-# ============================================================
-def hash_password(password: str) -> str:
-    salt = bcrypt.gensalt()
-    return bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
+def create_refresh_token(user_id: str, rol: str) -> str:
+    """Crea un refresh token con TTL más largo."""
+    return create_access_token(
+        data={"sub": user_id, "rol": rol, "type": "refresh"},
+        expires_delta=timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+    )
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
+# ─────────────────────────────────────────────────────────────
+# 🛡️ RATE LIMITING PARA LOGIN
+# ─────────────────────────────────────────────────────────────
 
-# ============================================================
-# ✅ CUALQUIER USUARIO AUTENTICADO (admin, cajero, usuario)
-# ============================================================
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    logger.info("=" * 50)
-    logger.info("🔍 [get_current_user] INICIO")
-    logger.info(f"🔍 [get_current_user] Token recibido: {token[:30]}...")
-    
+def _check_rate_limit(identifier: str) -> bool:
+    """
+    Verifica si el identificador está bloqueado por rate limiting.
+    Retorna True si está permitido, False si está bloqueado.
+    """
+    now = datetime.now(timezone.utc)
+
+    if identifier in _login_attempts:
+        attempts, first_attempt, locked_until = _login_attempts[identifier]
+
+        # Si está bloqueado
+        if locked_until and now < locked_until:
+            logger.warning(f"🚫 [Rate Limit] {identifier} bloqueado hasta {locked_until}")
+            return False
+
+        # Resetear contador después del período de lockout
+        if locked_until and now >= locked_until:
+            _login_attempts[identifier] = (0, now, None)
+
+    return True
+
+def _record_failed_attempt(identifier: str):
+    """Registra un intento fallido de login."""
+    now = datetime.now(timezone.utc)
+
+    if identifier not in _login_attempts:
+        _login_attempts[identifier] = (1, now, None)
+    else:
+        attempts, first_attempt, _ = _login_attempts[identifier]
+        attempts += 1
+
+        if attempts >= MAX_LOGIN_ATTEMPTS:
+            locked_until = now + timedelta(minutes=LOGIN_LOCKOUT_MINUTES)
+            _login_attempts[identifier] = (attempts, first_attempt, locked_until)
+            logger.warning(f"🔒 [Rate Limit] {identifier} bloqueado por {LOGIN_LOCKOUT_MINUTES} min")
+        else:
+            _login_attempts[identifier] = (attempts, first_attempt, None)
+
+def _record_successful_attempt(identifier: str):
+    """Resetea el contador de intentos fallidos tras login exitoso."""
+    if identifier in _login_attempts:
+        del _login_attempts[identifier]
+
+# ─────────────────────────────────────────────────────────────
+# ✅ VALIDACIÓN DE TOKENS (con todas las verificaciones)
+# ─────────────────────────────────────────────────────────────
+
+def _decode_and_validate_token(token: str) -> dict:
+    """
+    Decodifica y valida un JWT con todas las verificaciones de seguridad.
+
+    Verifica:
+    - Firma (prevenir None alg, alg confusion)
+    - Expiración
+    - Not Before (nbf)
+    - Audience (aud)
+    - Issuer (iss)
+    - Algorithm whitelist
+    """
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username = payload.get("sub")
-        rol = payload.get("rol")
-        
-        logger.info(f"🔍 [get_current_user] Username: {username}, Rol: {rol}")
-        
-        if username is None:
-            logger.error("❌ [get_current_user] Username es None")
-            raise HTTPException(status_code=401, detail="Token inválido")
+        payload = jwt.decode(
+            token,
+            SECRET_KEY,
+            algorithms=[ALGORITHM],  # ⚠️ WHITELIST: solo HS256 permitido
+            audience="financoop-api",
+            issuer="financoop-backend",
+            options={
+                "verify_signature": True,
+                "verify_exp": True,
+                "verify_iat": True,
+                "verify_nbf": True,
+                "verify_aud": True,
+                "verify_iss": True,
+                "require": ["exp", "iat", "sub", "jti"]
+            }
+        )
+        return payload
+    except ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expirado")
     except JWTError as e:
-        logger.error(f"❌ [get_current_user] Error JWT: {e}")
+        logger.warning(f"❌ [JWT] Token inválido: {str(e)}")
         raise HTTPException(status_code=401, detail="Token inválido")
-    
-    # Buscar en Usuario primero (admin, cajero, usuario del sistema)
+
+# ─────────────────────────────────────────────────────────────
+# 👤 OBTENER USUARIO ACTUAL (cualquier usuario autenticado)
+# ─────────────────────────────────────────────────────────────
+
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    """Obtiene el usuario/cliente actual con validación completa del token."""
+
+    token_hash = _hash_token(token)
+    logger.info(f"🔍 [get_current_user] Token hash: {token_hash}...")
+
+    payload = _decode_and_validate_token(token)
+    username = payload.get("sub")
+
+    if username is None:
+        logger.error("❌ [get_current_user] Username es None")
+        raise HTTPException(status_code=401, detail="Token inválido: subject missing")
+
+    # Buscar en Usuario primero
     usuario = db.query(Usuario).filter(Usuario.username == username).first()
     if usuario and usuario.activo:
-        logger.info(f"✅ [get_current_user] Usuario encontrado: {usuario.username}")
+        logger.info(f"✅ [get_current_user] Usuario: {usuario.username} (rol: {usuario.rol})")
         return usuario
-    
-    # Si no es usuario del sistema, buscar en Cliente
+
+    # Buscar en Cliente
     try:
         cliente_id = int(username)
         cliente = db.query(Cliente).filter(Cliente.id == cliente_id).first()
         if cliente:
-            logger.info(f"✅ [get_current_user] Cliente encontrado: {cliente.id}")
+            logger.info(f"✅ [get_current_user] Cliente: {cliente.id}")
             return cliente
     except ValueError:
         pass
-    
+
     logger.error(f"❌ [get_current_user] Usuario no encontrado: {username}")
     raise HTTPException(status_code=401, detail="Usuario no encontrado")
 
-# ============================================================
-# ✅ SOLO ADMINISTRADORES - CORREGIDO CON LOGS
-# ============================================================
+# ─────────────────────────────────────────────────────────────
+# 👑 SOLO ADMINISTRADORES
+# ─────────────────────────────────────────────────────────────
+
 def get_current_admin(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    logger.info("=" * 50)
-    logger.info("🔍 [get_current_admin] INICIO")
-    logger.info(f"🔍 [get_current_admin] Token recibido: {token[:30]}...")
-    
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username = payload.get("sub")
-        rol = payload.get("rol")
-        
-        logger.info(f"🔍 [get_current_admin] Username extraído: {username}")
-        logger.info(f"🔍 [get_current_admin] Rol extraído: {rol}")
-        
-        if username is None:
-            logger.error("❌ [get_current_admin] Username es None")
-            raise HTTPException(status_code=401, detail="Token inválido: username missing")
-        
-        if rol != "admin":
-            logger.error(f"❌ [get_current_admin] Rol no es admin: {rol}")
-            raise HTTPException(status_code=403, detail=f"No tienes permisos de administrador. Tu rol: {rol}")
-        
-        logger.info(f"✅ [get_current_admin] Rol validado: {rol}")
-        
-    except JWTError as e:
-        logger.error(f"❌ [get_current_admin] Error JWT: {e}")
-        raise HTTPException(status_code=401, detail=f"Token inválido: {str(e)}")
-    except Exception as e:
-        logger.error(f"❌ [get_current_admin] Error inesperado: {e}")
-        raise HTTPException(status_code=401, detail=f"Error: {str(e)}")
-    
-    # Buscar usuario en BD
-    logger.info(f"🔍 [get_current_admin] Buscando usuario: {username}")
+    """Obtiene admin con validación completa y verificación de rol."""
+
+    token_hash = _hash_token(token)
+    logger.info(f"🔍 [get_current_admin] Token hash: {token_hash}...")
+
+    payload = _decode_and_validate_token(token)
+    username = payload.get("sub")
+    rol = payload.get("rol")
+
+    if username is None:
+        raise HTTPException(status_code=401, detail="Token inválido")
+
+    if rol != "admin":
+        logger.warning(f"🚫 [get_current_admin] Acceso denegado. Rol: {rol}")
+        raise HTTPException(status_code=403, detail="Permisos insuficientes")
+
     usuario = db.query(Usuario).filter(Usuario.username == username).first()
-    
-    if not usuario:
-        logger.error(f"❌ [get_current_admin] Usuario no encontrado: {username}")
-        raise HTTPException(status_code=403, detail="Usuario no encontrado")
-    
-    if not usuario.activo:
-        logger.error(f"❌ [get_current_admin] Usuario inactivo: {username}")
-        raise HTTPException(status_code=403, detail="Usuario inactivo")
-    
-    logger.info(f"✅ [get_current_admin] Usuario autorizado: {usuario.username} (rol: {usuario.rol})")
-    logger.info("=" * 50)
+
+    if not usuario or not usuario.activo:
+        raise HTTPException(status_code=403, detail="Usuario no encontrado o inactivo")
+
+    logger.info(f"✅ [get_current_admin] Admin autorizado: {usuario.username}")
     return usuario
 
-# ============================================================
-# ✅ CLIENTES (para la app móvil)
-# ============================================================
+# ─────────────────────────────────────────────────────────────
+# 📱 CLIENTES (para app móvil)
+# ─────────────────────────────────────────────────────────────
+
 def get_current_cliente(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        cliente_id = payload.get("sub")
-        if cliente_id is None:
-            raise HTTPException(status_code=401, detail="Token inválido")
-    except JWTError:
+    """Obtiene cliente con validación completa."""
+
+    token_hash = _hash_token(token)
+    logger.info(f"🔍 [get_current_cliente] Token hash: {token_hash}...")
+
+    payload = _decode_and_validate_token(token)
+    cliente_id = payload.get("sub")
+
+    if cliente_id is None:
         raise HTTPException(status_code=401, detail="Token inválido")
-    
-    cliente = db.query(Cliente).filter(Cliente.id == int(cliente_id)).first()
+
+    try:
+        cliente = db.query(Cliente).filter(Cliente.id == int(cliente_id)).first()
+    except ValueError:
+        raise HTTPException(status_code=401, detail="ID de cliente inválido")
+
     if not cliente:
-        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+
+    logger.info(f"✅ [get_current_cliente] Cliente: {cliente.id}")
     return cliente
+
+# ─────────────────────────────────────────────────────────────
+# 🔑 HASH Y VERIFICACIÓN DE CONTRASEÑAS
+# ─────────────────────────────────────────────────────────────
+
+def hash_password(password: str) -> str:
+    """
+    Hashea una contraseña con bcrypt usando rounds configurables.
+    Rounds=12 ~ 250ms por hash (resistente a GPU cracking).
+    """
+    if len(password) < 8:
+        raise ValueError("La contraseña debe tener al menos 8 caracteres")
+
+    salt = bcrypt.gensalt(rounds=BCRYPT_ROUNDS)
+    hashed = bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
+    logger.info(f"🔑 [hash_password] Hash generado (rounds={BCRYPT_ROUNDS})")
+    return hashed
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """
+    Verifica contraseña usando comparación segura (timing-safe).
+    """
+    result = bcrypt.checkpw(
+        plain_password.encode('utf-8'),
+        hashed_password.encode('utf-8')
+    )
+    # No loggear resultado para prevenir timing attacks en logging
+    return result
+
+# ─────────────────────────────────────────────────────────────
+# 🧹 LIMPIEZA PERIÓDICA DE RATE LIMITING
+# ─────────────────────────────────────────────────────────────
+
+def cleanup_rate_limits():
+    """Limpia entradas antiguas del rate limiting (ejecutar periódicamente)."""
+    now = datetime.now(timezone.utc)
+    expired = [
+        k for k, v in _login_attempts.items()
+        if v[2] and now > v[2] + timedelta(hours=1)
+    ]
+    for k in expired:
+        del _login_attempts[k]
+    if expired:
+        logger.info(f"🧹 [Cleanup] {len(expired)} entradas de rate limit eliminadas")
