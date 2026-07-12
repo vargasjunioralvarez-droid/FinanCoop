@@ -24,7 +24,7 @@ class LoginClienteRequest(BaseModel):
     pin: str
 
 # ============================================================
-# ✅ LOGIN PARA CLIENTES (APP MÓVIL) - CORREGIDO PARA JSON
+# ✅ LOGIN PARA CLIENTES (APP MÓVIL)
 # ============================================================
 @router.post("/login-cliente")
 def login_cliente(request: LoginClienteRequest, db: Session = Depends(get_db)):
@@ -66,7 +66,7 @@ def login_cliente(request: LoginClienteRequest, db: Session = Depends(get_db)):
     return response
 
 # ============================================================
-# ✅ LOGIN PARA ADMINISTRADORES (PANEL WEB) - SIN CAMBIOS
+# ✅ LOGIN PARA ADMINISTRADORES (PANEL WEB) - CORREGIDO
 # ============================================================
 @router.post("/login")
 def login_admin(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
@@ -74,16 +74,21 @@ def login_admin(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = 
     
     usuario = db.query(Usuario).filter(Usuario.username == form_data.username).first()
     
-    if not usuario or not verify_password(form_data.password, usuario.password):
-        logger.warning(f"❌ [BACKEND] Admin credenciales incorrectas: {form_data.username}")
+    if not usuario:
+        logger.warning(f"❌ [BACKEND] Usuario no encontrado: {form_data.username}")
+        raise HTTPException(status_code=401, detail="Credenciales incorrectas")
+    
+    if not verify_password(form_data.password, usuario.password):
+        logger.warning(f"❌ [BACKEND] Contraseña incorrecta: {form_data.username}")
         raise HTTPException(status_code=401, detail="Credenciales incorrectas")
     
     if not usuario.activo:
         logger.warning(f"❌ [BACKEND] Usuario inactivo: {form_data.username}")
         raise HTTPException(status_code=403, detail="Usuario inactivo")
     
+    # 🔥 CREAR TOKEN CON ROL INCLUIDO
     token = create_access_token(data={"sub": usuario.username, "rol": usuario.rol})
-    logger.info(f"🔑 [BACKEND] Token admin generado para {usuario.username}")
+    logger.info(f"🔑 [BACKEND] Token admin generado para {usuario.username} con rol: {usuario.rol}")
     
     return {
         "access_token": token,

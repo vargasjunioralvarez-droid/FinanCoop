@@ -1,7 +1,8 @@
+// frontend/vite.config.js
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import vuetify from 'vite-plugin-vuetify'
-import { resolve } from 'path'  // Para el alias @
+import { resolve } from 'path'
 
 export default defineConfig({
   plugins: [
@@ -10,20 +11,26 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
-      '@': resolve(__dirname, 'src'),  // Alias @ para importaciones
+      '@': resolve(__dirname, 'src'),
     },
   },
   server: {
-    port: 5174,
+    port: 5173,
+    strictPort: true,
+    host: '0.0.0.0',
+    hmr: {
+      host: 'localhost',
+      port: 5173
+    },
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        target: 'http://127.0.0.1:8000',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, '')  // Quita /api de la ruta
+        rewrite: (path) => path.replace(/^\/api/, '')
       }
     }
   },
-  base: './',  // Rutas relativas para producción
+  base: './',
   build: {
     outDir: 'dist',
     assetsDir: 'assets',

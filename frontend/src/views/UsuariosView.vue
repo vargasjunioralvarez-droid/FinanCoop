@@ -114,11 +114,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-
-const API_URL = import.meta.env.VITE_API_URL || 'https://financoop.onrender.com'
-
-// ✅ OBTENER TOKEN DIRECTAMENTE
-const token = localStorage.getItem('admin_token')
+import { api } from '@/config/api'
 
 const usuarios = ref([])
 const cargando = ref(false)
@@ -148,45 +144,23 @@ const headers = [
 ]
 
 // ============================================================
-// ✅ FUNCIÓN PARA PETICIONES CON TOKEN
-// ============================================================
-const apiCall = async (url, options = {}) => {
-  const token = localStorage.getItem('admin_token')
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      ...options.headers
-    }
-  })
-  
-  if (!response.ok) {
-    if (response.status === 401) {
-      localStorage.removeItem('admin_token')
-      localStorage.removeItem('admin_rol')
-      localStorage.removeItem('admin_username')
-      window.location.href = '/admin-login'
-    }
-    const error = await response.json()
-    throw new Error(error.detail || 'Error en la petición')
-  }
-  
-  return response.json()
-}
-
-// ============================================================
 // ✅ CARGAR USUARIOS
 // ============================================================
 const cargarUsuarios = async () => {
   cargando.value = true
   try {
-    const data = await apiCall(`${API_URL}/admin/usuarios`)
+    const data = await api.get('/admin/usuarios')
     usuarios.value = data
-    console.log('✅ Usuarios cargados:', usuarios.value)
+    console.log('✅ Usuarios cargados:', usuarios.value.length)
   } catch (error) {
-    console.error('Error cargando usuarios:', error)
-    alert('Error al cargar usuarios: ' + error.message)
+    console.error('❌ Error cargando usuarios:', error)
+    if (error.response?.status === 401) {
+      alert('⛔ Sesión expirada o no autorizado')
+      localStorage.clear()
+      window.location.href = '/login'
+    } else {
+      alert('Error al cargar usuarios: ' + (error.response?.data?.detail || error.message))
+    }
   } finally {
     cargando.value = false
   }
@@ -203,23 +177,19 @@ const guardarUsuario = async () => {
 
   guardando.value = true
   try {
-    const url = usuarioEditando.value 
-      ? `${API_URL}/admin/usuarios/${usuarioEditando.value.id}`
-      : `${API_URL}/admin/usuarios`
+    if (usuarioEditando.value) {
+      await api.put(`/admin/usuarios/${usuarioEditando.value.id}`, formUsuario.value)
+      alert('✅ Usuario actualizado')
+    } else {
+      await api.post('/admin/usuarios', formUsuario.value)
+      alert('✅ Usuario creado')
+    }
     
-    const method = usuarioEditando.value ? 'PUT' : 'POST'
-    
-    const data = await apiCall(url, {
-      method,
-      body: JSON.stringify(formUsuario.value)
-    })
-    
-    alert(usuarioEditando.value ? '✅ Usuario actualizado' : '✅ Usuario creado')
     dialogUsuario.value = false
     await cargarUsuarios()
   } catch (error) {
-    console.error('Error guardando usuario:', error)
-    alert('❌ Error: ' + error.message)
+    console.error('❌ Error guardando usuario:', error)
+    alert('❌ Error: ' + (error.response?.data?.detail || error.message))
   } finally {
     guardando.value = false
   }
@@ -230,14 +200,12 @@ const guardarUsuario = async () => {
 // ============================================================
 const confirmarEliminar = async () => {
   try {
-    await apiCall(`${API_URL}/admin/usuarios/${usuarioAEliminar.value.id}`, {
-      method: 'DELETE'
-    })
+    await api.delete(`/admin/usuarios/${usuarioAEliminar.value.id}`)
     alert('✅ Usuario eliminado')
     dialogEliminar.value = false
     await cargarUsuarios()
   } catch (error) {
-    console.error('Error eliminando usuario:', error)
+    console.error('❌ Error eliminando usuario:', error)
     alert('❌ Error al eliminar usuario')
   }
 }
@@ -280,11 +248,13 @@ const eliminarUsuario = (usuario) => {
 // ✅ MOUNTED
 // ============================================================
 onMounted(() => {
+  const token = localStorage.getItem('admin_token')
   if (!token) {
     alert('Debes iniciar sesión como administrador')
+    window.location.href = '/login'
     return
   }
-  console.log('🔑 Token de admin:', token)
+  console.log('🔑 Token presente:', token.substring(0, 30) + '...')
   cargarUsuarios()
 })
 </script>

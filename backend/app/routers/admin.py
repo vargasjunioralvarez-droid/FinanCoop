@@ -2,10 +2,16 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
+from typing import Optional
+import logging
+
 from app.database import get_db
 from app.models import Usuario
 from app.auth import get_current_admin, hash_password, verify_password
-from typing import Optional
+
+# Configurar logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/admin", tags=["Administración"])
 
@@ -28,15 +34,22 @@ class UsuarioUpdate(BaseModel):
     activo: Optional[bool] = None
 
 # ============================================================
-# ✅ LISTAR USUARIOS (SOLO ADMIN)
+# ✅ LISTAR USUARIOS (SOLO ADMIN) - CON LOGS
 # ============================================================
 @router.get("/usuarios")
 def listar_usuarios(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin)
 ):
+    logger.info("=" * 50)
+    logger.info("📋 [ADMIN] listar_usuarios - INICIO")
+    logger.info(f"📋 [ADMIN] Usuario actual: {current_user.username}")
+    logger.info(f"📋 [ADMIN] Rol del usuario: {current_user.rol}")
+    
     usuarios = db.query(Usuario).all()
-    return [
+    logger.info(f"📋 [ADMIN] Total usuarios en BD: {len(usuarios)}")
+    
+    result = [
         {
             "id": u.id,
             "username": u.username,
@@ -48,6 +61,10 @@ def listar_usuarios(
         }
         for u in usuarios
     ]
+    
+    logger.info(f"✅ [ADMIN] Usuarios listados exitosamente")
+    logger.info("=" * 50)
+    return result
 
 # ============================================================
 # ✅ CREAR USUARIO (SOLO ADMIN)
@@ -58,6 +75,8 @@ def crear_usuario(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin)
 ):
+    logger.info(f"➕ [ADMIN] Creando usuario por: {current_user.username}")
+    
     # Verificar si el usuario ya existe
     existe = db.query(Usuario).filter(Usuario.username == usuario_data.username).first()
     if existe:
@@ -94,6 +113,8 @@ def actualizar_usuario(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin)
 ):
+    logger.info(f"✏️ [ADMIN] Actualizando usuario {id} por: {current_user.username}")
+    
     usuario = db.query(Usuario).filter(Usuario.id == id).first()
     if not usuario:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
@@ -130,6 +151,8 @@ def eliminar_usuario(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin)
 ):
+    logger.info(f"🗑️ [ADMIN] Eliminando usuario {id} por: {current_user.username}")
+    
     usuario = db.query(Usuario).filter(Usuario.id == id).first()
     if not usuario:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")

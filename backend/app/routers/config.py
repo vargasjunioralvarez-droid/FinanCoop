@@ -1,101 +1,70 @@
-# routers/config.py
-from fastapi import APIRouter, Depends
+# app/routers/config.py
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from datetime import datetime
+import logging
 from app.database import get_db
 from app.models import TasaDolar, NivelConfig, Financiamiento
-from app.models import TasaDolar, NivelConfig
 from app.schemas import TasaUpdate, NivelConfigUpdate
 from app.utils import obtener_tasa_actual, recalcular_cuotas_pendientes, get_niveles_config, init_niveles_db
-from datetime import datetime
+from app.config import NIVELES_CONFIG
+
+# Configurar logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/config", tags=["Configuración"])
 
 @router.get("/tasa-dolar")
 def obtener_tasa(db: Session = Depends(get_db)):
-    tasa = obtener_tasa_actual(db)
-    historial = db.query(TasaDolar).order_by(TasaDolar.id.desc()).limit(10).all()
+    """Obtener la tasa de cambio actual y su historial"""
+    logger.info("=" * 50)
+    logger.info("🔍 [tasa-dolar] INICIO")
     
-    return {
-        "tasa": tasa,
-        "fecha": datetime.now().isoformat(),
-        "historial": [
-            {
-                "tasa": h.tasa,
-                "fecha": h.fecha_actualizacion.isoformat() if h.fecha_actualizacion else None,
-                "fuente": h.fuente,
-                "actualizado_por": h.actualizado_por
-            } for h in historial
-        ]
-    }
-
-@router.post("/tasa-dolar")
-def actualizar_tasa_manual(tasa_update: TasaUpdate, db: Session = Depends(get_db)):
-    nueva_tasa = tasa_update.tasa
-    
-    tasa = TasaDolar(
-        tasa=nueva_tasa, 
-        fuente="manual", 
-        actualizado_por=tasa_update.actualizado_por
-    )
-    db.add(tasa)
-    db.commit()
-    
-    recalculados = recalcular_cuotas_pendientes(db, nueva_tasa)
-    
-    return {
-        "mensaje": f"Tasa actualizada a {nueva_tasa} BS/$",
-        "tasa": nueva_tasa,
-        "fuente": "manual",
-        "financiamientos_afectados": db.query(Financiamiento).filter(
-            Financiamiento.estado == "activo"
-        ).count(),
-        "cuotas_recalculadas": recalculados
-    }
-
-@router.get("/historial-tasas")
-def historial_tasas(db: Session = Depends(get_db)):
-    tasas = db.query(TasaDolar).order_by(TasaDolar.id.desc()).limit(50).all()
-    return [
-        {
-            "id": t.id,
-            "tasa": t.tasa,
-            "fecha_actualizacion": t.fecha_actualizacion.isoformat() if t.fecha_actualizacion else None,
-            "fuente": t.fuente,
-            "actualizado_por": t.actualizado_por
-        } for t in tasas
-    ]
-
-@router.get("/niveles")
-def obtener_niveles(db: Session = Depends(get_db)):
-    niveles = get_niveles_config(db)
-    return {
-        "niveles": niveles,
-        "tasa_actual": obtener_tasa_actual(db)
-    }
-
-@router.put("/niveles/{nivel}")
-def actualizar_nivel(nivel: str, config: NivelConfigUpdate, db: Session = Depends(get_db)):
-    nc = db.query(NivelConfig).filter(NivelConfig.nivel == nivel).first()
-    if not nc:
-        raise HTTPException(status_code=404, detail="Nivel no encontrado")
-    
-    nc.monto_max_usd = config.monto_max_usd
-    nc.entrada_pct = config.entrada_pct
-    nc.financia_pct = config.financia_pct
-    nc.cuotas_base = config.cuotas_base
-    nc.cuotas_max = config.cuotas_max
-    nc.mora_diaria = config.mora_diaria
-    nc.aprobacion_extra = config.aprobacion_extra
-    
-    db.commit()
-    get_niveles_config(db)
-    
-    return {"mensaje": f"Nivel {nivel} actualizado", "config": NIVELES_CONFIG[nivel]}
-
-@router.post("/niveles/reset")
-def reset_niveles(db: Session = Depends(get_db)):
-    db.query(NivelConfig).delete()
-    db.commit()
-    init_niveles_db(db)
-    get_niveles_config(db)
-    return {"mensaje": "Niveles restaurados a valores por defecto"}
+    try:
+        # 1. Obtener tasa actual
+        logger.info("📡 [tasa-dolar] Obteniendo tasa actual...")
+        tasa = obtener_tasa_actual(db)
+        logger.info(f"✅ [tasa-dolar] Tasa actual: {tasa}")
+        
+        # 2. Obtener historial
+        logger.info("📡 [tasa-dolar] Obteniendo historial...")
+        historial = db.query(TasaDolar).order_by(TasaDolar.id.desc()).limit(10).all()
+        logger.info(f"✅ [tasa-dolar] Historial obtenido: {len(historial)} registros")
+        
+        # 3. Construir respuesta
+        response = {
+            "tasa": tasa,
+            "fecha": datetime.now().isoformat(),
+            "historial": []
+        }
+        
+        for h in historial:
+            try:
+                item = {
+                    "tasa": h.tasa,
+                    "fuente": h.fuente if hasattr(h, 'fuente') else "manual"
+                }
+                # Verificar si tiene fecha
+                if hasattr(h, 'fecha') and h.fecha:
+                    item["fecha"] = h.fecha.isoformat()
+                elif hasattr(h, 'fecha_actualizacion') and h.fecha_actualizacion:
+                    item["fecha"] = h.fecha_actualizacion.isoformat()
+                else:
+                    item["fecha"] = None
+                
+                response["historial"].append(item)
+            except Exception as e:
+                logger.error(f"❌ [tasa-dolar] Error procesando historial item: {e}")
+                continue
+        
+        logger.info(f"✅ [tasa-dolar] Respuesta construida: {response}")
+        logger.info("=" * 50)
+        return response
+        
+    except Exception as e:
+        logger.error(f"❌ [tasa-dolar] ERROR: {e}")
+        logger.error(f"❌ [tasa-dolar] Tipo de error: {type(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))

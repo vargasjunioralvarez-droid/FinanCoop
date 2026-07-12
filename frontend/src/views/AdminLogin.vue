@@ -68,25 +68,35 @@ const login = async () => {
   cargando.value = true
 
   try {
-    const formData = new FormData()
+    // 🔥 PRUEBA CON FETCH DIRECTO (sin Axios)
+    const formData = new URLSearchParams()
     formData.append('username', username.value)
     formData.append('password', password.value)
 
-    const res = await fetch('https://financoop.onrender.com/auth/login', {
+    console.log('📡 Enviando login con:', username.value)
+    console.log('📡 Datos:', formData.toString())
+
+    const response = await fetch('/api/auth/login', {
       method: 'POST',
-      body: formData
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: formData.toString()
     })
 
-    const data = await res.json()
+    console.log('📡 Status:', response.status)
 
-    if (data.access_token) {
-      // Guardar token y datos del usuario
+    const data = await response.json()
+    console.log('📡 Response:', data)
+
+    if (response.ok && data.access_token) {
       localStorage.setItem('admin_token', data.access_token)
       localStorage.setItem('admin_rol', data.rol)
       localStorage.setItem('admin_username', data.username)
       localStorage.setItem('admin_nombre', data.nombre)
       
-      // Redirigir según el rol
+      console.log('✅ Login exitoso:', data.username)
+      
       if (data.rol === 'admin') {
         await router.push('/usuarios')
       } else {
@@ -96,7 +106,7 @@ const login = async () => {
       alert('❌ Credenciales incorrectas: ' + (data.detail || 'Verifica tus datos'))
     }
   } catch (error) {
-    console.error('Error:', error)
+    console.error('❌ Error de login:', error)
     alert('❌ Error de conexión con el servidor')
   } finally {
     cargando.value = false

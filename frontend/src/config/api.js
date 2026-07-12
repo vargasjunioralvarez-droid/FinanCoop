@@ -1,7 +1,12 @@
 // frontend/src/config/api.js
 import axios from 'axios'
 
-const API_URL = import.meta.env.VITE_API_URL || 'https://financoop.onrender.com'
+// 🔥 FORZAR A USAR /api EN DESARROLLO
+const isDevelopment = import.meta.env.MODE === 'development'
+const API_URL = isDevelopment ? '/api' : (import.meta.env.VITE_API_URL || 'https://financoop.onrender.com')
+
+console.log('🌐 Modo:', import.meta.env.MODE)
+console.log('🔗 API_URL:', API_URL)
 
 const api = axios.create({
   baseURL: API_URL,
@@ -22,12 +27,15 @@ api.interceptors.request.use(
       console.log('⚠️ [API] Sin token para:', config.url)
     }
     
+    // 🔥 IMPORTANTE: Mostrar la URL completa
+    console.log('📡 [API] URL completa:', config.baseURL + config.url)
+    
     return config
   },
   (error) => Promise.reject(error)
 )
 
-// Interceptor para devolver data directamente
+// Interceptor para manejar respuestas
 api.interceptors.response.use(
   (response) => {
     console.log('✅ [API] OK:', response.config.url, response.status)
