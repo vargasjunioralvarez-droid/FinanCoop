@@ -2,6 +2,7 @@
   <v-app>
     <!-- App Bar -->
     <v-app-bar 
+      v-if="mostrarNav"
       color="primary" 
       dark
       elevation="4"
@@ -140,32 +141,32 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
-import axios from 'axios'
-import { API_URL } from '@/config/api'
+import { ref, onMounted, computed } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import { api } from '@/config/api'
 
 const router = useRouter()
+const route = useRoute()
 const tasaActual = ref(40.0)
 
-// ✅ VERIFICAR SI ES ADMIN
-const esAdmin = localStorage.getItem('admin_rol') === 'admin'
+// ✅ Mostrar navbar solo si no estamos en login
+const mostrarNav = computed(() => route.path !== '/login')
+
+// ✅ VERIFICAR SI ES ADMIN (reactivo)
+const esAdmin = computed(() => localStorage.getItem('admin_rol') === 'admin')
 
 const cargarTasa = async () => {
   try {
-    const res = await axios.get(`${API_URL}/config/tasa-dolar`)
-    tasaActual.value = res.data.tasa
+    const data = await api.get('/config/tasa-dolar')
+    tasaActual.value = data.tasa
   } catch (e) {
     console.error('Error cargando tasa:', e)
   }
 }
 
 const cerrarSesion = () => {
-  localStorage.removeItem('admin_token')
-  localStorage.removeItem('admin_rol')
-  localStorage.removeItem('admin_username')
-  localStorage.removeItem('admin_nombre')
-  router.push('/login')
+  localStorage.clear()
+  window.location.href = '/login'
 }
 
 onMounted(() => {

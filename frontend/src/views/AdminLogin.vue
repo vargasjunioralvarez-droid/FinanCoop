@@ -52,16 +52,13 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { api } from '@/config/api'
 
 const router = useRouter()
 
 const username = ref('')
 const password = ref('')
 const cargando = ref(false)
-
-// 🔥 URL de la API según el entorno
-const API_URL = import.meta.env.VITE_API_URL || 'https://financoop.onrender.com'
-console.log('🌐 API_URL:', API_URL)
 
 const login = async () => {
   if (!username.value || !password.value) {
@@ -72,36 +69,22 @@ const login = async () => {
   cargando.value = true
 
   try {
+    console.log('📡 Enviando login con:', username.value)
+
+    // 🔥 USAR api.js (axios) para login también
     const formData = new URLSearchParams()
     formData.append('username', username.value)
     formData.append('password', password.value)
 
-    console.log('📡 Enviando login a:', `${API_URL}/auth/login`)
-    console.log('📡 Datos:', formData.toString())
-
-    const response = await fetch(`${API_URL}/auth/login`, {
-      method: 'POST',
+    const data = await api.post('/auth/login', formData.toString(), {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded'
-      },
-      body: formData.toString()
+      }
     })
 
-    console.log('📡 Status:', response.status)
-
-    // Verificar que la respuesta sea JSON antes de parsear
-    const contentType = response.headers.get('content-type')
-    if (!contentType || !contentType.includes('application/json')) {
-      const text = await response.text()
-      console.error('❌ Respuesta no es JSON:', text)
-      alert('❌ Error del servidor: respuesta inválida')
-      return
-    }
-
-    const data = await response.json()
     console.log('📡 Response:', data)
 
-    if (response.ok && data.access_token) {
+    if (data.access_token) {
       localStorage.setItem('admin_token', data.access_token)
       localStorage.setItem('admin_rol', data.rol)
       localStorage.setItem('admin_username', data.username)
@@ -109,17 +92,15 @@ const login = async () => {
       
       console.log('✅ Login exitoso:', data.username)
       
-      if (data.rol === 'admin') {
-        await router.push('/usuarios')
-      } else {
-        await router.push('/inicio')
-      }
+      // 🔥 FORZAR recarga completa para que App.vue se actualice
+      window.location.href = data.rol === 'admin' ? '/usuarios' : '/inicio'
     } else {
-      alert('❌ ' + (data.detail || 'Credenciales incorrectas'))
+      alert('❌ Credenciales incorrectas')
     }
   } catch (error) {
     console.error('❌ Error de login:', error)
-    alert('❌ Error de conexión con el servidor')
+    const mensaje = error.response?.data?.detail || 'Error de conexión con el servidor'
+    alert('❌ ' + mensaje)
   } finally {
     cargando.value = false
   }
