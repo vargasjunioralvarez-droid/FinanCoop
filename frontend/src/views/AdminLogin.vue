@@ -59,6 +59,10 @@ const username = ref('')
 const password = ref('')
 const cargando = ref(false)
 
+// 🔥 URL de la API según el entorno
+const API_URL = import.meta.env.VITE_API_URL || 'https://financoop.onrender.com'
+console.log('🌐 API_URL:', API_URL)
+
 const login = async () => {
   if (!username.value || !password.value) {
     alert('Ingresa usuario y contraseña')
@@ -68,15 +72,14 @@ const login = async () => {
   cargando.value = true
 
   try {
-    // 🔥 PRUEBA CON FETCH DIRECTO (sin Axios)
     const formData = new URLSearchParams()
     formData.append('username', username.value)
     formData.append('password', password.value)
 
-    console.log('📡 Enviando login con:', username.value)
+    console.log('📡 Enviando login a:', `${API_URL}/auth/login`)
     console.log('📡 Datos:', formData.toString())
 
-    const response = await fetch('/api/auth/login', {
+    const response = await fetch(`${API_URL}/auth/login`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded'
@@ -85,6 +88,15 @@ const login = async () => {
     })
 
     console.log('📡 Status:', response.status)
+
+    // Verificar que la respuesta sea JSON antes de parsear
+    const contentType = response.headers.get('content-type')
+    if (!contentType || !contentType.includes('application/json')) {
+      const text = await response.text()
+      console.error('❌ Respuesta no es JSON:', text)
+      alert('❌ Error del servidor: respuesta inválida')
+      return
+    }
 
     const data = await response.json()
     console.log('📡 Response:', data)
@@ -103,7 +115,7 @@ const login = async () => {
         await router.push('/inicio')
       }
     } else {
-      alert('❌ Credenciales incorrectas: ' + (data.detail || 'Verifica tus datos'))
+      alert('❌ ' + (data.detail || 'Credenciales incorrectas'))
     }
   } catch (error) {
     console.error('❌ Error de login:', error)
