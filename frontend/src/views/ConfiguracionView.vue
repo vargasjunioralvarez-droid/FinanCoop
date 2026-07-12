@@ -53,7 +53,7 @@
           
           <v-alert type="info" class="mt-3" density="compact">
             <strong>⚠️ Importante:</strong><br>
-            Al cambiar la tasa se recalcular TODAS las cuotas pendientes 
+            Al cambiar la tasa se recalcularán TODAS las cuotas pendientes 
             para proteger contra la devaluación.
           </v-alert>
         </v-card-text>
@@ -120,8 +120,8 @@
               </v-chip>
             </template>
             
-            <template v-slot:item.fecha_actualizacion="{ item }">
-              {{ formatearFecha(item.fecha_actualizacion) }}
+            <template v-slot:item.fecha="{ item }">
+              {{ formatearFecha(item.fecha) }}
             </template>
           </v-data-table>
         </v-card-text>
@@ -132,7 +132,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { api } from '@/config/api'  // ✅ Usar 'api'
+import { api } from '@/config/api'
 
 const tasaActual = ref(40.0)
 const nuevaTasa = ref(40.0)
@@ -150,9 +150,8 @@ const historialTasas = ref([])
 
 const headersTasas = [
   { title: 'Tasa', key: 'tasa' },
-  { title: 'Fecha', key: 'fecha_actualizacion' },
-  { title: 'Fuente', key: 'fuente' },
-  { title: 'Actualizado por', key: 'actualizado_por' }
+  { title: 'Fecha', key: 'fecha' },
+  { title: 'Fuente', key: 'fuente' }
 ]
 
 const cargarTasa = async () => {
@@ -164,6 +163,7 @@ const cargarTasa = async () => {
     
     if (data.historial && data.historial.length > 0) {
       fuenteActual.value = data.historial[0].fuente
+      historialTasas.value = data.historial
     }
   } catch (e) {
     console.error('Error cargando tasa:', e)
@@ -198,7 +198,6 @@ const actualizarTasaManual = async () => {
     
     await cargarTasa()
     await cargarStats()
-    await cargarHistorial()
     
   } catch (e) {
     alert('Error actualizando tasa')
@@ -223,7 +222,6 @@ const actualizarTasaBCV = async () => {
     
     await cargarTasa()
     await cargarStats()
-    await cargarHistorial()
     
   } catch (e) {
     alert('Error consultando BCV')
@@ -259,15 +257,6 @@ const cargarStats = async () => {
   }
 }
 
-const cargarHistorial = async () => {
-  try {
-    const data = await api.get('/config/historial-tasas')
-    historialTasas.value = data
-  } catch (e) {
-    console.error('Error cargando historial:', e)
-  }
-}
-
 const formatearFecha = (fechaStr) => {
   if (!fechaStr) return ''
   const fecha = new Date(fechaStr)
@@ -283,6 +272,5 @@ const formatearFecha = (fechaStr) => {
 onMounted(() => {
   cargarTasa()
   cargarStats()
-  cargarHistorial()
 })
 </script>
