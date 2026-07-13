@@ -1,5 +1,5 @@
+// mobile/src/router/index.js
 import { createRouter, createWebHistory } from 'vue-router'
-import { useFinanCash } from '@/composables/useFinanCash'
 
 // Importar vistas
 import InicioView from '@/views/InicioView.vue'
@@ -39,7 +39,7 @@ const router = createRouter({
     // 🔒 Rutas protegidas
     {
       path: '/',
-      redirect: '/inicio'  // ✅ Redirige / a /inicio
+      redirect: '/inicio'
     },
     {
       path: '/inicio',
@@ -74,23 +74,32 @@ const router = createRouter({
   ]
 })
 
-// ✅ Guardia de navegación
+// ✅ Guardia de navegación - CORREGIDA
 router.beforeEach((to, from, next) => {
-  const { token } = useFinanCash()
+  // 🔥 USAR localStorage DIRECTAMENTE (no useFinanCash)
+  const token = localStorage.getItem('financoop_token')
   const isPublic = to.meta.public
   const requiresAuth = to.meta.requiresAuth
 
-  console.log('🛣️ Navegando a:', to.path, 'Token:', !!token.value)
+  console.log('🛣️ Navegando a:', to.path, 'Token:', !!token)
 
-  if (requiresAuth && !token.value) {
+  // 1. Si la ruta requiere autenticación y no hay token
+  if (requiresAuth && !token) {
     console.log('⛔ Requiere autenticación, redirigiendo a login')
     next('/login')
-  } else if (isPublic && token.value && to.path !== '/registro-exitoso') {
+    return
+  }
+
+  // 2. Si la ruta es pública y hay token (excepto registro-exitoso)
+  if (isPublic && token && to.path !== '/registro-exitoso') {
     console.log('🔓 Pública pero con token, redirigiendo a /inicio')
     next('/inicio')
-  } else {
-    next()
+    return
   }
+
+  // 3. Si la ruta es pública y NO hay token (login, registro, etc.)
+  // o si la ruta está protegida y hay token
+  next()
 })
 
 export default router

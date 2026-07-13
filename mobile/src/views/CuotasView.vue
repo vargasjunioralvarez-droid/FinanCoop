@@ -1,105 +1,100 @@
 <template>
-  <v-container class="pa-4 cuotas-view">
-    <div class="d-flex align-center mb-3">
-      <v-btn icon variant="text" size="small" @click="$router.push('/')">
-        <v-icon>mdi-arrow-left</v-icon>
-      </v-btn>
-      <span class="text-h6 font-weight-medium ml-2">Mis Cuotas</span>
-      <v-spacer />
-      <v-chip size="small" color="primary" variant="tonal">
-        {{ cuotasPendientes.length }} pendientes
-      </v-chip>
-    </div>
+  <div class="cuotas-wrapper">
+    <div class="bg-gradient"></div>
 
-    <v-chip-group v-model="filtro" mandatory class="mb-3">
-      <v-chip value="todas" size="small" variant="outlined" filter>Todas</v-chip>
-      <v-chip value="pendientes" size="small" variant="outlined" filter>Pendientes</v-chip>
-      <v-chip value="vencidas" size="small" variant="outlined" filter color="error">Vencidas</v-chip>
-      <v-chip value="pagadas" size="small" variant="outlined" filter color="success">Pagadas</v-chip>
-    </v-chip-group>
-
-    <v-card class="mb-3 resumen-card" elevation="2">
-      <v-card-text class="pa-4">
-        <div class="d-flex justify-space-between align-center">
-          <div>
-            <div class="text-caption text-medium-emphasis">Deuda pendiente</div>
-            <div class="text-h4 font-weight-bold" style="font-variant-numeric: tabular-nums; color: rgb(var(--v-theme-warning));">
-              BS {{ formatearBS(totalDeudaBs) }}
-            </div>
-            <div class="text-caption text-medium-emphasis">
-              Ref: ${{ formatearUSD(totalDeudaUsd) }} @ {{ formatearNumero(tasaActual) }} Bs/$
-            </div>
-          </div>
-          <div class="text-right">
-            <div class="text-caption text-medium-emphasis">Cuotas</div>
-            <div class="text-h5 font-weight-medium">{{ cuotasPendientes.length }}</div>
-          </div>
-        </div>
-      </v-card-text>
-    </v-card>
-
-    <div v-if="cuotasFiltradas.length === 0" class="text-center py-8">
-      <v-icon size="48" color="medium-emphasis" class="mb-2">mdi-inbox-outline</v-icon>
-      <div class="text-body-1 text-medium-emphasis">No hay cuotas {{ filtro !== 'todas' ? 'en esta categoría' : '' }}</div>
-    </div>
-
-    <v-card
-      v-for="c in cuotasFiltradas"
-      :key="c.cuota_id || c.id"
-      class="mb-2 cuota-item"
-      :class="{ 'cuota-seleccionable': c.estado === 'pendiente' || c.estado === 'conciliando' }"
-      elevation="1"
-      @click="seleccionarCuota(c)"
-    >
-      <v-card-text class="pa-3">
+    <div class="page-content">
+      <!-- Header -->
+      <div class="header-section">
         <div class="d-flex align-center">
-          <v-avatar :color="avatarColor(c)" size="40" class="mr-3">
-            <v-icon color="white" size="20">{{ avatarIcon(c) }}</v-icon>
-          </v-avatar>
-          <div class="flex-grow-1">
-            <div class="d-flex align-center mb-1">
-              <span class="text-body-2 font-weight-medium">{{ c.financiamiento_descripcion || 'Sin descripción' }}</span>
-              <v-chip size="x-small" :color="chipColor(c)" variant="tonal" class="ml-2">
-                {{ chipLabel(c) }}
+          <v-btn icon variant="text" size="small" class="back-btn" @click="$router.push('/inicio')">
+            <v-icon>mdi-arrow-left</v-icon>
+          </v-btn>
+          <span class="header-title">Mis Cuotas</span>
+          <v-spacer />
+          <v-chip class="badge-chip" size="small" color="primary" variant="tonal">
+            {{ cuotasPendientes.length }} pendientes
+          </v-chip>
+        </div>
+      </div>
+
+      <!-- Filtros -->
+      <v-chip-group v-model="filtro" mandatory class="filter-group">
+        <v-chip value="todas" size="small" variant="outlined" filter>Todas</v-chip>
+        <v-chip value="pendientes" size="small" variant="outlined" filter>Pendientes</v-chip>
+        <v-chip value="vencidas" size="small" variant="outlined" filter color="error">Vencidas</v-chip>
+        <v-chip value="pagadas" size="small" variant="outlined" filter color="success">Pagadas</v-chip>
+      </v-chip-group>
+
+      <!-- Resumen de deuda -->
+      <v-card class="summary-card glass-card" elevation="0">
+        <v-card-text class="pa-4">
+          <div class="d-flex justify-space-between align-center">
+            <div>
+              <div class="summary-label">Deuda pendiente</div>
+              <div class="summary-value">BS {{ formatearBS(totalDeudaBs) }}</div>
+              <div class="summary-sub">Ref: ${{ formatearUSD(totalDeudaUsd) }}</div>
+            </div>
+            <div class="summary-badge">
+              <span class="badge-number">{{ cuotasPendientes.length }}</span>
+              <span class="badge-label">cuotas</span>
+            </div>
+          </div>
+        </v-card-text>
+      </v-card>
+
+      <!-- Lista de cuotas -->
+      <div v-if="cuotasFiltradas.length === 0" class="empty-state">
+        <v-icon size="56" color="rgba(255,255,255,0.2)">mdi-inbox-outline</v-icon>
+        <div class="empty-text">No hay cuotas en esta categoría</div>
+      </div>
+
+      <v-card
+        v-for="c in cuotasFiltradas"
+        :key="c.cuota_id || c.id"
+        class="cuota-item glass-card"
+        :class="{ 'cuota-selectable': c.estado === 'pendiente' || c.estado === 'conciliando' }"
+        elevation="0"
+        @click="seleccionarCuota(c)"
+      >
+        <v-card-text class="pa-3">
+          <div class="d-flex align-center">
+            <v-avatar :color="avatarColor(c)" size="42" class="mr-3">
+              <v-icon color="white" size="20">{{ avatarIcon(c) }}</v-icon>
+            </v-avatar>
+            <div class="flex-grow-1">
+              <div class="d-flex align-center mb-1">
+                <span class="cuota-title">{{ c.financiamiento_descripcion || 'Sin descripción' }}</span>
+                <v-chip size="x-small" :color="chipColor(c)" variant="tonal" class="ml-2">
+                  {{ chipLabel(c) }}
+                </v-chip>
+              </div>
+              <div class="cuota-meta">Cuota #{{ c.cuota_numero || c.numero }} — {{ formatearFecha(c.fecha_vencimiento) }}</div>
+              <div v-if="c.dias_atraso > 0" class="cuota-mora">{{ c.dias_atraso }} días de mora</div>
+            </div>
+            <div class="text-right ml-2">
+              <div class="cuota-monto">BS {{ formatearBS(c.monto_total_bs || c.monto_bs) }}</div>
+              <div class="cuota-usd">${{ formatearUSD(c.monto_total_usd_ref || c.monto_usd_ref) }}</div>
+              <div v-if="c.monto_interes_bs > 0" class="cuota-interes">+{{ formatearBS(c.monto_interes_bs) }} mora</div>
+              <v-chip v-if="c.puede_pagar !== false && c.estado !== 'pagada'" color="success" size="x-small" class="mt-1" variant="flat">
+                Pagar
               </v-chip>
             </div>
-            <div class="text-caption text-medium-emphasis">
-              Cuota #{{ c.cuota_numero || c.numero }} — {{ formatearFecha(c.fecha_vencimiento) }}
-            </div>
-            <div v-if="c.dias_atraso > 0" class="text-caption text-error">
-              {{ c.dias_atraso }} días de mora
-            </div>
           </div>
-          <div class="text-right ml-2">
-            <!-- ✅ MONTO EN BS ACTUALIZADO -->
-            <div class="text-h6 font-weight-bold" style="font-variant-numeric: tabular-nums;">
-              BS {{ formatearBS(c.monto_total_bs || c.monto_bs) }}
-            </div>
-            <!-- ✅ USD SIEMPRE IGUAL -->
-            <div class="text-caption text-medium-emphasis">
-              ${{ formatearUSD(c.monto_total_usd_ref || c.monto_usd_ref) }}
-            </div>
-            <div v-if="c.monto_interes_bs > 0" class="text-caption text-error">
-              +{{ formatearBS(c.monto_interes_bs) }} mora
-            </div>
-            <v-chip v-if="c.puede_pagar !== false && c.estado !== 'pagada'" color="success" size="small" class="mt-1" variant="flat">
-              Pagar
-            </v-chip>
-          </div>
-        </div>
-      </v-card-text>
-    </v-card>
+        </v-card-text>
+      </v-card>
 
-    <v-card class="mt-3 info-card" variant="outlined">
-      <v-card-text class="pa-3 d-flex align-center">
-        <v-icon size="18" color="info" class="mr-2">mdi-information-outline</v-icon>
-        <div class="text-caption text-medium-emphasis">
-          ✅ Los montos en Bs se actualizan automáticamente con el tipo de cambio.<br>
-          💵 Tu deuda se mantiene en DÓLARES (USD) para protegerte de la devaluación.
-        </div>
-      </v-card-text>
-    </v-card>
-  </v-container>
+      <!-- Info -->
+      <v-card class="info-card glass-card" elevation="0">
+        <v-card-text class="pa-3 d-flex align-center">
+          <v-icon size="18" color="info" class="mr-2">mdi-information-outline</v-icon>
+          <div class="info-text">
+            ✅ Los montos en Bs se actualizan automáticamente con el tipo de cambio.<br>
+            💵 Tu deuda se mantiene en DÓLARES (USD) para protegerte de la devaluación.
+          </div>
+        </v-card-text>
+      </v-card>
+    </div>
+  </div>
 </template>
 
 <script setup>
@@ -129,7 +124,6 @@ const financiamientoId = route.query.financiamiento_id
 const cuotasFiltradas = computed(() => {
   let lista = [...todasCuotas.value]
   
-  // Filtrar por financiamiento si viene en query
   if (financiamientoId) {
     lista = lista.filter(c => c.financiamiento_id === Number(financiamientoId))
   }
@@ -209,35 +203,186 @@ function chipLabel(c) {
 }
 
 function seleccionarCuota(c) {
-  if (c.estado === 'pagada') {
-    console.log('❌ Esta cuota ya está pagada')
-    return
-  }
-  console.log('✅ Seleccionando cuota:', c)
+  if (c.estado === 'pagada') return
   setCuotaSeleccionada(c)
   router.push('/pagar')
 }
 </script>
 
 <style scoped>
-.cuotas-view { padding-bottom: 80px; }
-.resumen-card {
-  border-left: 4px solid rgb(var(--v-theme-warning));
-  border-radius: 12px;
+.cuotas-wrapper {
+  min-height: 100vh;
+  background: #0a0e1a;
+  position: relative;
 }
+
+.bg-gradient {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(ellipse at 20% 50%, rgba(79, 172, 254, 0.08), transparent 70%),
+              radial-gradient(ellipse at 80% 50%, rgba(99, 102, 241, 0.08), transparent 70%);
+  z-index: 0;
+}
+
+.page-content {
+  position: relative;
+  z-index: 1;
+  padding: 16px 16px 80px;
+}
+
+.header-section {
+  margin-bottom: 16px;
+}
+
+.back-btn {
+  color: rgba(255,255,255,0.6) !important;
+}
+
+.header-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #ffffff;
+  margin-left: 8px;
+}
+
+.badge-chip {
+  background: rgba(79, 172, 254, 0.15) !important;
+  color: #4facfe !important;
+}
+
+.filter-group {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.filter-group :deep(.v-chip) {
+  background: rgba(255,255,255,0.04) !important;
+  color: rgba(255,255,255,0.5) !important;
+  border-color: rgba(255,255,255,0.06) !important;
+}
+
+.filter-group :deep(.v-chip--selected) {
+  background: rgba(79, 172, 254, 0.15) !important;
+  color: #4facfe !important;
+  border-color: rgba(79, 172, 254, 0.3) !important;
+}
+
+.glass-card {
+  background: rgba(255,255,255,0.04) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 16px !important;
+}
+
+.summary-card {
+  margin-bottom: 16px;
+}
+
+.summary-label {
+  font-size: 11px;
+  color: rgba(255,255,255,0.4);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.summary-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: #ffd54f;
+}
+
+.summary-sub {
+  font-size: 11px;
+  color: rgba(255,255,255,0.3);
+}
+
+.summary-badge {
+  text-align: center;
+}
+
+.badge-number {
+  font-size: 28px;
+  font-weight: 700;
+  color: #ffffff;
+  display: block;
+}
+
+.badge-label {
+  font-size: 10px;
+  color: rgba(255,255,255,0.3);
+  text-transform: uppercase;
+}
+
 .cuota-item {
-  transition: all 0.2s ease;
-  border-left: 3px solid transparent;
-  border-radius: 12px;
+  margin-bottom: 10px;
+  transition: all 0.3s ease;
+  cursor: default;
 }
-.cuota-item.cuota-seleccionable { cursor: pointer; }
-.cuota-item.cuota-seleccionable:hover {
+
+.cuota-item.cuota-selectable {
+  cursor: pointer;
+}
+
+.cuota-item.cuota-selectable:hover {
   transform: translateX(4px);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08) !important;
+  background: rgba(255,255,255,0.06) !important;
 }
+
+.cuota-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: #ffffff;
+}
+
+.cuota-meta {
+  font-size: 11px;
+  color: rgba(255,255,255,0.4);
+}
+
+.cuota-mora {
+  font-size: 11px;
+  color: #f87171;
+}
+
+.cuota-monto {
+  font-size: 15px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.cuota-usd {
+  font-size: 11px;
+  color: rgba(255,255,255,0.3);
+}
+
+.cuota-interes {
+  font-size: 10px;
+  color: #f87171;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 48px 0;
+}
+
+.empty-text {
+  font-size: 14px;
+  color: rgba(255,255,255,0.3);
+  margin-top: 12px;
+}
+
 .info-card {
-  border-style: dashed;
-  opacity: 0.8;
-  border-radius: 12px;
+  margin-top: 16px;
+}
+
+.info-text {
+  font-size: 11px;
+  color: rgba(255,255,255,0.3);
+  line-height: 1.5;
 }
 </style>

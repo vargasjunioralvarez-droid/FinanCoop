@@ -1,10 +1,22 @@
 <template>
   <v-app :theme="tema" class="mobile-app">
+    <!-- Toast de inactividad -->
+    <v-snackbar
+      v-model="mostrarMensajeInactividad"
+      color="warning"
+      timeout="3000"
+      location="top"
+      variant="tonal"
+    >
+      <v-icon start color="warning">mdi-clock-alert</v-icon>
+      {{ mensajeInactividad }}
+    </v-snackbar>
+
     <!-- REGISTRO (sin layout) -->
     <router-view v-if="route.path === '/registro' || route.path === '/registro-exitoso'" />
 
     <!-- LOGIN (sin layout) cuando NO hay token o la ruta es login -->
-    <router-view v-else-if="route.path === '/login' || !tokenValido" />
+    <router-view v-else-if="route.path === '/login' || !token" />
 
     <!-- DASHBOARD CON ROUTER -->
     <div v-else class="app-content">
@@ -126,7 +138,7 @@
         </v-card>
       </v-dialog>
 
-      <!-- Bottom Navigation tipo Cashea -->
+      <!-- Bottom Navigation -->
       <v-bottom-navigation
         :model-value="activeTab"
         grow
@@ -170,7 +182,7 @@
         </v-btn>
       </v-bottom-navigation>
 
-      <!-- Contenido con Router View y transiciones -->
+      <!-- Contenido -->
       <v-main class="pb-16 pt-14">
         <router-view v-slot="{ Component }">
           <transition name="slide-fade" mode="out-in">
@@ -183,7 +195,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, computed, watch, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useFinanCash } from '@/composables/useFinanCash'
 
@@ -193,7 +205,9 @@ const {
   badgeCount,
   cargarDatos,
   colorNivel,
-  iconoNivel
+  iconoNivel,
+  cerrarSesion,
+  resetInactivityTimer
 } = useFinanCash()
 
 const route = useRoute()
@@ -202,42 +216,22 @@ const router = useRouter()
 const mostrarAyuda = ref(false)
 const tema = ref(localStorage.getItem('financoop_theme') || 'light')
 const scrolled = ref(false)
-const tokenValido = ref(false)
-const verificandoToken = ref(true)
 
-// ✅ FUNCIÓN PARA VALIDAR EL TOKEN
-const validarToken = async () => {
-  const tokenGuardado = localStorage.getItem('financoop_token')
-  
-  if (!tokenGuardado) {
-    tokenValido.value = false
-    verificandoToken.value = false
-    return
-  }
+// ============ MENSAJE DE INACTIVIDAD ============
+const mostrarMensajeInactividad = ref(false)
+const mensajeInactividad = ref('')
 
-  try {
-    // Intentar cargar datos con el token
-    await cargarDatos()
-    tokenValido.value = true
-  } catch (error) {
-    console.log('❌ Token inválido o expirado')
-    localStorage.removeItem('financoop_token')
-    tokenValido.value = false
-    // Si está en una ruta protegida, redirigir a login
-    if (route.path !== '/login' && route.path !== '/registro' && route.path !== '/registro-exitoso') {
-      router.push('/login')
-    }
-  } finally {
-    verificandoToken.value = false
-  }
+const handleInactividad = (event) => {
+  mensajeInactividad.value = event.detail?.mensaje || 'Sesión cerrada por inactividad'
+  mostrarMensajeInactividad.value = true
 }
 
-// Tab activo basado en la ruta actual
+// ============ COMPUTED ============
 const activeTab = computed(() => {
   return route.meta?.tab || route.name?.toLowerCase() || 'inicio'
 })
 
-// Navegación manual
+// ============ NAVEGACIÓN ============
 const navigateTo = (tab) => {
   const routes = {
     inicio: '/inicio',
@@ -249,48 +243,76 @@ const navigateTo = (tab) => {
   router.push(routes[tab])
 }
 
+// ============ TEMAS ============
 const toggleTema = () => {
   tema.value = tema.value === 'light' ? 'dark' : 'light'
   localStorage.setItem('financoop_theme', tema.value)
 }
 
-// Detectar scroll
+// ============ SCROLL ============
 const onScroll = () => {
   scrolled.value = window.scrollY > 10
 }
 
-onMounted(async () => {
-  console.log('📱 App montada, validando token...')
-  await validarToken()
-  window.addEventListener('scroll', onScroll)
+// ============ INICIALIZAR APP ============
+const iniciarApp = async () => {
+  console.log('📱 Iniciando app...')
   
-  // Si no hay token válido y no está en rutas públicas, redirigir a login
-  if (!tokenValido.value && !['/login', '/registro', '/registro-exitoso'].includes(route.path)) {
-    router.push('/login')
-  }
-})
-
-// ✅ Watcher para cuando cambie la ruta
-watch(route, async (newRoute) => {
-  // Si la ruta es login o registro, no hacer nada
-  if (['/login', '/registro', '/registro-exitoso'].includes(newRoute.path)) {
-    return
+  // ✅ Verificar si hay token en localStorage
+  const tokenGuardado = localStorage.getItem('financoop_token')
+  
+  if (tokenGuardado && !token.value) {
+    // Si hay token en localStorage pero no en el ref, sincronizar
+    token.value = tokenGuardado
   }
   
-  // Si no hay token válido y la ruta no es pública, redirigir a login
-  if (!tokenValido.value) {
-    router.push('/login')
+  if (token.value) {
+    console.log('🔄 Token presente, cargando datos...')
+    try {
+      await cargarDatos()
+      console.log('✅ Datos cargados correctamente')
+      if (resetInactivityTimer) {
+        resetInactivityTimer()
+      }
+    } catch (error) {
+      console.error('❌ Error cargando datos:', error)
+      localStorage.removeItem('financoop_token')
+      token.value = null
+      if (route.path !== '/login' && route.path !== '/registro' && route.path !== '/registro-exitoso') {
+        router.push('/login')
+      }
+    }
+  } else {
+    console.log('❌ No hay token')
+    if (route.path !== '/login' && route.path !== '/registro' && route.path !== '/registro-exitoso') {
+      router.push('/login')
+    }
   }
-})
+}
 
-// ✅ Watcher para cambios en el token
+// ============ WATCHERS ============
 watch(token, (newToken) => {
+  console.log('🔄 Token cambiado:', newToken ? 'Token presente' : 'Sin token')
+  
   if (!newToken) {
-    tokenValido.value = false
+    // Si el token se vuelve null, redirigir a login (excepto en rutas públicas)
     if (!['/login', '/registro', '/registro-exitoso'].includes(route.path)) {
       router.push('/login')
     }
   }
+}, { immediate: true })
+
+// ============ CICLO DE VIDA ============
+onMounted(async () => {
+  console.log('📱 App montada')
+  window.addEventListener('inactividad', handleInactividad)
+  window.addEventListener('scroll', onScroll)
+  await iniciarApp()
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('inactividad', handleInactividad)
+  window.removeEventListener('scroll', onScroll)
 })
 </script>
 
@@ -365,14 +387,6 @@ watch(token, (newToken) => {
 .v-btn:active {
   transform: scale(0.96);
   transition: transform 0.15s ease;
-}
-
-.v-card {
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.v-card:active {
-  transform: scale(0.98);
 }
 
 .slide-fade-enter-active {

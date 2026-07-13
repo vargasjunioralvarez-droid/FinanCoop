@@ -1,82 +1,51 @@
 <template>
-  <v-container class="success-container" fluid>
-    <v-row justify="center" align="center" class="min-vh-100">
-      <v-col cols="12" sm="8" md="6" lg="4">
-        <v-card class="success-card" elevation="4" rounded="xl">
-          <v-card-text class="text-center pa-4">
-            <!-- Icono -->
-            <div class="mb-3">
-              <v-icon size="64" color="success">mdi-check-circle</v-icon>
-            </div>
+  <div class="success-wrapper">
+    <div class="bg-gradient"></div>
 
-            <h2 class="text-h6 font-weight-bold text-success mb-1">
-              ¡Registro Exitoso!
-            </h2>
+    <div class="page-content">
+      <v-card class="success-card glass-card" elevation="0">
+        <v-card-text class="pa-4 text-center">
+          <v-icon size="64" color="#4caf50" class="mb-3">mdi-check-circle</v-icon>
+          <h2 class="success-title">¡Registro Exitoso!</h2>
+          <p class="success-sub">Tu solicitud ha sido enviada para verificación</p>
 
-            <p class="text-caption text-medium-emphasis mb-3">
-              Tu solicitud ha sido enviada para verificación
-            </p>
+          <v-alert v-if="pinGenerado" type="info" class="pin-alert" border="start" density="compact">
+            <div class="pin-label">📱 PIN de acceso:</div>
+            <div class="pin-value">{{ pinGenerado }}</div>
+            <div class="pin-hint">Usa este PIN para entrar a la app</div>
+          </v-alert>
+          <v-alert v-else type="warning" class="pin-alert" border="start" density="compact">
+            <div class="pin-label">⏳ Esperando PIN</div>
+            <div class="pin-hint">Revisa tu WhatsApp/SMS</div>
+          </v-alert>
 
-            <!-- ✅ Mostrar PIN si está disponible -->
-            <v-alert v-if="pinGenerado" type="info" class="mb-3" border="start" density="compact">
-              <div class="text-caption font-weight-bold">📱 PIN de acceso:</div>
-              <div class="text-h4 font-weight-bold text-primary">{{ pinGenerado }}</div>
-              <div class="text-caption text-medium-emphasis">Usa este PIN para entrar a la app</div>
-            </v-alert>
+          <v-divider style="border-color: rgba(255,255,255,0.06);" />
 
-            <v-alert v-else type="warning" class="mb-3" border="start" density="compact">
-              <div class="text-caption font-weight-bold">⏳ Esperando PIN</div>
-              <div class="text-caption text-medium-emphasis">Revisa tu WhatsApp/SMS</div>
-            </v-alert>
+          <v-list density="compact" class="bg-transparent text-left">
+            <v-list-item>
+              <v-list-item-title>📨 Recibirás un SMS/WhatsApp con tu PIN de acceso</v-list-item-title>
+            </v-list-item>
+            <v-list-item>
+              <v-list-item-title>⏳ Verificación en 24-48 horas</v-list-item-title>
+            </v-list-item>
+          </v-list>
 
-            <v-divider class="my-2" />
+          <v-divider style="border-color: rgba(255,255,255,0.06);" />
 
-            <!-- Pasos -->
-            <v-list density="compact" class="bg-transparent text-left">
-              <v-list-item>
-                <template v-slot:prepend>
-                  <v-icon size="16" color="info">mdi-send</v-icon>
-                </template>
-                <v-list-item-title class="text-caption font-weight-medium">Recibirás un SMS/WhatsApp con tu PIN de acceso</v-list-item-title>
-              </v-list-item>
-              <v-list-item>
-                <template v-slot:prepend>
-                  <v-icon size="16" color="warning">mdi-clock</v-icon>
-                </template>
-                <v-list-item-title class="text-caption font-weight-medium">Verificación en 24-48 horas</v-list-item-title>
-              </v-list-item>
-            </v-list>
+          <div class="info-row"><span>Tu cédula:</span><span>{{ cedula }}</span></div>
+          <div class="info-row"><span>Estado:</span><v-chip color="warning" size="x-small"><v-icon size="12" start>mdi-clock-outline</v-icon>En verificación</v-chip></div>
 
-            <v-divider class="my-2" />
+          <v-divider style="border-color: rgba(255,255,255,0.06);" />
 
-            <!-- Datos -->
-            <div class="d-flex justify-space-between text-caption py-1">
-              <span class="text-medium-emphasis">Tu cédula:</span>
-              <span class="font-weight-bold">{{ cedula }}</span>
-            </div>
-            <div class="d-flex justify-space-between text-caption py-1">
-              <span class="text-medium-emphasis">Estado:</span>
-              <v-chip color="warning" size="x-small">
-                <v-icon size="12" start>mdi-clock-outline</v-icon>
-                En verificación
-              </v-chip>
-            </div>
+          <v-btn color="#4facfe" rounded="pill" block size="large" class="login-btn" @click="irALogin">
+            <v-icon start size="18">mdi-login</v-icon>Ir al Login
+          </v-btn>
 
-            <v-divider class="my-2" />
-
-            <v-btn color="primary" rounded="pill" block size="large" @click="irALogin" class="mt-2">
-              <v-icon start size="18">mdi-login</v-icon>
-              Ir al Login
-            </v-btn>
-
-            <p class="text-caption text-medium-emphasis mt-2">
-              🔑 Usa tu cédula y el PIN que te enviamos
-            </p>
-          </v-card-text>
-        </v-card>
-      </v-col>
-    </v-row>
-  </v-container>
+          <p class="login-hint">🔑 Usa tu cédula y el PIN que te enviamos</p>
+        </v-card-text>
+      </v-card>
+    </div>
+  </div>
 </template>
 
 <script setup>
@@ -89,7 +58,6 @@ const cedula = route.params.cedula || ''
 const pinGenerado = ref(null)
 
 onMounted(() => {
-  // Intentar obtener el PIN de localStorage
   const storedPin = localStorage.getItem('financoop_pin_temp')
   if (storedPin) {
     pinGenerado.value = storedPin
@@ -98,29 +66,106 @@ onMounted(() => {
 })
 
 const irALogin = () => {
-  // Limpiar token residual
   localStorage.removeItem('financoop_token')
   router.push('/login')
 }
 </script>
 
 <style scoped>
-.success-container {
+.success-wrapper {
   min-height: 100vh;
-  background: #f5f7fa;
-  padding: 10px 0;
+  background: #0a0e1a;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.success-card {
-  background: white !important;
-  border-radius: 20px !important;
+.bg-gradient {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(ellipse at 20% 50%, rgba(79, 172, 254, 0.08), transparent 70%),
+              radial-gradient(ellipse at 80% 50%, rgba(99, 102, 241, 0.08), transparent 70%);
+  z-index: 0;
 }
 
-:deep(.v-theme--dark) .success-container {
-  background: #121212;
+.page-content {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 420px;
+  padding: 20px;
 }
 
-:deep(.v-theme--dark) .success-card {
-  background: #1e1e1e !important;
+.glass-card {
+  background: rgba(255,255,255,0.04) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 24px !important;
+}
+
+.success-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #4caf50;
+}
+
+.success-sub {
+  font-size: 14px;
+  color: rgba(255,255,255,0.4);
+  margin-bottom: 16px;
+}
+
+.pin-alert {
+  background: rgba(79, 172, 254, 0.05) !important;
+  border-color: rgba(79, 172, 254, 0.15) !important;
+  border-radius: 12px !important;
+  margin-bottom: 16px;
+}
+
+.pin-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.5);
+}
+
+.pin-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: #4facfe;
+}
+
+.pin-hint {
+  font-size: 11px;
+  color: rgba(255,255,255,0.3);
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  font-size: 13px;
+  color: rgba(255,255,255,0.6);
+}
+
+.info-row span:first-child {
+  color: rgba(255,255,255,0.3);
+}
+
+.login-btn {
+  background: linear-gradient(135deg, #4facfe, #6366f1) !important;
+  font-weight: 700;
+  height: 50px;
+}
+
+.login-hint {
+  font-size: 12px;
+  color: rgba(255,255,255,0.2);
+  margin-top: 12px;
 }
 </style>

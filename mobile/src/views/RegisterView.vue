@@ -1,249 +1,103 @@
 <template>
-  <v-container class="register-container" fluid>
-    <v-row justify="center" align="center" class="min-vh-100">
-      <v-col cols="12" sm="8" md="6" lg="5">
-        <v-card class="register-card" elevation="4" rounded="xl">
-          <v-card-title class="text-center py-3">
+  <div class="register-wrapper">
+    <div class="bg-gradient"></div>
+
+    <div class="page-content">
+      <v-card class="register-card glass-card" elevation="0">
+        <v-card-text class="pa-4">
+          <div class="text-center mb-3">
             <v-img src="/icons/icon-192x192.png" width="50" class="mx-auto mb-1" contain />
-            <h1 class="text-h6 font-weight-bold">FinanCoop</h1>
-            <p class="text-caption text-medium-emphasis">Regístrate para comenzar</p>
-          </v-card-title>
+            <h1 class="register-title">FinanCoop</h1>
+            <p class="register-sub">Regístrate para comenzar</p>
+          </div>
 
-          <v-divider />
+          <v-divider style="border-color: rgba(255,255,255,0.06);" />
 
-          <v-card-text class="pa-3">
-            <v-stepper v-model="paso" class="bg-transparent" flat>
-              <v-stepper-header>
-                <v-stepper-item :complete="paso > 1" :value="1" color="primary" size="small">
-                  <v-icon size="14">mdi-account</v-icon>
-                </v-stepper-item>
-                <v-divider />
-                <v-stepper-item :complete="paso > 2" :value="2" color="primary" size="small">
-                  <v-icon size="14">mdi-account-group</v-icon>
-                </v-stepper-item>
-                <v-divider />
-                <v-stepper-item :complete="paso > 3" :value="3" color="primary" size="small">
-                  <v-icon size="14">mdi-card-account-details</v-icon>
-                </v-stepper-item>
-                <v-divider />
-                <v-stepper-item :value="4" color="primary" size="small">
-                  <v-icon size="14">mdi-check</v-icon>
-                </v-stepper-item>
-              </v-stepper-header>
+          <v-stepper v-model="paso" class="bg-transparent flat">
+            <v-stepper-header>
+              <v-stepper-item :complete="paso > 1" :value="1" color="#4facfe" size="small">
+                <v-icon size="14">mdi-account</v-icon>
+              </v-stepper-item>
+              <v-divider />
+              <v-stepper-item :complete="paso > 2" :value="2" color="#4facfe" size="small">
+                <v-icon size="14">mdi-account-group</v-icon>
+              </v-stepper-item>
+              <v-divider />
+              <v-stepper-item :complete="paso > 3" :value="3" color="#4facfe" size="small">
+                <v-icon size="14">mdi-card-account-details</v-icon>
+              </v-stepper-item>
+              <v-divider />
+              <v-stepper-item :value="4" color="#4facfe" size="small">
+                <v-icon size="14">mdi-check</v-icon>
+              </v-stepper-item>
+            </v-stepper-header>
 
-              <v-stepper-window v-model="paso" class="mt-2">
-                <!-- PASO 1 -->
-                <v-stepper-window-item :value="1">
-                  <v-text-field
-                    v-model="registro.nombre"
-                    label="Nombre completo *"
-                    variant="outlined"
-                    density="compact"
-                    prepend-inner-icon="mdi-account"
-                    :rules="[v => !!v || 'Requerido']"
-                    hide-details
-                    class="mb-2"
-                  />
-                  <v-text-field
-                    v-model="registro.cedula"
-                    label="Cédula *"
-                    variant="outlined"
-                    density="compact"
-                    prepend-inner-icon="mdi-card-account-details"
-                    :rules="[v => !!v || 'Requerido', v => v.length >= 6 || 'Mínimo 6 dígitos']"
-                    hide-details
-                    class="mb-2"
-                  />
-                  <div class="d-flex mb-2">
-                    <v-select
-                      v-model="codigoPais"
-                      :items="codigosPaises"
-                      item-title="nombre"
-                      item-value="codigo"
-                      label="Código"
-                      variant="outlined"
-                      density="compact"
-                      hide-details
-                      class="codigo-pais"
-                      style="max-width: 120px;"
-                    />
-                    <v-text-field
-                      v-model="registro.telefono"
-                      label="Teléfono *"
-                      variant="outlined"
-                      density="compact"
-                      prepend-inner-icon="mdi-phone"
-                      :rules="[v => !!v || 'Requerido']"
-                      hide-details
-                      class="telefono-input"
-                      placeholder="4121234567"
-                    />
-                  </div>
-                  <v-text-field
-                    v-model="registro.email"
-                    label="Email (opcional)"
-                    variant="outlined"
-                    density="compact"
-                    prepend-inner-icon="mdi-email"
-                    type="email"
-                    hide-details
-                    class="mb-2"
-                  />
-                  <v-textarea
-                    v-model="registro.direccion"
-                    label="Dirección completa *"
-                    variant="outlined"
-                    density="compact"
-                    rows="1"
-                    prepend-inner-icon="mdi-map-marker"
-                    :rules="[v => !!v || 'Requerido']"
-                    hide-details
-                    class="mb-2"
-                    placeholder="Calle, urbanización, ciudad"
-                  />
-                  <div class="d-flex justify-end mt-2">
-                    <v-btn color="primary" rounded="pill" size="small" @click="paso++" :disabled="!validarPaso(1)">
-                      Siguiente
-                      <v-icon end size="16">mdi-chevron-right</v-icon>
-                    </v-btn>
-                  </div>
-                </v-stepper-window-item>
+            <v-stepper-window v-model="paso" class="mt-3">
+              <!-- Paso 1 -->
+              <v-stepper-window-item :value="1">
+                <v-text-field v-model="registro.nombre" label="Nombre completo *" variant="outlined" density="compact" prepend-inner-icon="mdi-account" :rules="[v => !!v || 'Requerido']" hide-details class="mb-2" />
+                <v-text-field v-model="registro.cedula" label="Cédula *" variant="outlined" density="compact" prepend-inner-icon="mdi-card-account-details" :rules="[v => !!v || 'Requerido', v => v.length >= 6 || 'Mínimo 6 dígitos']" hide-details class="mb-2" />
+                <div class="d-flex mb-2">
+                  <v-select v-model="codigoPais" :items="codigosPaises" item-title="nombre" item-value="codigo" label="Código" variant="outlined" density="compact" hide-details class="codigo-pais" style="max-width: 120px;" />
+                  <v-text-field v-model="registro.telefono" label="Teléfono *" variant="outlined" density="compact" prepend-inner-icon="mdi-phone" :rules="[v => !!v || 'Requerido']" hide-details class="telefono-input" placeholder="4121234567" />
+                </div>
+                <v-text-field v-model="registro.email" label="Email (opcional)" variant="outlined" density="compact" prepend-inner-icon="mdi-email" type="email" hide-details class="mb-2" />
+                <v-textarea v-model="registro.direccion" label="Dirección completa *" variant="outlined" density="compact" rows="1" prepend-inner-icon="mdi-map-marker" :rules="[v => !!v || 'Requerido']" hide-details class="mb-2" placeholder="Calle, urbanización, ciudad" />
+                <div class="d-flex justify-end mt-2">
+                  <v-btn color="#4facfe" rounded="pill" size="small" @click="paso++" :disabled="!validarPaso(1)">Siguiente <v-icon end size="16">mdi-chevron-right</v-icon></v-btn>
+                </div>
+              </v-stepper-window-item>
 
-                <!-- PASO 2 -->
-                <v-stepper-window-item :value="2">
-                  <v-text-field
-                    v-model="registro.referencia_nombre"
-                    label="Nombre de referencia *"
-                    variant="outlined"
-                    density="compact"
-                    prepend-inner-icon="mdi-account"
-                    :rules="[v => !!v || 'Requerido']"
-                    hide-details
-                    class="mb-2"
-                  />
-                  <v-text-field
-                    v-model="registro.referencia_telefono"
-                    label="Teléfono de referencia *"
-                    variant="outlined"
-                    density="compact"
-                    prepend-inner-icon="mdi-phone"
-                    :rules="[v => !!v || 'Requerido']"
-                    hide-details
-                    class="mb-2"
-                  />
-                  <v-select
-                    v-model="registro.referencia_parentesco"
-                    :items="['Familiar', 'Amigo', 'Vecino', 'Compañero de trabajo', 'Otro']"
-                    label="Parentesco *"
-                    variant="outlined"
-                    density="compact"
-                    prepend-inner-icon="mdi-account-heart"
-                    :rules="[v => !!v || 'Requerido']"
-                    hide-details
-                    class="mb-2"
-                  />
-                  <div class="d-flex justify-space-between mt-2">
-                    <v-btn variant="text" size="small" @click="paso--">
-                      <v-icon start size="16">mdi-chevron-left</v-icon>
-                      Atrás
-                    </v-btn>
-                    <v-btn color="primary" rounded="pill" size="small" @click="paso++" :disabled="!validarPaso(2)">
-                      Siguiente
-                      <v-icon end size="16">mdi-chevron-right</v-icon>
-                    </v-btn>
-                  </div>
-                </v-stepper-window-item>
+              <!-- Paso 2 -->
+              <v-stepper-window-item :value="2">
+                <v-text-field v-model="registro.referencia_nombre" label="Nombre de referencia *" variant="outlined" density="compact" prepend-inner-icon="mdi-account" :rules="[v => !!v || 'Requerido']" hide-details class="mb-2" />
+                <v-text-field v-model="registro.referencia_telefono" label="Teléfono de referencia *" variant="outlined" density="compact" prepend-inner-icon="mdi-phone" :rules="[v => !!v || 'Requerido']" hide-details class="mb-2" />
+                <v-select v-model="registro.referencia_parentesco" :items="['Familiar', 'Amigo', 'Vecino', 'Compañero de trabajo', 'Otro']" label="Parentesco *" variant="outlined" density="compact" prepend-inner-icon="mdi-account-heart" :rules="[v => !!v || 'Requerido']" hide-details class="mb-2" />
+                <div class="d-flex justify-space-between mt-2">
+                  <v-btn variant="text" size="small" @click="paso--"><v-icon start size="16">mdi-chevron-left</v-icon>Atrás</v-btn>
+                  <v-btn color="#4facfe" rounded="pill" size="small" @click="paso++" :disabled="!validarPaso(2)">Siguiente <v-icon end size="16">mdi-chevron-right</v-icon></v-btn>
+                </div>
+              </v-stepper-window-item>
 
-                <!-- PASO 3 -->
-                <v-stepper-window-item :value="3">
-                  <div class="text-center py-2">
-                    <v-icon size="40" :color="fotoCedula ? 'success' : 'grey-lighten-2'" class="mb-1">
-                      {{ fotoCedula ? 'mdi-check-circle' : 'mdi-camera' }}
-                    </v-icon>
-                    <div v-if="!fotoCedula" class="text-caption text-medium-emphasis mb-2">
-                      Sube foto de tu cédula
-                    </div>
-                    <div v-else class="text-caption text-success mb-2">✅ Foto cargada</div>
-                    
-                    <!-- ✅ BOTÓN PARA PC (SELECTOR DE ARCHIVO) -->
-                    <v-btn :color="fotoCedula ? 'success' : 'primary'" rounded="pill" size="small" @click="abrirSelectorArchivos">
-                      <v-icon start size="16">{{ fotoCedula ? 'mdi-refresh' : 'mdi-file-upload' }}</v-icon>
-                      {{ fotoCedula ? 'Cambiar' : 'Seleccionar Archivo' }}
-                    </v-btn>
+              <!-- Paso 3 -->
+              <v-stepper-window-item :value="3">
+                <div class="text-center py-2">
+                  <v-icon size="40" :color="fotoCedula ? '#4caf50' : 'rgba(255,255,255,0.1)'" class="mb-1">{{ fotoCedula ? 'mdi-check-circle' : 'mdi-camera' }}</v-icon>
+                  <div v-if="!fotoCedula" class="text-caption text-medium-emphasis mb-2">Sube foto de tu cédula</div>
+                  <div v-else class="text-caption text-success mb-2">✅ Foto cargada</div>
+                  <v-btn :color="fotoCedula ? '#4caf50' : '#4facfe'" rounded="pill" size="small" @click="abrirSelectorArchivos">
+                    <v-icon start size="16">{{ fotoCedula ? 'mdi-refresh' : 'mdi-file-upload' }}</v-icon>{{ fotoCedula ? 'Cambiar' : 'Seleccionar Archivo' }}
+                  </v-btn>
+                  <div v-if="fotoCedula" class="mt-2"><v-img :src="fotoCedula" max-height="100" contain class="rounded" /></div>
+                </div>
+                <div class="d-flex justify-space-between mt-2">
+                  <v-btn variant="text" size="small" @click="paso--"><v-icon start size="16">mdi-chevron-left</v-icon>Atrás</v-btn>
+                  <v-btn color="#4facfe" rounded="pill" size="small" @click="paso++" :disabled="!validarPaso(3)">Siguiente <v-icon end size="16">mdi-chevron-right</v-icon></v-btn>
+                </div>
+              </v-stepper-window-item>
 
-                    <div v-if="fotoCedula" class="mt-2">
-                      <v-img :src="fotoCedula" max-height="100" contain class="rounded" />
-                    </div>
-                  </div>
-
-                  <div class="d-flex justify-space-between mt-2">
-                    <v-btn variant="text" size="small" @click="paso--">
-                      <v-icon start size="16">mdi-chevron-left</v-icon>
-                      Atrás
-                    </v-btn>
-                    <v-btn color="primary" rounded="pill" size="small" @click="paso++" :disabled="!validarPaso(3)">
-                      Siguiente
-                      <v-icon end size="16">mdi-chevron-right</v-icon>
-                    </v-btn>
-                  </div>
-                </v-stepper-window-item>
-
-                <!-- PASO 4 -->
-                <v-stepper-window-item :value="4">
-                  <v-alert type="success" class="mb-2" density="compact">
-                    <span class="text-caption font-weight-medium">✅ Revisa tus datos</span>
-                  </v-alert>
-
-                  <v-list density="compact" class="bg-transparent">
-                    <v-list-item>
-                      <v-list-item-title class="text-caption text-medium-emphasis">Nombre</v-list-item-title>
-                      <v-list-item-subtitle class="text-body-2 font-weight-medium">{{ registro.nombre }}</v-list-item-subtitle>
-                    </v-list-item>
-                    <v-list-item>
-                      <v-list-item-title class="text-caption text-medium-emphasis">Cédula</v-list-item-title>
-                      <v-list-item-subtitle class="text-body-2 font-weight-medium">{{ registro.cedula }}</v-list-item-subtitle>
-                    </v-list-item>
-                    <v-list-item>
-                      <v-list-item-title class="text-caption text-medium-emphasis">Teléfono</v-list-item-title>
-                      <v-list-item-subtitle class="text-body-2 font-weight-medium">{{ telefonoCompleto }}</v-list-item-subtitle>
-                    </v-list-item>
-                    <v-list-item>
-                      <v-list-item-title class="text-caption text-medium-emphasis">Dirección</v-list-item-title>
-                      <v-list-item-subtitle class="text-body-2 font-weight-medium">{{ registro.direccion }}</v-list-item-subtitle>
-                    </v-list-item>
-                    <v-list-item>
-                      <v-list-item-title class="text-caption text-medium-emphasis">Referencia</v-list-item-title>
-                      <v-list-item-subtitle class="text-body-2 font-weight-medium">
-                        {{ registro.referencia_nombre }} ({{ registro.referencia_parentesco }})
-                      </v-list-item-subtitle>
-                    </v-list-item>
-                    <v-list-item v-if="fotoCedula">
-                      <v-list-item-title class="text-caption text-medium-emphasis">Cédula</v-list-item-title>
-                      <v-list-item-subtitle class="text-success">
-                        <v-icon size="16" color="success">mdi-check-circle</v-icon>
-                        Foto cargada
-                      </v-list-item-subtitle>
-                    </v-list-item>
-                  </v-list>
-
-                  <div class="d-flex justify-space-between mt-2">
-                    <v-btn variant="text" size="small" @click="paso--">
-                      <v-icon start size="16">mdi-chevron-left</v-icon>
-                      Atrás
-                    </v-btn>
-                    <v-btn color="success" rounded="pill" size="small" :loading="enviando" @click="enviarRegistro">
-                      <v-icon start size="16">mdi-send</v-icon>
-                      Enviar
-                    </v-btn>
-                  </div>
-                </v-stepper-window-item>
-              </v-stepper-window>
-            </v-stepper>
-          </v-card-text>
-        </v-card>
-      </v-col>
-    </v-row>
-  </v-container>
+              <!-- Paso 4 -->
+              <v-stepper-window-item :value="4">
+                <v-alert type="success" class="mb-2" density="compact">✅ Revisa tus datos</v-alert>
+                <v-list density="compact" class="bg-transparent">
+                  <v-list-item><v-list-item-title class="text-caption text-medium-emphasis">Nombre</v-list-item-title><v-list-item-subtitle class="text-body-2">{{ registro.nombre }}</v-list-item-subtitle></v-list-item>
+                  <v-list-item><v-list-item-title class="text-caption text-medium-emphasis">Cédula</v-list-item-title><v-list-item-subtitle class="text-body-2">{{ registro.cedula }}</v-list-item-subtitle></v-list-item>
+                  <v-list-item><v-list-item-title class="text-caption text-medium-emphasis">Teléfono</v-list-item-title><v-list-item-subtitle class="text-body-2">{{ telefonoCompleto }}</v-list-item-subtitle></v-list-item>
+                  <v-list-item><v-list-item-title class="text-caption text-medium-emphasis">Dirección</v-list-item-title><v-list-item-subtitle class="text-body-2">{{ registro.direccion }}</v-list-item-subtitle></v-list-item>
+                  <v-list-item><v-list-item-title class="text-caption text-medium-emphasis">Referencia</v-list-item-title><v-list-item-subtitle class="text-body-2">{{ registro.referencia_nombre }} ({{ registro.referencia_parentesco }})</v-list-item-subtitle></v-list-item>
+                  <v-list-item v-if="fotoCedula"><v-list-item-title class="text-caption text-medium-emphasis">Cédula</v-list-item-title><v-list-item-subtitle class="text-success"><v-icon size="16" color="success">mdi-check-circle</v-icon>Foto cargada</v-list-item-subtitle></v-list-item>
+                </v-list>
+                <div class="d-flex justify-space-between mt-2">
+                  <v-btn variant="text" size="small" @click="paso--"><v-icon start size="16">mdi-chevron-left</v-icon>Atrás</v-btn>
+                  <v-btn color="#4caf50" rounded="pill" size="small" :loading="enviando" @click="enviarRegistro"><v-icon start size="16">mdi-send</v-icon>Enviar</v-btn>
+                </div>
+              </v-stepper-window-item>
+            </v-stepper-window>
+          </v-stepper>
+        </v-card-text>
+      </v-card>
+    </div>
+  </div>
 </template>
 
 <script setup>
@@ -269,14 +123,7 @@ const codigosPaises = [
   { nombre: '🇵🇪 Perú', codigo: '+51' },
   { nombre: '🇲🇽 México', codigo: '+52' },
   { nombre: '🇪🇸 España', codigo: '+34' },
-  { nombre: '🇺🇸 USA', codigo: '+1' },
-  { nombre: '🇵🇦 Panamá', codigo: '+507' },
-  { nombre: '🇩🇴 República Dominicana', codigo: '+1' },
-  { nombre: '🇨🇷 Costa Rica', codigo: '+506' },
-  { nombre: '🇬🇹 Guatemala', codigo: '+502' },
-  { nombre: '🇸🇻 El Salvador', codigo: '+503' },
-  { nombre: '🇭🇳 Honduras', codigo: '+504' },
-  { nombre: '🇳🇮 Nicaragua', codigo: '+505' }
+  { nombre: '🇺🇸 USA', codigo: '+1' }
 ]
 
 const registro = reactive({
@@ -287,143 +134,115 @@ const registro = reactive({
   direccion: '',
   referencia_nombre: '',
   referencia_telefono: '',
-  referencia_parentesco: '',
-  cedula_foto: null
+  referencia_parentesco: ''
 })
 
-const telefonoCompleto = computed(() => {
-  if (!registro.telefono) return ''
-  return `${codigoPais.value}${registro.telefono}`
-})
+const telefonoCompleto = computed(() => `${codigoPais.value}${registro.telefono}`)
 
-const validarPaso = (paso) => {
-  switch(paso) {
-    case 1: 
-      return registro.nombre && 
-             registro.cedula && 
-             registro.telefono && 
-             registro.direccion
-    case 2: 
-      return registro.referencia_nombre && 
-             registro.referencia_telefono && 
-             registro.referencia_parentesco
-    case 3: 
-      return !!fotoCedula.value
-    default: 
-      return true
-  }
+const validarPaso = (p) => {
+  if (p === 1) return registro.nombre && registro.cedula && registro.telefono && registro.direccion
+  if (p === 2) return registro.referencia_nombre && registro.referencia_telefono && registro.referencia_parentesco
+  if (p === 3) return !!fotoCedula.value
+  return true
 }
 
-// ✅ FUNCIÓN PARA PC: Abrir selector de archivos
 const abrirSelectorArchivos = () => {
-  console.log('📸 Abriendo selector de archivos (PC)...')
   const input = document.createElement('input')
   input.type = 'file'
   input.accept = 'image/*'
   input.onchange = (e) => {
     const file = e.target.files[0]
     if (file) {
-      console.log('📸 Archivo seleccionado:', file.name, file.size, 'bytes')
       const reader = new FileReader()
-      reader.onload = (ev) => {
-        fotoCedula.value = ev.target.result
-        fotoFile.value = file
-        registro.cedula_foto = file
-        console.log('📸 Foto seleccionada (PC):', file.name)
-      }
+      reader.onload = (ev) => { fotoCedula.value = ev.target.result; fotoFile.value = file }
       reader.readAsDataURL(file)
     }
   }
   input.click()
 }
 
-// ============================================================
-// ✅ ENVIAR REGISTRO CON LOGS DETALLADOS
-// ============================================================
 const enviarRegistro = async () => {
-  console.log('========================================')
-  console.log('📤 INICIANDO REGISTRO...')
-  console.log('📤 Paso 1: Validando datos...')
-  
   if (!validarPaso(1) || !validarPaso(2) || !validarPaso(3)) {
-    console.log('❌ Validación fallida: faltan campos obligatorios')
     alert('Por favor completa todos los campos obligatorios')
     return
   }
-  console.log('✅ Validación aprobada')
-
   enviando.value = true
-  console.log('📤 Enviando... estado:', enviando.value)
-  
   try {
-    console.log('📤 Paso 2: Preparando datos...')
-    const telefonoCompletoValue = `${codigoPais.value}${registro.telefono}`
-    console.log('📞 Teléfono completo:', telefonoCompletoValue)
-    console.log('👤 Nombre:', registro.nombre)
-    console.log('🆔 Cédula:', registro.cedula)
-    console.log('📍 Dirección:', registro.direccion)
-    console.log('👥 Referencia:', registro.referencia_nombre, registro.referencia_telefono, registro.referencia_parentesco)
-    
     const formData = new FormData()
     formData.append('nombre', registro.nombre.trim())
     formData.append('cedula', registro.cedula.trim())
-    formData.append('telefono', telefonoCompletoValue)
+    formData.append('telefono', telefonoCompleto.value)
     formData.append('email', (registro.email || '').trim())
     formData.append('direccion', registro.direccion.trim())
     formData.append('referencia_nombre', registro.referencia_nombre.trim())
     formData.append('referencia_telefono', registro.referencia_telefono.trim())
     formData.append('referencia_parentesco', registro.referencia_parentesco.trim())
-    console.log('✅ FormData preparado')
-    
-    // ✅ Enviar la foto al backend
-    console.log('📸 Paso 3: Verificando foto...')
-    console.log('📸 fotoFile.value:', fotoFile.value)
-    if (fotoFile.value) {
-      formData.append('cedula_foto', fotoFile.value)
-      console.log('📸 Foto agregada al FormData:', fotoFile.value.name, fotoFile.value.size, 'bytes')
-    } else {
-      console.log('⚠️ No hay foto para enviar')
-    }
-    
-    console.log('📤 Paso 4: Enviando al backend...')
-    console.log('📤 URL:', `${import.meta.env.VITE_API_URL}/clientes`)
-    
+    if (fotoFile.value) formData.append('cedula_foto', fotoFile.value)
     const result = await registrarCliente(formData)
-    console.log('📥 Resultado del backend:', result)
-    
     if (result.success) {
-      console.log('✅ Registro exitoso! PIN:', result.pin)
-      if (result.pin) {
-        localStorage.setItem('financoop_pin_temp', result.pin)
-      }
+      if (result.pin) localStorage.setItem('financoop_pin_temp', result.pin)
       router.push('/registro-exitoso/' + encodeURIComponent(registro.cedula))
     } else {
-      console.log('❌ Error en el registro:', result.error)
       alert('Error: ' + (result.error || 'No se pudo registrar'))
     }
   } catch (err) {
-    console.error('❌ ERROR EN REGISTRO:', err)
-    console.error('❌ Mensaje:', err.message)
-    console.error('❌ Stack:', err.stack)
     alert('Error al registrar. Intenta de nuevo.\n\n' + err.message)
   } finally {
     enviando.value = false
-    console.log('📤 Registro finalizado, enviando:', enviando.value)
-    console.log('========================================')
   }
 }
 </script>
 
 <style scoped>
-.register-container {
+.register-wrapper {
   min-height: 100vh;
-  background: #f5f7fa;
-  padding: 10px 0;
+  background: #0a0e1a;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.register-card {
-  background: white !important;
-  border-radius: 20px !important;
+.bg-gradient {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(ellipse at 20% 50%, rgba(79, 172, 254, 0.08), transparent 70%),
+              radial-gradient(ellipse at 80% 50%, rgba(99, 102, 241, 0.08), transparent 70%);
+  z-index: 0;
+}
+
+.page-content {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 480px;
+  padding: 20px;
+}
+
+.glass-card {
+  background: rgba(255,255,255,0.04) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 24px !important;
+}
+
+.register-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.register-sub {
+  font-size: 13px;
+  color: rgba(255,255,255,0.4);
+}
+
+.flat {
+  background: transparent !important;
 }
 
 .codigo-pais {
@@ -433,6 +252,7 @@ const enviarRegistro = async () => {
 
 .codigo-pais :deep(.v-field) {
   border-radius: 8px 0 0 8px !important;
+  background: rgba(255,255,255,0.04) !important;
 }
 
 .telefono-input {
@@ -441,13 +261,62 @@ const enviarRegistro = async () => {
 
 .telefono-input :deep(.v-field) {
   border-radius: 0 8px 8px 0 !important;
+  background: rgba(255,255,255,0.04) !important;
 }
 
-:deep(.v-theme--dark) .register-container {
-  background: #121212;
+:deep(.v-stepper) {
+  background: transparent !important;
 }
 
-:deep(.v-theme--dark) .register-card {
-  background: #1e1e1e !important;
+:deep(.v-stepper-item) {
+  color: rgba(255,255,255,0.3) !important;
+}
+
+:deep(.v-stepper-item--selected) {
+  color: #4facfe !important;
+}
+
+:deep(.v-stepper-item--complete) {
+  color: #4caf50 !important;
+}
+
+:deep(.v-stepper-divider) {
+  border-color: rgba(255,255,255,0.06) !important;
+}
+
+:deep(.v-text-field .v-field),
+:deep(.v-textarea .v-field),
+:deep(.v-select .v-field) {
+  background: rgba(255,255,255,0.04) !important;
+  border-radius: 12px !important;
+}
+
+:deep(.v-text-field .v-field__input),
+:deep(.v-textarea .v-field__input) {
+  color: #ffffff !important;
+}
+
+:deep(.v-text-field .v-field__input::placeholder),
+:deep(.v-textarea .v-field__input::placeholder) {
+  color: rgba(255,255,255,0.2) !important;
+}
+
+:deep(.v-text-field .v-icon),
+:deep(.v-textarea .v-icon),
+:deep(.v-select .v-icon) {
+  color: rgba(255,255,255,0.3) !important;
+}
+
+:deep(.v-field--focused) {
+  box-shadow: 0 0 0 2px rgba(79, 172, 254, 0.15) !important;
+}
+
+:deep(.v-stepper-window) {
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+:deep(.v-stepper-window-item) {
+  padding: 0 !important;
 }
 </style>

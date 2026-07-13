@@ -4,6 +4,12 @@ import { CapacitorHttp } from '@capacitor/core'
 
 const API_URL = 'https://financoop.onrender.com'
 
+// ============ TIMEOUT DE INACTIVIDAD ============
+const INACTIVITY_TIMEOUT = 15 * 60 * 1000 // 15 minutos
+let inactivityTimer = null
+let listenersAdded = false
+let lastResetTime = 0
+
 // ============ ESTADO GLOBAL ============
 const token = ref(localStorage.getItem('financoop_token') || null)
 const usuario = ref({})
@@ -57,6 +63,82 @@ const metodosPago = [
   { title: 'Zelle', value: 'zelle' },
   { title: 'Binance', value: 'binance' }
 ]
+
+// ============ FUNCIONES DE INACTIVIDAD ============
+function resetInactivityTimer() {
+  // Evita reinicios excesivos (mínimo 1 segundo entre reinicios)
+  const now = Date.now()
+  if (now - lastResetTime < 1000) {
+    return
+  }
+  lastResetTime = now
+  
+  if (inactivityTimer) {
+    clearTimeout(inactivityTimer)
+    inactivityTimer = null
+  }
+  
+  if (token.value) {
+    console.log('⏰ Iniciando timer de inactividad (15 minutos)')
+    inactivityTimer = setTimeout(() => {
+      console.log('⏰ Tiempo de inactividad agotado, cerrando sesión...')
+      cerrarSesionPorInactividad()
+    }, INACTIVITY_TIMEOUT)
+  }
+}
+
+function cerrarSesionPorInactividad() {
+  console.log('🔒 Cerrando sesión por inactividad')
+  
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('inactividad', { 
+      detail: { mensaje: 'Sesión cerrada por inactividad' }
+    }))
+  }
+  
+  cerrarSesion()
+}
+
+function iniciarListenersInactividad() {
+  if (listenersAdded) return
+  listenersAdded = true
+  
+  console.log('📡 Activando listeners de inactividad')
+  
+  const eventos = [
+    'click', 'touchstart', 'mousemove', 'scroll', 
+    'keydown', 'focus', 'input', 'change'
+  ]
+  
+  let throttleTimer = null
+  
+  const reiniciar = () => {
+    if (throttleTimer) return
+    throttleTimer = setTimeout(() => {
+      throttleTimer = null
+      resetInactivityTimer()
+    }, 5000)
+  }
+  
+  eventos.forEach(evento => {
+    document.addEventListener(evento, reiniciar, { passive: true })
+  })
+  
+  window.__inactivityListeners = { eventos, reiniciar }
+}
+
+function limpiarListenersInactividad() {
+  if (!listenersAdded) return
+  
+  const { eventos, reiniciar } = window.__inactivityListeners || {}
+  if (eventos && reiniciar) {
+    eventos.forEach(evento => {
+      document.removeEventListener(evento, reiniciar)
+    })
+  }
+  listenersAdded = false
+  window.__inactivityListeners = null
+}
 
 // ============ COMPUTED ============
 const nivelActual = computed(() => nivelesConfig.value[usuario.value.nivel] || {})
@@ -181,18 +263,15 @@ function copiarAlPortapapeles(texto) {
 }
 
 // ============ API CALLS ============
-// 🔥 FIX: Headers mínimos para evitar CORS preflight innecesario
 async function apiCall(endpoint, options = {}) {
   const url = `${API_URL}${endpoint}`
   
-  // 🔥 FIX: Headers básicos SIN cache-control (evita preflight complejo)
   const headers = {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
     ...options.headers
   }
   
-  // Token en header Authorization (NO en query param)
   if (token.value && endpoint.includes('/app/')) {
     headers['Authorization'] = `Bearer ${token.value}`
   }
@@ -269,6 +348,9 @@ async function iniciarSesion() {
       token.value = data.token
       localStorage.setItem('financoop_token', data.token)
       console.log('✅ Login exitoso, token guardado')
+      
+      iniciarListenersInactividad()
+      resetInactivityTimer()
     } else {
       error.value = 'Error: No se recibió token'
       cargando.value = false
@@ -290,6 +372,15 @@ async function iniciarSesion() {
 }
 
 function cerrarSesion() {
+  console.log('🔒 Cerrando sesión manualmente')
+  
+  if (inactivityTimer) {
+    clearTimeout(inactivityTimer)
+    inactivityTimer = null
+  }
+  
+  limpiarListenersInactividad()
+  
   token.value = null
   localStorage.removeItem('financoop_token')
   usuario.value = {}
@@ -364,9 +455,12 @@ async function cargarDatos() {
   }
   
   console.log('🔄 Cargando datos...')
+  console.log('🔑 Token usado:', token.value)
   
   try {
     const data = await apiCall('/app/mis-datos')
+    
+    console.log('📥 Datos del cliente:', data)
     
     if (data.error) {
       console.error('❌ Error:', data.error)
@@ -388,6 +482,7 @@ async function cargarDatos() {
     
     try {
       const cuotasData = await apiCall('/app/mis-cuotas')
+      console.log('📥 Respuesta de cuotas:', cuotasData)
       if (cuotasData && !cuotasData.error) {
         todasCuotas.value = cuotasData.cuotas || []
       }
@@ -395,6 +490,9 @@ async function cargarDatos() {
       console.error('❌ Error cuotas:', err)
       todasCuotas.value = []
     }
+    
+    console.log('✅ Datos cargados exitosamente')
+    resetInactivityTimer()
     
   } catch (err) {
     console.error('❌ Error cargando datos:', err)
@@ -588,6 +686,8 @@ export function useFinanCash() {
     registrarCliente,
     verificarCedula,
     setCuotaSeleccionada,
-    recalcularMontosConNuevaTasa
+    recalcularMontosConNuevaTasa,
+    resetInactivityTimer,
+    cerrarSesionPorInactividad
   }
 }
