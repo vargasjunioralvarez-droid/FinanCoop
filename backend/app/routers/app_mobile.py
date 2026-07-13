@@ -1,5 +1,5 @@
-# routers/app_mobile.py
-from fastapi import APIRouter, Depends
+# backend/app/routers/app_mobile.py
+from fastapi import APIRouter, Depends, Response
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Cliente, Financiamiento, Cuota, ConfiguracionPago
@@ -8,6 +8,11 @@ from app.utils import generar_token, obtener_tasa_actual, calcular_usado_disponi
 from datetime import datetime
 
 router = APIRouter(prefix="/app", tags=["App Móvil"])
+
+# 🔥 FIX: Handler para OPTIONS preflight de CORS
+@router.options("/login")
+def options_login():
+    return Response(status_code=200)
 
 @router.post("/login")
 def login_app(login: LoginApp, db: Session = Depends(get_db)):
