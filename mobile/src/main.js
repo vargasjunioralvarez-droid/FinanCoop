@@ -1,3 +1,4 @@
+// mobile/src/main.js
 import { createApp } from 'vue'
 import App from './App.vue'
 import vuetify from './plugins/vuetify'
@@ -10,17 +11,15 @@ app.use(vuetify)
 app.use(router)
 app.mount('#app')
 
-// ✅ Registrar Service Worker
+// 🔥 DESACTIVAR SERVICE WORKER PARA FORZAR NUEVOS DISEÑOS
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/service-worker.js')
-      .then(registration => {
-        console.log('✅ SW registrado:', registration.scope)
-      })
-      .catch(error => {
-        console.log('❌ Error SW:', error)
-      })
+  // DESREGISTRAR CUALQUIER SERVICE WORKER EXISTENTE
+  navigator.serviceWorker.getRegistrations().then(function(registrations) {
+    for(let registration of registrations) {
+      registration.unregister()
+      console.log('✅ Service Worker desregistrado')
+    }
   })
 }
 
-console.log('✅ App iniciada con Vue Router')
+console.log('✅ App iniciada con Vue Router (SW desactivado)')
