@@ -9,6 +9,8 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
 from app.database import engine, Base, get_db
 from app.models import NivelConfig, TasaDolar, ConfiguracionPago
 from app.config import NIVELES_CONFIG_DEFAULT
@@ -19,7 +21,7 @@ from app.routers import (
 from datetime import datetime, timezone
 
 # ─────────────────────────────────────────────────────────────
-# 📝 LOGGING SEGURO (sin exponer tokens ni contraseñas)
+# 📝 LOGGING SEGURO
 # ─────────────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
@@ -28,10 +30,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ─────────────────────────────────────────────────────────────
-# 🚀 FASTAPI CON SEGURIDAD
+# 🚀 FASTAPI
 # ─────────────────────────────────────────────────────────────
-
-# Detectar entorno
 ENV = os.getenv("ENVIRONMENT", "development")
 IS_PROD = ENV == "production"
 
@@ -39,47 +39,93 @@ app = FastAPI(
     title="FinanCash API",
     description="API segura para sistema de administración financiera",
     version="4.0.0",
-    # 🚫 Deshabilitar docs en producción
     docs_url="/docs" if not IS_PROD else None,
     redoc_url="/redoc" if not IS_PROD else None,
     openapi_url="/openapi.json" if not IS_PROD else None,
-    debug=False  # 🚫 NUNCA debug=True en producción
+    debug=False
 )
 
 # ─────────────────────────────────────────────────────────────
-# 🛡️ MIDDLEWARE: SECURITY HEADERS
+# 🌐 CORS: Orígenes permitidos
 # ─────────────────────────────────────────────────────────────
+ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "http://localhost:5174",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:5174",
+    "capacitor://localhost",
+    "ionic://localhost",
+    "http://localhost",
+    "https://localhost",
+    "https://financash-frontend.onrender.com",
+    "https://financash-backend.onrender.com",
+    "https://financoop.onrender.com",
+]
 
+if IS_PROD:
+    capacitor_origins = [
+        "capacitor://localhost",
+        "ionic://localhost",
+        "http://localhost",
+        "https://localhost",
+    ]
+    https_origins = [o for o in ALLOWED_ORIGINS if o.startswith("https://")]
+    ALLOWED_ORIGINS = list(set(https_origins + capacitor_origins))
+    logger.info(f"🔒 CORS en producción: {ALLOWED_ORIGINS}")
+
+# ─────────────────────────────────────────────────────────────
+# 🔥 FIX: Middleware CORS custom que intercepta OPTIONS primero
+# ─────────────────────────────────────────────────────────────
+class CustomCORSMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        origin = request.headers.get("origin", "")
+        
+        # Verificar si el origen está permitido
+        is_allowed = origin in ALLOWED_ORIGINS
+        if not is_allowed and not IS_PROD:
+            # En desarrollo, permitir localhost parcial
+            is_allowed = "localhost" in origin
+        
+        if is_allowed:
+            # 🔥 INTERCEPTAR OPTIONS PREFLIGHT AQUÍ
+            if request.method == "OPTIONS":
+                response = Response(status_code=200)
+                response.headers["Access-Control-Allow-Origin"] = origin
+                response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, PATCH, OPTIONS"
+                response.headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type, X-Request-ID"
+                response.headers["Access-Control-Allow-Credentials"] = "true"
+                response.headers["Access-Control-Max-Age"] = "600"
+                return response
+            
+            # Para otros métodos, continuar y agregar headers
+            response = await call_next(request)
+            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Access-Control-Allow-Credentials"] = "true"
+            return response
+        
+        return await call_next(request)
+
+# Aplicar el middleware custom PRIMERO
+app.add_middleware(CustomCORSMiddleware)
+
+# ─────────────────────────────────────────────────────────────
+# 🛡️ SECURITY HEADERS (después de CORS)
+# ─────────────────────────────────────────────────────────────
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
-    """Agrega headers de seguridad a TODAS las respuestas."""
     response = await call_next(request)
-
-    # Prevenir que el navegador adivine el tipo de contenido
     response.headers["X-Content-Type-Options"] = "nosniff"
-
-    # Prevenir clickjacking (tu sitio no puede ir en iframes)
     response.headers["X-Frame-Options"] = "DENY"
-
-    # Protección básica XSS (legacy browsers)
     response.headers["X-XSS-Protection"] = "1; mode=block"
-
-    # Controlar qué info se envía en Referer
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-
-    # Restringir permisos del navegador
     response.headers["Permissions-Policy"] = (
         "geolocation=(), microphone=(), camera=(), "
         "payment=(), usb=(), magnetometer=(), gyroscope=()"
     )
-
-    # Forzar HTTPS (HSTS) - solo en producción
     if IS_PROD:
         response.headers["Strict-Transport-Security"] = (
             "max-age=31536000; includeSubDomains; preload"
         )
-
-    # Content Security Policy básico
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
         "script-src 'self'; "
@@ -91,61 +137,11 @@ async def security_headers(request: Request, call_next):
         "base-uri 'self'; "
         "form-action 'self'"
     )
-
     return response
 
 # ─────────────────────────────────────────────────────────────
-# 🌐 MIDDLEWARE: CORS RESTRICTIVO
+# 🏠 TRUSTED HOST
 # ─────────────────────────────────────────────────────────────
-
-# Orígenes permitidos (NUNCA usar "*" en producción)
-# 🔥 FIX: Agregados orígenes de Capacitor para iOS y Android
-ALLOWED_ORIGINS = [
-    # Desarrollo local (Vite)
-    "http://localhost:5173",
-    "http://localhost:5174",
-    "http://127.0.0.1:5173",
-    "http://127.0.0.1:5174",
-    # Capacitor / Ionic (iOS)
-    "capacitor://localhost",
-    "ionic://localhost",
-    # Capacitor / Ionic (Android)
-    "http://localhost",
-    "https://localhost",
-    # Producción
-    "https://financash-frontend.onrender.com",
-    "https://financash-backend.onrender.com",
-    "https://financoop.onrender.com",
-]
-
-# 🔥 FIX: En producción, mantener orígenes de Capacitor + HTTPS
-if IS_PROD:
-    # Orígenes de Capacitor (siempre necesarios para la app móvil)
-    capacitor_origins = [
-        "capacitor://localhost",
-        "ionic://localhost",
-        "http://localhost",
-        "https://localhost",
-    ]
-    # Orígenes HTTPS de producción
-    https_origins = [o for o in ALLOWED_ORIGINS if o.startswith("https://")]
-    # Combinar: HTTPS + Capacitor (la app móvil necesita estos incluso en prod)
-    ALLOWED_ORIGINS = list(set(https_origins + capacitor_origins))
-    logger.info(f"🔒 CORS en producción: {ALLOWED_ORIGINS}")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=True,  # ✅ Necesario para cookies/auth headers
-    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
-    max_age=600,  # Cache preflight 10 minutos
-)
-
-# ─────────────────────────────────────────────────────────────
-# 🏠 MIDDLEWARE: TRUSTED HOST (previene Host Header Injection)
-# ─────────────────────────────────────────────────────────────
-
 if IS_PROD:
     app.add_middleware(
         TrustedHostMiddleware,
@@ -153,34 +149,25 @@ if IS_PROD:
             "financoop.onrender.com",
             "financash-backend.onrender.com",
             "financash-frontend.onrender.com",
-            "localhost",  # solo para desarrollo local
+            "localhost",
         ]
     )
 
 # ─────────────────────────────────────────────────────────────
-# ❌ MANEJADOR GLOBAL DE ERRORES (sin leak de información)
+# ❌ GLOBAL EXCEPTION HANDLER
 # ─────────────────────────────────────────────────────────────
-
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    """
-    Captura TODOS los errores no manejados.
-    NUNCA expone detalles internos al cliente.
-    """
     request_id = request.headers.get("X-Request-ID", "unknown")
-
-    # Loggear el error completo internamente (con traceback)
     logger.error(
         f"❌ [Error {request_id}] {type(exc).__name__}: {str(exc)}",
         exc_info=True
     )
-
-    # Responder con mensaje genérico
     return JSONResponse(
         status_code=500,
         content={
             "detail": "Error interno del servidor",
-            "request_id": request_id  # Para debugging interno
+            "request_id": request_id
         }
     )
 
@@ -190,14 +177,11 @@ async def global_exception_handler(request: Request, exc: Exception):
 Base.metadata.create_all(bind=engine)
 
 # ─────────────────────────────────────────────────────────────
-# 📊 INICIALIZAR DATOS POR DEFECTO
+# 📊 INICIALIZAR DATOS
 # ─────────────────────────────────────────────────────────────
-
 def init_db():
     db = next(get_db())
-
     try:
-        # Niveles de configuración
         for nivel_key, config in NIVELES_CONFIG_DEFAULT.items():
             existe = db.query(NivelConfig).filter(NivelConfig.nivel == nivel_key).first()
             if not existe:
@@ -216,14 +200,12 @@ def init_db():
                 db.add(nc)
                 logger.info(f"✅ Nivel creado: {nivel_key}")
 
-        # Tasa del dólar por defecto
         tasa = db.query(TasaDolar).order_by(TasaDolar.id.desc()).first()
         if not tasa:
             tasa = TasaDolar(tasa=40.0, fuente="manual")
             db.add(tasa)
             logger.info("✅ Tasa dólar inicial creada: 40.0")
 
-        # Configuración de pagos por defecto
         config_pago = db.query(ConfiguracionPago).first()
         if not config_pago:
             config_pago = ConfiguracionPago(
@@ -238,7 +220,6 @@ def init_db():
 
         db.commit()
         logger.info("🚀 Base de datos inicializada correctamente")
-
     except Exception as e:
         db.rollback()
         logger.error(f"❌ Error inicializando BD: {e}")
@@ -249,7 +230,6 @@ def init_db():
 # ─────────────────────────────────────────────────────────────
 # 🔌 ROUTERS
 # ─────────────────────────────────────────────────────────────
-
 app.include_router(clientes_router)
 app.include_router(financiamientos_router)
 app.include_router(pagos_router)
@@ -259,9 +239,8 @@ app.include_router(admin_router)
 app.include_router(auth_router)
 
 # ─────────────────────────────────────────────────────────────
-# 🚀 EVENTO STARTUP
+# 🚀 STARTUP
 # ─────────────────────────────────────────────────────────────
-
 @app.on_event("startup")
 def startup():
     logger.info(f"🚀 FinanCash API iniciando | Entorno: {ENV}")
@@ -269,9 +248,8 @@ def startup():
     init_db()
 
 # ─────────────────────────────────────────────────────────────
-# ▶️ EJECUCIÓN DIRECTA
+# ▶️ EJECUCIÓN
 # ─────────────────────────────────────────────────────────────
-
 if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", 8000))
@@ -279,6 +257,6 @@ if __name__ == "__main__":
         "main:app",
         host="0.0.0.0",
         port=port,
-        reload=not IS_PROD,  # 🚫 Reload solo en desarrollo
+        reload=not IS_PROD,
         workers=1 if not IS_PROD else None
     )
