@@ -8,7 +8,7 @@ export default defineConfig({
     vue(),
     VitePWA({
       registerType: 'autoUpdate',
-      manifest: false,
+      manifest: false, // Usaremos manifest.json separado
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,json}'],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
@@ -17,13 +17,13 @@ export default defineConfig({
         runtimeCaching: [
           {
             // 🔥 FIX: Cachear solo assets, NO API
-            urlPattern: /^https:\/\/financoop\.onrender\.com\/(?!app\/|pagos\/|clientes\/|config\/|admin\/).*/,
+            urlPattern: /^https:\/\/financoop\.onrender\.com\/(?!app\/|pagos\/|clientes\/|config\/|admin\/|auth\/).*/,
             handler: 'NetworkFirst',
             options: {
               cacheName: 'assets-cache',
               expiration: {
                 maxEntries: 100,
-                maxAgeSeconds: 86400
+                maxAgeSeconds: 86400 // 24 horas
               },
               networkTimeoutSeconds: 10
             }
@@ -32,13 +32,29 @@ export default defineConfig({
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/,
             handler: 'CacheFirst',
             options: {
-              cacheName: 'google-fonts-stylesheets'
+              cacheName: 'google-fonts-stylesheets',
+              expiration: {
+                maxEntries: 10,
+                maxAgeSeconds: 60 * 60 * 24 * 30 // 30 días
+              }
+            }
+          },
+          {
+            urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'google-fonts-assets',
+              expiration: {
+                maxEntries: 30,
+                maxAgeSeconds: 60 * 60 * 24 * 30 // 30 días
+              }
             }
           }
         ]
       },
       devOptions: {
-        enabled: true
+        enabled: true,
+        type: 'module'
       }
     })
   ],
@@ -50,7 +66,13 @@ export default defineConfig({
   server: {
     port: 5175,
     host: true,
-    // 🔥 FIX: Configurar HMR para evitar errores WebSocket
+    // 🔥 FIX: Configurar WebSocket correctamente para eliminar el error
+    ws: {
+      host: 'localhost',
+      port: 5175,
+      protocol: 'ws'
+    },
+    // 🔥 FIX: Configurar HMR para que use el mismo puerto
     hmr: {
       port: 5175,
       host: 'localhost',

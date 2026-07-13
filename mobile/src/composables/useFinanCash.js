@@ -56,7 +56,7 @@ const metodosPago = [
   { title: 'Transferencia', value: 'transferencia' },
   { title: 'Zelle', value: 'zelle' },
   { title: 'Binance', value: 'binance' }
-})
+]
 
 // ============ COMPUTED ============
 const nivelActual = computed(() => nivelesConfig.value[usuario.value.nivel] || {})
