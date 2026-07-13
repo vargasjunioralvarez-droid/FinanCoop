@@ -96,3 +96,8 @@ coverage/
 dev-dist/
 dist-ssr/
 '@ | Out-File -FilePath ".gitignore" -Encoding utf8
+# Android generated files
+mobile/android/.gitignore
+mobile/android/app/src/androidTest/
+mobile/android/app/src/test/
+mobile/android/dependencies.txt
