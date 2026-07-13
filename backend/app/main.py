@@ -8,7 +8,7 @@ import logging
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 from app.database import engine, Base, get_db
@@ -52,9 +52,11 @@ ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://localhost:5174",
     "http://localhost:5175",
+    "http://localhost:5176",
     "http://127.0.0.1:5173",
     "http://127.0.0.1:5174",
     "http://127.0.0.1:5175",
+    "http://127.0.0.1:5176",
     "capacitor://localhost",
     "ionic://localhost",
     "http://localhost",
@@ -129,7 +131,7 @@ class CustomCORSMiddleware(BaseHTTPMiddleware):
 app.add_middleware(CustomCORSMiddleware)
 
 # ─────────────────────────────────────────────────────────────
-# 🛡️ SECURITY HEADERS
+# 🛡️ SECURITY HEADERS (CORREGIDO PARA SWAGGER)
 # ─────────────────────────────────────────────────────────────
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
@@ -139,14 +141,14 @@ async def security_headers(request: Request, call_next):
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     
-    # CSP permisivo para app móvil
+    # ✅ CSP CORREGIDO - Permite recursos de CDN para Swagger
     csp = (
-        "default-src 'self' https:; "
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
-        "style-src 'self' 'unsafe-inline'; "
+        "default-src 'self' https: http://localhost:*; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; "
+        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
         "img-src 'self' data: https: blob:; "
-        "font-src 'self' data:; "
-        "connect-src 'self' https://*.onrender.com https:; "
+        "font-src 'self' data: https://cdn.jsdelivr.net; "
+        "connect-src 'self' https://*.onrender.com https: http://localhost:*; "
         "frame-ancestors 'none'; "
         "base-uri 'self'; "
         "form-action 'self'"
@@ -157,6 +159,43 @@ async def security_headers(request: Request, call_next):
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     
     return response
+
+# ─────────────────────────────────────────────────────────────
+# 📚 SWAGGER UI PERSONALIZADO (FUNCIONA CON CSP)
+# ─────────────────────────────────────────────────────────────
+@app.get("/docs", include_in_schema=False)
+async def custom_swagger_ui_html():
+    """
+    Swagger UI personalizado que funciona con CSP
+    """
+    html = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <title>FinanCoop API - Swagger UI</title>
+        <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css" />
+    </head>
+    <body>
+        <div id="swagger-ui"></div>
+        <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+        <script>
+            window.onload = function() {
+                window.ui = SwaggerUIBundle({
+                    url: "/openapi.json",
+                    dom_id: "#swagger-ui",
+                    deepLinking: true,
+                    defaultModelsExpandDepth: -1,
+                    docExpansion: "none",
+                    persistAuthorization: true,
+                    validatorUrl: null,
+                });
+            };
+        </script>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html)
 
 # ─────────────────────────────────────────────────────────────
 # 🏠 TRUSTED HOST
