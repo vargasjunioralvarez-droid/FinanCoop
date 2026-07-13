@@ -92,6 +92,7 @@ def mis_datos(token: str, db: Session = Depends(get_db)):
     
     config = db.query(ConfiguracionPago).first()
     
+    # 🔥 FIX: Usar getattr para campos opcionales
     return {
         "cliente": {
             "id": cliente.id,
@@ -116,8 +117,8 @@ def mis_datos(token: str, db: Session = Depends(get_db)):
                 "banco": config.banco_transferencia if config else "",
                 "cuenta": config.cuenta_transferencia if config else ""
             },
-            "zelle": config.correo_zelle if config else None,
-            "binance": config.correo_binance if config else None
+            "zelle": getattr(config, 'correo_zelle', None) if config else None,
+            "binance": getattr(config, 'correo_binance', None) if config else None
         }
     }
 
@@ -173,6 +174,7 @@ def configuracion_pagos_publica(db: Session = Depends(get_db)):
     if not config:
         return {"error": "Configuración no encontrada"}
     
+    # 🔥 FIX: Usar getattr para campos opcionales
     return {
         "pago_movil": {
             "banco": config.banco_pago_movil,
@@ -183,6 +185,6 @@ def configuracion_pagos_publica(db: Session = Depends(get_db)):
             "banco": config.banco_transferencia,
             "cuenta": config.cuenta_transferencia
         },
-        "zelle": config.correo_zelle,
-        "binance": config.correo_binance
+        "zelle": getattr(config, 'correo_zelle', None),
+        "binance": getattr(config, 'correo_binance', None)
     }
