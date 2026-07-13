@@ -66,7 +66,6 @@ const metodosPago = [
 
 // ============ FUNCIONES DE INACTIVIDAD ============
 function resetInactivityTimer() {
-  // Evita reinicios excesivos (mínimo 1 segundo entre reinicios)
   const now = Date.now()
   if (now - lastResetTime < 1000) {
     return
@@ -390,59 +389,142 @@ function cerrarSesion() {
   cuotaSeleccionada.value = null
 }
 
-// ============ REGISTRO ============
-async function registrarCliente(formData) {
+// ============================================================
+// ✅ REGISTRO CORREGIDO - Envía JSON, NO FormData
+// ============================================================
+async function registrarCliente(datos) {
   cargando.value = true
   error.value = null
   
   try {
-    const data = {}
-    formData.forEach((value, key) => {
-      data[key] = value
-    })
+    // Si recibimos FormData, convertirlo a objeto JSON
+    let datosJson = datos
+    if (datos instanceof FormData) {
+      const obj = {}
+      for (let [key, value] of datos.entries()) {
+        // Ignorar archivos - se suben en otro endpoint
+        if (value instanceof File) {
+          console.log(`📸 Archivo ${key} ignorado (se subirá después)`)
+          continue
+        }
+        obj[key] = value
+      }
+      datosJson = obj
+    }
+    
+    console.log('📦 Enviando datos de registro (JSON):', datosJson)
     
     const response = await CapacitorHttp.request({
       method: 'POST',
       url: `${API_URL}/clientes`,
       headers: {
-        'Content-Type': 'multipart/form-data'
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
       },
-      data: data,
+      data: datosJson,
       connectTimeout: 60000,
       readTimeout: 60000
     })
     
-    const resData = response.data
+    console.log('📥 Respuesta del servidor:', response.data)
     
-    if (resData.error || resData.success === false) {
-      error.value = resData.error || 'Error al registrar'
-      cargando.value = false
-      return { success: false, error: error.value }
+    const data = response.data
+    
+    if (response.status >= 400) {
+      let errorMsg = 'Error al registrar'
+      if (data.detail) {
+        if (Array.isArray(data.detail)) {
+          errorMsg = data.detail.map(e => `${e.loc.join('.')}: ${e.msg}`).join('\n')
+        } else if (typeof data.detail === 'string') {
+          errorMsg = data.detail
+        } else {
+          errorMsg = JSON.stringify(data.detail)
+        }
+      } else if (data.error) {
+        errorMsg = data.error
+      }
+      throw new Error(errorMsg)
     }
     
-    if (resData.pin_generado) {
-      localStorage.setItem('financoop_pin_temp', resData.pin_generado)
+    // Guardar PIN si existe
+    if (data.pin) {
+      localStorage.setItem('financoop_pin_temp', data.pin)
     }
     
     cargando.value = false
     return { 
       success: true, 
-      pin: resData.pin_generado, 
-      mensaje: resData.mensaje 
+      pin: data.pin, 
+      mensaje: data.mensaje || 'Registro exitoso',
+      id: data.id
     }
+    
   } catch (err) {
     console.error('❌ Error registrando:', err)
-    error.value = 'Error de conexión: ' + (err.message || 'desconocido')
+    error.value = err.message || 'Error de conexión'
     cargando.value = false
     return { success: false, error: error.value }
   }
 }
 
+// ============================================================
+// ✅ SUBIR FOTO DE CÉDULA (endpoint separado)
+// ============================================================
+async function subirFotoCedula(clienteId, file) {
+  if (!clienteId || !file) {
+    return { success: false, error: 'Faltan datos para subir la foto' }
+  }
+  
+  try {
+    const formData = new FormData()
+    formData.append('cedula_foto', file)
+    
+    console.log(`📸 Subiendo foto para cliente ${clienteId}...`)
+    
+    const response = await CapacitorHttp.request({
+      method: 'POST',
+      url: `${API_URL}/clientes/${clienteId}/foto`,
+      headers: {
+        'Authorization': token.value ? `Bearer ${token.value}` : ''
+      },
+      data: formData,
+      connectTimeout: 60000,
+      readTimeout: 60000
+    })
+    
+    const data = response.data
+    
+    if (response.status >= 400) {
+      throw new Error(data.detail || data.error || 'Error al subir foto')
+    }
+    
+    console.log('✅ Foto subida exitosamente:', data)
+    return { success: true, ...data }
+    
+  } catch (err) {
+    console.error('❌ Error subiendo foto:', err)
+    return { success: false, error: err.message }
+  }
+}
+
+// ============================================================
+// ✅ VERIFICAR CÉDULA
+// ============================================================
 async function verificarCedula(cedula) {
   try {
-    const data = await apiCall(`/clientes/buscar/${cedula}`)
-    return data.encontrado || false
+    const response = await CapacitorHttp.request({
+      method: 'GET',
+      url: `${API_URL}/clientes/verificar/${cedula}`,
+      headers: {
+        'Accept': 'application/json'
+      },
+      connectTimeout: 10000,
+      readTimeout: 10000
+    })
+    
+    return response.data?.existe || false
   } catch (err) {
+    console.error('❌ Error verificando cédula:', err)
     return false
   }
 }
@@ -633,13 +715,10 @@ async function actualizarPerfil(datos) {
   }
 }
 
-async function subirFotoCedula(file) {
-  return { success: true, error: null }
-}
-
 // ============ EXPORT ============
 export function useFinanCash() {
   return {
+    // Estado
     token,
     usuario,
     datosCliente,
@@ -654,10 +733,14 @@ export function useFinanCash() {
     error,
     cargandoPago,
     nivelesConfig,
+    
+    // Formularios
     loginForm,
     pagoForm,
     registroForm,
     metodosPago,
+    
+    // Computed
     nivelActual,
     siguienteNivel,
     progresoNivel,
@@ -669,6 +752,8 @@ export function useFinanCash() {
     totalDeudaBs,
     totalDeudaUsd,
     badgeCount,
+    
+    // Utilidades
     formatearBS,
     formatearUSD,
     formatearNumero,
@@ -677,6 +762,8 @@ export function useFinanCash() {
     colorNivel,
     iconoNivel,
     copiarAlPortapapeles,
+    
+    // Funciones principales
     iniciarSesion,
     cerrarSesion,
     cargarDatos,
