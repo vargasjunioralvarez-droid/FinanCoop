@@ -5,7 +5,6 @@
 
 import os
 import logging
-import re
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
@@ -64,7 +63,7 @@ ALLOWED_ORIGINS = [
     "https://financash-backend.onrender.com",
     "https://financoop.onrender.com",
     "null",
-    "",  # Origen vacío
+    "",
 ]
 
 if IS_PROD:
@@ -86,22 +85,28 @@ class CustomCORSMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
         origin = request.headers.get("origin", "")
         
-        # 🔥 FIX: Capacitor en Android/iOS envía origin vacío o "null"
-        # También acepta cualquier origen HTTPS en producción
+        # Capacitor en Android/iOS envía origin vacío o "null"
         is_allowed = (
             origin in ALLOWED_ORIGINS or
-            not origin or  # Vacío = Capacitor nativo
+            not origin or
             origin == "null" or
             (IS_PROD and origin.startswith("https://")) or
             (not IS_PROD and "localhost" in origin)
         )
         
+        # 🔥 FIX: Headers permitidos incluyendo cache-control
+        allowed_headers = (
+            "Authorization, Content-Type, X-Request-ID, X-Requested-With, "
+            "Accept, Origin, Cache-Control, Pragma, Expires"
+        )
+        allowed_methods = "GET, POST, PUT, DELETE, PATCH, OPTIONS"
+        
         # Responder a OPTIONS inmediatamente (preflight)
         if request.method == "OPTIONS":
             response = Response(status_code=200)
             response.headers["Access-Control-Allow-Origin"] = origin or "*"
-            response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, PATCH, OPTIONS"
-            response.headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type, X-Request-ID, X-Requested-With, Accept, Origin"
+            response.headers["Access-Control-Allow-Methods"] = allowed_methods
+            response.headers["Access-Control-Allow-Headers"] = allowed_headers
             response.headers["Access-Control-Allow-Credentials"] = "true"
             response.headers["Access-Control-Max-Age"] = "86400"
             response.headers["Vary"] = "Origin"
@@ -113,12 +118,14 @@ class CustomCORSMiddleware(BaseHTTPMiddleware):
         if is_allowed:
             response.headers["Access-Control-Allow-Origin"] = origin or "*"
             response.headers["Access-Control-Allow-Credentials"] = "true"
+            response.headers["Access-Control-Allow-Headers"] = allowed_headers
+            response.headers["Access-Control-Allow-Methods"] = allowed_methods
             response.headers["Access-Control-Expose-Headers"] = "X-Request-ID"
             response.headers["Vary"] = "Origin"
         
         return response
 
-# Aplicar el middleware custom PRIMERO (antes que cualquier otro)
+# Aplicar el middleware custom PRIMERO
 app.add_middleware(CustomCORSMiddleware)
 
 # ─────────────────────────────────────────────────────────────
@@ -152,7 +159,7 @@ async def security_headers(request: Request, call_next):
     return response
 
 # ─────────────────────────────────────────────────────────────
-# 🏠 TRUSTED HOST (solo en prod, muy permisivo para Capacitor)
+# 🏠 TRUSTED HOST
 # ─────────────────────────────────────────────────────────────
 if IS_PROD:
     app.add_middleware(
@@ -162,7 +169,7 @@ if IS_PROD:
             "financash-backend.onrender.com",
             "financash-frontend.onrender.com",
             "localhost",
-            "*"  # Permite cualquier host (necesario para Capacitor)
+            "*"
         ]
     )
 

@@ -56,7 +56,7 @@ const metodosPago = [
   { title: 'Transferencia', value: 'transferencia' },
   { title: 'Zelle', value: 'zelle' },
   { title: 'Binance', value: 'binance' }
-]
+})
 
 // ============ COMPUTED ============
 const nivelActual = computed(() => nivelesConfig.value[usuario.value.nivel] || {})
@@ -181,14 +181,14 @@ function copiarAlPortapapeles(texto) {
 }
 
 // ============ API CALLS ============
+// 🔥 FIX: Headers mínimos para evitar CORS preflight innecesario
 async function apiCall(endpoint, options = {}) {
   const url = `${API_URL}${endpoint}`
   
+  // 🔥 FIX: Headers básicos SIN cache-control (evita preflight complejo)
   const headers = {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
-    'Cache-Control': 'no-cache',
-    'X-Requested-With': 'XMLHttpRequest',
     ...options.headers
   }
   
@@ -221,7 +221,6 @@ async function apiCall(endpoint, options = {}) {
   } catch (err) {
     console.error('❌ API Error:', err)
     
-    // Si es error de token, cerrar sesión
     if (err.message?.includes('401') || err.message?.includes('Sesión no válida')) {
       console.log('🔒 Token inválido, cerrando sesión...')
       cerrarSesion()
@@ -306,7 +305,6 @@ async function registrarCliente(formData) {
   error.value = null
   
   try {
-    // Convertir FormData a objeto plano para CapacitorHttp
     const data = {}
     formData.forEach((value, key) => {
       data[key] = value
@@ -489,7 +487,6 @@ async function reportarPago() {
       return false
     }
     
-    // Reset form
     pagoForm.value = {
       metodo: 'pago_movil',
       referencia: '',
@@ -545,7 +542,6 @@ async function subirFotoCedula(file) {
 // ============ EXPORT ============
 export function useFinanCash() {
   return {
-    // Estado
     token,
     usuario,
     datosCliente,
@@ -559,15 +555,11 @@ export function useFinanCash() {
     cargando,
     error,
     cargandoPago,
-    
-    // Config
     nivelesConfig,
     loginForm,
     pagoForm,
     registroForm,
     metodosPago,
-    
-    // Computed
     nivelActual,
     siguienteNivel,
     progresoNivel,
@@ -579,8 +571,6 @@ export function useFinanCash() {
     totalDeudaBs,
     totalDeudaUsd,
     badgeCount,
-    
-    // Funciones auxiliares
     formatearBS,
     formatearUSD,
     formatearNumero,
@@ -589,8 +579,6 @@ export function useFinanCash() {
     colorNivel,
     iconoNivel,
     copiarAlPortapapeles,
-    
-    // API
     iniciarSesion,
     cerrarSesion,
     cargarDatos,
@@ -599,11 +587,7 @@ export function useFinanCash() {
     subirFotoCedula,
     registrarCliente,
     verificarCedula,
-    
-    // Seleccionar cuota
     setCuotaSeleccionada,
-    
-    // Recalcular con nueva tasa
     recalcularMontosConNuevaTasa
   }
 }

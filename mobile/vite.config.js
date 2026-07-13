@@ -8,87 +8,37 @@ export default defineConfig({
     vue(),
     VitePWA({
       registerType: 'autoUpdate',
-      // 🔥 FIX: Usar manifest de public/ o definirlo aquí
-      manifest: {
-        name: 'FinanCoop',
-        short_name: 'FinanCoop',
-        description: 'App de financiamiento cooperativo',
-        theme_color: '#1a237e',
-        background_color: '#1a237e',
-        display: 'standalone',
-        scope: '/',
-        start_url: '/',
-        icons: [
-          {
-            src: '/icons/icon-192x192.png',
-            sizes: '192x192',
-            type: 'image/png'
-          },
-          {
-            src: '/icons/icon-512x512.png',
-            sizes: '512x512',
-            type: 'image/png'
-          }
-        ]
-      },
+      manifest: false,
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,json}'],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
-        // 🔥 FIX: NO cachear llamadas API - solo assets estáticos
-        navigateFallback: '/index.html',
-        navigateFallbackDenylist: [
-          /^\/app\//,
-          /^\/pagos\//,
-          /^\/clientes\//,
-          /^\/admin\//,
-          /^\/auth\//,
-          /^\/config\//,
-          /^\/financiamientos\//
-        ],
+        // 🔥 FIX: NO cachear rutas de API
+        navigateFallback: null,
         runtimeCaching: [
           {
-            // 🔥 FIX: Cachear fonts de Google
+            // 🔥 FIX: Cachear solo assets, NO API
+            urlPattern: /^https:\/\/financoop\.onrender\.com\/(?!app\/|pagos\/|clientes\/|config\/|admin\/).*/,
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'assets-cache',
+              expiration: {
+                maxEntries: 100,
+                maxAgeSeconds: 86400
+              },
+              networkTimeoutSeconds: 10
+            }
+          },
+          {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/,
             handler: 'CacheFirst',
             options: {
-              cacheName: 'google-fonts-stylesheets',
-              expiration: {
-                maxEntries: 10,
-                maxAgeSeconds: 60 * 60 * 24 * 365
-              }
-            }
-          },
-          {
-            urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'google-fonts-webfonts',
-              expiration: {
-                maxEntries: 30,
-                maxAgeSeconds: 60 * 60 * 24 * 365
-              },
-              cacheableResponse: {
-                statuses: [0, 200]
-              }
-            }
-          },
-          {
-            // 🔥 FIX: Cachear imágenes externas
-            urlPattern: /\.(?:png|jpg|jpeg|svg|gif|webp)$/,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'images',
-              expiration: {
-                maxEntries: 60,
-                maxAgeSeconds: 60 * 60 * 24 * 30
-              }
+              cacheName: 'google-fonts-stylesheets'
             }
           }
         ]
       },
       devOptions: {
-        enabled: true,
-        type: 'module'
+        enabled: true
       }
     })
   ],
@@ -98,18 +48,13 @@ export default defineConfig({
     }
   },
   server: {
-    port: 5174,
+    port: 5175,
     host: true,
-    // 🔥 FIX: Headers CORS para desarrollo
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, PATCH, OPTIONS',
-      'Access-Control-Allow-Headers': 'X-Requested-With, Content-Type, Authorization'
+    // 🔥 FIX: Configurar HMR para evitar errores WebSocket
+    hmr: {
+      port: 5175,
+      host: 'localhost',
+      protocol: 'ws'
     }
-  },
-  build: {
-    outDir: 'dist',
-    assetsDir: 'assets',
-    sourcemap: true
   }
 })
