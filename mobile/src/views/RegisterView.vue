@@ -140,9 +140,29 @@ const registro = reactive({
 const telefonoCompleto = computed(() => `${codigoPais.value}${registro.telefono}`)
 
 const validarPaso = (p) => {
+<<<<<<< Updated upstream
   if (p === 1) return registro.nombre && registro.cedula && registro.telefono && registro.direccion
   if (p === 2) return registro.referencia_nombre && registro.referencia_telefono && registro.referencia_parentesco
   if (p === 3) return !!fotoCedula.value
+=======
+  if (p === 1) {
+    return registro.nombre && 
+           registro.cedula && 
+           /^\d+$/.test(registro.cedula) &&
+           registro.telefono && 
+           /^\d+$/.test(registro.telefono) &&
+           registro.direccion
+  }
+  if (p === 2) {
+    return registro.referencia_nombre && 
+           registro.referencia_telefono && 
+           /^\d+$/.test(registro.referencia_telefono) &&
+           registro.referencia_parentesco
+  }
+  if (p === 3) {
+    return !!fotoCedula.value
+  }
+>>>>>>> Stashed changes
   return true
 }
 
@@ -154,7 +174,14 @@ const abrirSelectorArchivos = () => {
     const file = e.target.files[0]
     if (file) {
       const reader = new FileReader()
+<<<<<<< Updated upstream
       reader.onload = (ev) => { fotoCedula.value = ev.target.result; fotoFile.value = file }
+=======
+      reader.onload = (ev) => { 
+        fotoCedula.value = ev.target.result
+        fotoFile.value = file
+      }
+>>>>>>> Stashed changes
       reader.readAsDataURL(file)
     }
   }
@@ -162,12 +189,19 @@ const abrirSelectorArchivos = () => {
 }
 
 const enviarRegistro = async () => {
+<<<<<<< Updated upstream
+=======
+  errorMsg.value = ''
+  
+  // Validar campos
+>>>>>>> Stashed changes
   if (!validarPaso(1) || !validarPaso(2) || !validarPaso(3)) {
     alert('Por favor completa todos los campos obligatorios')
     return
   }
   enviando.value = true
   try {
+<<<<<<< Updated upstream
     const formData = new FormData()
     formData.append('nombre', registro.nombre.trim())
     formData.append('cedula', registro.cedula.trim())
@@ -185,6 +219,78 @@ const enviarRegistro = async () => {
     } else {
       alert('Error: ' + (result.error || 'No se pudo registrar'))
     }
+=======
+    // Datos en JSON
+    const datosCliente = {
+      nombre: registro.nombre.trim(),
+      cedula: registro.cedula.trim(),
+      telefono: telefonoCompleto.value,
+      email: (registro.email || '').trim(),
+      direccion: registro.direccion.trim(),
+      referencia_nombre: registro.referencia_nombre.trim(),
+      referencia_telefono: registro.referencia_telefono.trim(),
+      referencia_parentesco: registro.referencia_parentesco.trim()
+    }
+
+    console.log('📦 Enviando datos:', datosCliente)
+
+    const token = localStorage.getItem('token') || ''
+    
+    const response = await fetch('http://localhost:8000/clientes', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': token ? `Bearer ${token}` : ''
+      },
+      body: JSON.stringify(datosCliente)
+    })
+
+    const data = await response.json()
+
+    if (!response.ok) {
+      let errorMsgText = 'Error al registrar'
+      if (data.detail) {
+        if (Array.isArray(data.detail)) {
+          errorMsgText = data.detail.map(e => `${e.loc.join('.')}: ${e.msg}`).join('\n')
+        } else if (typeof data.detail === 'string') {
+          errorMsgText = data.detail
+        } else {
+          errorMsgText = JSON.stringify(data.detail)
+        }
+      }
+      throw new Error(errorMsgText)
+    }
+
+    console.log('✅ Cliente registrado:', data)
+    
+    // Guardar PIN si existe
+    if (data.pin) {
+      localStorage.setItem('financoop_pin_temp', data.pin)
+    }
+    
+    // Si hay foto, subirla después
+    if (fotoFile.value && data.id) {
+      try {
+        const fotoFormData = new FormData()
+        fotoFormData.append('cedula_foto', fotoFile.value)
+        
+        await fetch(`http://localhost:8000/clientes/${data.id}/foto`, {
+          method: 'POST',
+          headers: {
+            'Authorization': token ? `Bearer ${token}` : ''
+          },
+          body: fotoFormData
+        })
+        console.log('📸 Foto subida exitosamente')
+      } catch (fotoErr) {
+        console.warn('⚠️ No se pudo subir la foto:', fotoErr)
+      }
+    }
+    
+    // Redirigir a éxito
+    router.push(`/registro-exitoso/${encodeURIComponent(registro.cedula)}`)
+
+>>>>>>> Stashed changes
   } catch (err) {
     alert('Error al registrar. Intenta de nuevo.\n\n' + err.message)
   } finally {
