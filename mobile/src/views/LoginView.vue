@@ -1,11 +1,13 @@
 <template>
   <div class="login-wrapper">
+    <!-- Fondo animado con gradiente y partículas -->
     <div class="login-bg">
       <div class="gradient-sphere sphere-1"></div>
       <div class="gradient-sphere sphere-2"></div>
       <div class="gradient-sphere sphere-3"></div>
     </div>
 
+    <!-- Animación de partículas -->
     <div class="particles">
       <div v-for="i in 15" :key="i" class="particle" :style="{
         left: Math.random() * 100 + '%',
@@ -19,6 +21,7 @@
 
     <div class="login-container">
       <v-card class="login-card" elevation="20" rounded="xl">
+        <!-- Logo y título -->
         <div class="login-header">
           <div class="logo-wrapper">
             <div class="logo-icon">
@@ -41,6 +44,7 @@
           <p class="welcome-text">Bienvenido de vuelta</p>
         </div>
 
+        <!-- Formulario -->
         <div class="login-body">
           <v-form @submit.prevent="handleLogin" class="login-form">
             <div class="input-group">
@@ -57,12 +61,6 @@
                 rounded="lg"
                 bg-color="#f8f9fa"
                 class="custom-input"
-                :rules="[
-                  v => !!v || 'Requerido',
-                  v => /^\d+$/.test(v) || 'Solo números',
-                  v => v.length >= 6 || 'Mínimo 6 dígitos'
-                ]"
-                @input="loginForm.cedula = loginForm.cedula.replace(/\D/g, '')"
                 @keyup.enter="handleLogin"
               />
             </div>
@@ -83,12 +81,6 @@
                 rounded="lg"
                 bg-color="#f8f9fa"
                 class="custom-input"
-                :rules="[
-                  v => !!v || 'Requerido',
-                  v => /^\d+$/.test(v) || 'Solo números',
-                  v => v.length === 4 || 'Debe ser 4 dígitos'
-                ]"
-                @input="loginForm.pin = loginForm.pin.replace(/\D/g, '')"
                 @keyup.enter="handleLogin"
               />
             </div>
@@ -143,7 +135,7 @@
             <div class="footer-text">
               <p>
                 <v-icon size="16" class="text-grey">mdi-help-circle</v-icon>
-                ¿No tienes PIN? Solicítalo en la Coop más cercana
+                ¿No tienes PIN? Solicítalo en la Coop. mas Cercana
               </p>
             </div>
 
@@ -155,6 +147,7 @@
         </div>
       </v-card>
 
+      <!-- Versión -->
       <div class="version-text">
         <span>v2.0 • FinanCoop</span>
       </div>
@@ -170,22 +163,6 @@ const { loginForm, error, cargando, iniciarSesion } = useFinanCash()
 const router = useRouter()
 
 const handleLogin = async () => {
-  // Validar antes de enviar
-  if (!loginForm.cedula || !loginForm.pin) {
-    alert('Por favor ingresa tu cédula y PIN')
-    return
-  }
-  
-  if (!/^\d+$/.test(loginForm.cedula)) {
-    alert('La cédula solo debe contener números')
-    return
-  }
-  
-  if (!/^\d+$/.test(loginForm.pin)) {
-    alert('El PIN solo debe contener números')
-    return
-  }
-
   console.log('🔑 Intentando login...')
   
   try {
@@ -209,6 +186,7 @@ const irARegistro = () => {
 </script>
 
 <style scoped>
+/* ============ CONTENEDOR PRINCIPAL ============ */
 .login-wrapper {
   min-height: 100vh;
   display: flex;
@@ -219,6 +197,7 @@ const irARegistro = () => {
   padding: 20px;
 }
 
+/* ============ FONDO ANIMADO ============ */
 .login-bg {
   position: fixed;
   top: 0;
@@ -273,6 +252,7 @@ const irARegistro = () => {
   100% { transform: translate(-20px, 20px) scale(0.9); }
 }
 
+/* ============ PARTÍCULAS ============ */
 .particles {
   position: fixed;
   top: 0;
@@ -305,6 +285,7 @@ const irARegistro = () => {
   }
 }
 
+/* ============ CARD DE LOGIN ============ */
 .login-container {
   position: relative;
   z-index: 1;
@@ -321,6 +302,7 @@ const irARegistro = () => {
   padding: 8px;
 }
 
+/* ============ HEADER ============ */
 .login-header {
   text-align: center;
   padding: 32px 24px 24px;
@@ -388,6 +370,7 @@ const irARegistro = () => {
   margin: 0;
 }
 
+/* ============ BODY ============ */
 .login-body {
   padding: 0 20px 28px;
 }
@@ -453,6 +436,7 @@ const irARegistro = () => {
   color: rgba(255,255,255,0.3) !important;
 }
 
+/* ============ BOTONES ============ */
 .login-btn {
   background: linear-gradient(135deg, #4facfe, #6366f1) !important;
   border: none !important;
@@ -488,6 +472,7 @@ const irARegistro = () => {
   border-color: rgba(255,255,255,0.15);
 }
 
+/* ============ DIVISOR ============ */
 .divider-text {
   display: flex;
   align-items: center;
@@ -510,6 +495,7 @@ const irARegistro = () => {
   letter-spacing: 1px;
 }
 
+/* ============ ERROR ============ */
 .error-alert {
   background: rgba(239, 68, 68, 0.1) !important;
   border: 1px solid rgba(239, 68, 68, 0.15);
@@ -518,6 +504,7 @@ const irARegistro = () => {
   padding: 8px 12px !important;
 }
 
+/* ============ FOOTER ============ */
 .footer-text {
   text-align: center;
   margin-top: 4px;
@@ -558,6 +545,7 @@ const irARegistro = () => {
   letter-spacing: 1px;
 }
 
+/* ============ RESPONSIVE ============ */
 @media (max-width: 480px) {
   .login-wrapper {
     padding: 12px;
@@ -589,6 +577,56 @@ const irARegistro = () => {
   .register-btn {
     height: 44px;
     font-size: 13px;
+  }
+}
+
+@media (max-height: 700px) {
+  .login-header {
+    padding: 16px 16px 12px;
+  }
+  
+  .logo-icon {
+    width: 56px;
+    height: 56px;
+    padding: 8px;
+    margin-bottom: 8px;
+  }
+  
+  .app-title {
+    font-size: 20px;
+  }
+  
+  .divider-line {
+    margin: 8px auto;
+  }
+  
+  .welcome-text {
+    font-size: 12px;
+  }
+  
+  .login-body {
+    padding: 0 16px 16px;
+    gap: 12px;
+  }
+  
+  .login-form {
+    gap: 12px;
+  }
+  
+  .login-btn {
+    height: 44px;
+  }
+  
+  .register-btn {
+    height: 40px;
+    font-size: 12px;
+  }
+}
+
+/* ============ TEMA OSCURO (opcional) ============ */
+@media (prefers-color-scheme: dark) {
+  .login-card {
+    background: rgba(10, 14, 26, 0.8) !important;
   }
 }
 </style>

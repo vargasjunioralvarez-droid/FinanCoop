@@ -35,173 +35,44 @@
             <v-stepper-window v-model="paso" class="mt-3">
               <!-- Paso 1 -->
               <v-stepper-window-item :value="1">
-                <v-text-field 
-                  v-model="registro.nombre" 
-                  label="Nombre completo *" 
-                  variant="outlined" 
-                  density="compact" 
-                  prepend-inner-icon="mdi-account" 
-                  :rules="[v => !!v || 'Requerido']" 
-                  hide-details 
-                  class="mb-2" 
-                />
-                
-                <v-text-field 
-                  v-model="registro.cedula" 
-                  label="Cédula *" 
-                  variant="outlined" 
-                  density="compact" 
-                  prepend-inner-icon="mdi-card-account-details" 
-                  :rules="[
-                    v => !!v || 'Requerido', 
-                    v => /^\d+$/.test(v) || 'Solo números',
-                    v => v.length >= 6 || 'Mínimo 6 dígitos',
-                    v => v.length <= 10 || 'Máximo 10 dígitos'
-                  ]" 
-                  hide-details 
-                  class="mb-2"
-                  @input="registro.cedula = registro.cedula.replace(/\D/g, '')"
-                />
-                
+                <v-text-field v-model="registro.nombre" label="Nombre completo *" variant="outlined" density="compact" prepend-inner-icon="mdi-account" :rules="[v => !!v || 'Requerido']" hide-details class="mb-2" />
+                <v-text-field v-model="registro.cedula" label="Cédula *" variant="outlined" density="compact" prepend-inner-icon="mdi-card-account-details" :rules="[v => !!v || 'Requerido', v => v.length >= 6 || 'Mínimo 6 dígitos']" hide-details class="mb-2" />
                 <div class="d-flex mb-2">
-                  <v-select 
-                    v-model="codigoPais" 
-                    :items="codigosPaises" 
-                    item-title="nombre" 
-                    item-value="codigo" 
-                    label="Código" 
-                    variant="outlined" 
-                    density="compact" 
-                    hide-details 
-                    class="codigo-pais" 
-                    style="max-width: 120px;" 
-                  />
-                  <v-text-field 
-                    v-model="registro.telefono" 
-                    label="Teléfono *" 
-                    variant="outlined" 
-                    density="compact" 
-                    prepend-inner-icon="mdi-phone" 
-                    :rules="[
-                      v => !!v || 'Requerido',
-                      v => /^\d+$/.test(v) || 'Solo números',
-                      v => v.length >= 7 || 'Mínimo 7 dígitos'
-                    ]" 
-                    hide-details 
-                    class="telefono-input" 
-                    placeholder="4121234567"
-                    @input="registro.telefono = registro.telefono.replace(/\D/g, '')"
-                  />
+                  <v-select v-model="codigoPais" :items="codigosPaises" item-title="nombre" item-value="codigo" label="Código" variant="outlined" density="compact" hide-details class="codigo-pais" style="max-width: 120px;" />
+                  <v-text-field v-model="registro.telefono" label="Teléfono *" variant="outlined" density="compact" prepend-inner-icon="mdi-phone" :rules="[v => !!v || 'Requerido']" hide-details class="telefono-input" placeholder="4121234567" />
                 </div>
-                
-                <v-text-field 
-                  v-model="registro.email" 
-                  label="Email (opcional)" 
-                  variant="outlined" 
-                  density="compact" 
-                  prepend-inner-icon="mdi-email" 
-                  type="email" 
-                  :rules="[
-                    v => !v || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) || 'Email inválido'
-                  ]"
-                  hide-details 
-                  class="mb-2" 
-                />
-                
-                <v-textarea 
-                  v-model="registro.direccion" 
-                  label="Dirección completa *" 
-                  variant="outlined" 
-                  density="compact" 
-                  rows="1" 
-                  prepend-inner-icon="mdi-map-marker" 
-                  :rules="[v => !!v || 'Requerido']" 
-                  hide-details 
-                  class="mb-2" 
-                  placeholder="Calle, urbanización, ciudad" 
-                />
-                
+                <v-text-field v-model="registro.email" label="Email (opcional)" variant="outlined" density="compact" prepend-inner-icon="mdi-email" type="email" hide-details class="mb-2" />
+                <v-textarea v-model="registro.direccion" label="Dirección completa *" variant="outlined" density="compact" rows="1" prepend-inner-icon="mdi-map-marker" :rules="[v => !!v || 'Requerido']" hide-details class="mb-2" placeholder="Calle, urbanización, ciudad" />
                 <div class="d-flex justify-end mt-2">
-                  <v-btn color="#4facfe" rounded="pill" size="small" @click="paso++" :disabled="!validarPaso(1)">
-                    Siguiente <v-icon end size="16">mdi-chevron-right</v-icon>
-                  </v-btn>
+                  <v-btn color="#4facfe" rounded="pill" size="small" @click="paso++" :disabled="!validarPaso(1)">Siguiente <v-icon end size="16">mdi-chevron-right</v-icon></v-btn>
                 </div>
               </v-stepper-window-item>
 
               <!-- Paso 2 -->
               <v-stepper-window-item :value="2">
-                <v-text-field 
-                  v-model="registro.referencia_nombre" 
-                  label="Nombre de referencia *" 
-                  variant="outlined" 
-                  density="compact" 
-                  prepend-inner-icon="mdi-account" 
-                  :rules="[v => !!v || 'Requerido']" 
-                  hide-details 
-                  class="mb-2" 
-                />
-                
-                <v-text-field 
-                  v-model="registro.referencia_telefono" 
-                  label="Teléfono de referencia *" 
-                  variant="outlined" 
-                  density="compact" 
-                  prepend-inner-icon="mdi-phone" 
-                  :rules="[
-                    v => !!v || 'Requerido',
-                    v => /^\d+$/.test(v) || 'Solo números',
-                    v => v.length >= 7 || 'Mínimo 7 dígitos'
-                  ]" 
-                  hide-details 
-                  class="mb-2"
-                  @input="registro.referencia_telefono = registro.referencia_telefono.replace(/\D/g, '')"
-                />
-                
-                <v-select 
-                  v-model="registro.referencia_parentesco" 
-                  :items="['Familiar', 'Amigo', 'Vecino', 'Compañero de trabajo', 'Otro']" 
-                  label="Parentesco *" 
-                  variant="outlined" 
-                  density="compact" 
-                  prepend-inner-icon="mdi-account-heart" 
-                  :rules="[v => !!v || 'Requerido']" 
-                  hide-details 
-                  class="mb-2" 
-                />
-                
+                <v-text-field v-model="registro.referencia_nombre" label="Nombre de referencia *" variant="outlined" density="compact" prepend-inner-icon="mdi-account" :rules="[v => !!v || 'Requerido']" hide-details class="mb-2" />
+                <v-text-field v-model="registro.referencia_telefono" label="Teléfono de referencia *" variant="outlined" density="compact" prepend-inner-icon="mdi-phone" :rules="[v => !!v || 'Requerido']" hide-details class="mb-2" />
+                <v-select v-model="registro.referencia_parentesco" :items="['Familiar', 'Amigo', 'Vecino', 'Compañero de trabajo', 'Otro']" label="Parentesco *" variant="outlined" density="compact" prepend-inner-icon="mdi-account-heart" :rules="[v => !!v || 'Requerido']" hide-details class="mb-2" />
                 <div class="d-flex justify-space-between mt-2">
-                  <v-btn variant="text" size="small" @click="paso--">
-                    <v-icon start size="16">mdi-chevron-left</v-icon>Atrás
-                  </v-btn>
-                  <v-btn color="#4facfe" rounded="pill" size="small" @click="paso++" :disabled="!validarPaso(2)">
-                    Siguiente <v-icon end size="16">mdi-chevron-right</v-icon>
-                  </v-btn>
+                  <v-btn variant="text" size="small" @click="paso--"><v-icon start size="16">mdi-chevron-left</v-icon>Atrás</v-btn>
+                  <v-btn color="#4facfe" rounded="pill" size="small" @click="paso++" :disabled="!validarPaso(2)">Siguiente <v-icon end size="16">mdi-chevron-right</v-icon></v-btn>
                 </div>
               </v-stepper-window-item>
 
               <!-- Paso 3 -->
               <v-stepper-window-item :value="3">
                 <div class="text-center py-2">
-                  <v-icon size="40" :color="fotoCedula ? '#4caf50' : 'rgba(255,255,255,0.1)'" class="mb-1">
-                    {{ fotoCedula ? 'mdi-check-circle' : 'mdi-camera' }}
-                  </v-icon>
+                  <v-icon size="40" :color="fotoCedula ? '#4caf50' : 'rgba(255,255,255,0.1)'" class="mb-1">{{ fotoCedula ? 'mdi-check-circle' : 'mdi-camera' }}</v-icon>
                   <div v-if="!fotoCedula" class="text-caption text-medium-emphasis mb-2">Sube foto de tu cédula</div>
                   <div v-else class="text-caption text-success mb-2">✅ Foto cargada</div>
                   <v-btn :color="fotoCedula ? '#4caf50' : '#4facfe'" rounded="pill" size="small" @click="abrirSelectorArchivos">
-                    <v-icon start size="16">{{ fotoCedula ? 'mdi-refresh' : 'mdi-file-upload' }}</v-icon>
-                    {{ fotoCedula ? 'Cambiar' : 'Seleccionar Archivo' }}
+                    <v-icon start size="16">{{ fotoCedula ? 'mdi-refresh' : 'mdi-file-upload' }}</v-icon>{{ fotoCedula ? 'Cambiar' : 'Seleccionar Archivo' }}
                   </v-btn>
-                  <div v-if="fotoCedula" class="mt-2">
-                    <v-img :src="fotoCedula" max-height="100" contain class="rounded" />
-                  </div>
+                  <div v-if="fotoCedula" class="mt-2"><v-img :src="fotoCedula" max-height="100" contain class="rounded" /></div>
                 </div>
                 <div class="d-flex justify-space-between mt-2">
-                  <v-btn variant="text" size="small" @click="paso--">
-                    <v-icon start size="16">mdi-chevron-left</v-icon>Atrás
-                  </v-btn>
-                  <v-btn color="#4facfe" rounded="pill" size="small" @click="paso++" :disabled="!validarPaso(3)">
-                    Siguiente <v-icon end size="16">mdi-chevron-right</v-icon>
-                  </v-btn>
+                  <v-btn variant="text" size="small" @click="paso--"><v-icon start size="16">mdi-chevron-left</v-icon>Atrás</v-btn>
+                  <v-btn color="#4facfe" rounded="pill" size="small" @click="paso++" :disabled="!validarPaso(3)">Siguiente <v-icon end size="16">mdi-chevron-right</v-icon></v-btn>
                 </div>
               </v-stepper-window-item>
 
@@ -209,40 +80,16 @@
               <v-stepper-window-item :value="4">
                 <v-alert type="success" class="mb-2" density="compact">✅ Revisa tus datos</v-alert>
                 <v-list density="compact" class="bg-transparent">
-                  <v-list-item>
-                    <v-list-item-title class="text-caption text-medium-emphasis">Nombre</v-list-item-title>
-                    <v-list-item-subtitle class="text-body-2">{{ registro.nombre }}</v-list-item-subtitle>
-                  </v-list-item>
-                  <v-list-item>
-                    <v-list-item-title class="text-caption text-medium-emphasis">Cédula</v-list-item-title>
-                    <v-list-item-subtitle class="text-body-2">{{ registro.cedula }}</v-list-item-subtitle>
-                  </v-list-item>
-                  <v-list-item>
-                    <v-list-item-title class="text-caption text-medium-emphasis">Teléfono</v-list-item-title>
-                    <v-list-item-subtitle class="text-body-2">{{ telefonoCompleto }}</v-list-item-subtitle>
-                  </v-list-item>
-                  <v-list-item>
-                    <v-list-item-title class="text-caption text-medium-emphasis">Dirección</v-list-item-title>
-                    <v-list-item-subtitle class="text-body-2">{{ registro.direccion }}</v-list-item-subtitle>
-                  </v-list-item>
-                  <v-list-item>
-                    <v-list-item-title class="text-caption text-medium-emphasis">Referencia</v-list-item-title>
-                    <v-list-item-subtitle class="text-body-2">{{ registro.referencia_nombre }} ({{ registro.referencia_parentesco }})</v-list-item-subtitle>
-                  </v-list-item>
-                  <v-list-item v-if="fotoCedula">
-                    <v-list-item-title class="text-caption text-medium-emphasis">Cédula</v-list-item-title>
-                    <v-list-item-subtitle class="text-success">
-                      <v-icon size="16" color="success">mdi-check-circle</v-icon>Foto cargada
-                    </v-list-item-subtitle>
-                  </v-list-item>
+                  <v-list-item><v-list-item-title class="text-caption text-medium-emphasis">Nombre</v-list-item-title><v-list-item-subtitle class="text-body-2">{{ registro.nombre }}</v-list-item-subtitle></v-list-item>
+                  <v-list-item><v-list-item-title class="text-caption text-medium-emphasis">Cédula</v-list-item-title><v-list-item-subtitle class="text-body-2">{{ registro.cedula }}</v-list-item-subtitle></v-list-item>
+                  <v-list-item><v-list-item-title class="text-caption text-medium-emphasis">Teléfono</v-list-item-title><v-list-item-subtitle class="text-body-2">{{ telefonoCompleto }}</v-list-item-subtitle></v-list-item>
+                  <v-list-item><v-list-item-title class="text-caption text-medium-emphasis">Dirección</v-list-item-title><v-list-item-subtitle class="text-body-2">{{ registro.direccion }}</v-list-item-subtitle></v-list-item>
+                  <v-list-item><v-list-item-title class="text-caption text-medium-emphasis">Referencia</v-list-item-title><v-list-item-subtitle class="text-body-2">{{ registro.referencia_nombre }} ({{ registro.referencia_parentesco }})</v-list-item-subtitle></v-list-item>
+                  <v-list-item v-if="fotoCedula"><v-list-item-title class="text-caption text-medium-emphasis">Cédula</v-list-item-title><v-list-item-subtitle class="text-success"><v-icon size="16" color="success">mdi-check-circle</v-icon>Foto cargada</v-list-item-subtitle></v-list-item>
                 </v-list>
                 <div class="d-flex justify-space-between mt-2">
-                  <v-btn variant="text" size="small" @click="paso--">
-                    <v-icon start size="16">mdi-chevron-left</v-icon>Atrás
-                  </v-btn>
-                  <v-btn color="#4caf50" rounded="pill" size="small" :loading="enviando" @click="enviarRegistro">
-                    <v-icon start size="16">mdi-send</v-icon>Enviar
-                  </v-btn>
+                  <v-btn variant="text" size="small" @click="paso--"><v-icon start size="16">mdi-chevron-left</v-icon>Atrás</v-btn>
+                  <v-btn color="#4caf50" rounded="pill" size="small" :loading="enviando" @click="enviarRegistro"><v-icon start size="16">mdi-send</v-icon>Enviar</v-btn>
                 </div>
               </v-stepper-window-item>
             </v-stepper-window>
@@ -252,77 +99,94 @@
     </div>
   </div>
 </template>
+
 <script setup>
 import { ref, reactive, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useFinanCash } from '@/composables/useFinanCash'
 
 const router = useRouter()
-const { registrarCliente, subirFotoCedula, cargando } = useFinanCash()
+const { registrarCliente } = useFinanCash()
 
 const paso = ref(1)
 const enviando = ref(false)
 const fotoCedula = ref(null)
 const fotoFile = ref(null)
 const codigoPais = ref('+58')
-const errorMsg = ref('')
 
-// ... resto del código igual ...
+const codigosPaises = [
+  { nombre: '🇻🇪 Venezuela', codigo: '+58' },
+  { nombre: '🇨🇴 Colombia', codigo: '+57' },
+  { nombre: '🇪🇨 Ecuador', codigo: '+593' },
+  { nombre: '🇦🇷 Argentina', codigo: '+54' },
+  { nombre: '🇨🇱 Chile', codigo: '+56' },
+  { nombre: '🇵🇪 Perú', codigo: '+51' },
+  { nombre: '🇲🇽 México', codigo: '+52' },
+  { nombre: '🇪🇸 España', codigo: '+34' },
+  { nombre: '🇺🇸 USA', codigo: '+1' }
+]
+
+const registro = reactive({
+  nombre: '',
+  cedula: '',
+  telefono: '',
+  email: '',
+  direccion: '',
+  referencia_nombre: '',
+  referencia_telefono: '',
+  referencia_parentesco: ''
+})
+
+const telefonoCompleto = computed(() => `${codigoPais.value}${registro.telefono}`)
+
+const validarPaso = (p) => {
+  if (p === 1) return registro.nombre && registro.cedula && registro.telefono && registro.direccion
+  if (p === 2) return registro.referencia_nombre && registro.referencia_telefono && registro.referencia_parentesco
+  if (p === 3) return !!fotoCedula.value
+  return true
+}
+
+const abrirSelectorArchivos = () => {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = 'image/*'
+  input.onchange = (e) => {
+    const file = e.target.files[0]
+    if (file) {
+      const reader = new FileReader()
+      reader.onload = (ev) => { fotoCedula.value = ev.target.result; fotoFile.value = file }
+      reader.readAsDataURL(file)
+    }
+  }
+  input.click()
+}
 
 const enviarRegistro = async () => {
-  errorMsg.value = ''
-  
   if (!validarPaso(1) || !validarPaso(2) || !validarPaso(3)) {
-    alert('Por favor completa todos los campos obligatorios correctamente')
+    alert('Por favor completa todos los campos obligatorios')
     return
   }
-
   enviando.value = true
-  
   try {
-    // ✅ Datos en JSON (NO FormData)
-    const datosCliente = {
-      nombre: registro.nombre.trim(),
-      cedula: registro.cedula.trim(),
-      telefono: telefonoCompleto.value,
-      email: (registro.email || '').trim(),
-      direccion: registro.direccion.trim(),
-      referencia_nombre: registro.referencia_nombre.trim(),
-      referencia_telefono: registro.referencia_telefono.trim(),
-      referencia_parentesco: registro.referencia_parentesco.trim()
+    const formData = new FormData()
+    formData.append('nombre', registro.nombre.trim())
+    formData.append('cedula', registro.cedula.trim())
+    formData.append('telefono', telefonoCompleto.value)
+    formData.append('email', (registro.email || '').trim())
+    formData.append('direccion', registro.direccion.trim())
+    formData.append('referencia_nombre', registro.referencia_nombre.trim())
+    formData.append('referencia_telefono', registro.referencia_telefono.trim())
+    formData.append('referencia_parentesco', registro.referencia_parentesco.trim())
+    if (fotoFile.value) formData.append('cedula_foto', fotoFile.value)
+    const result = await registrarCliente(formData)
+    if (result.success) {
+      if (result.pin) localStorage.setItem('financoop_pin_temp', result.pin)
+      router.push('/registro-exitoso/' + encodeURIComponent(registro.cedula))
+    } else {
+      alert('Error: ' + (result.error || 'No se pudo registrar'))
     }
-
-    console.log('📦 Enviando datos:', datosCliente)
-
-    // ✅ Usar la función del composable
-    const result = await registrarCliente(datosCliente)
-
-    if (!result.success) {
-      throw new Error(result.error || 'Error al registrar')
-    }
-
-    console.log('✅ Cliente registrado:', result)
-    
-    // ✅ Si hay foto, subirla después
-    if (fotoFile.value && result.id) {
-      const fotoResult = await subirFotoCedula(result.id, fotoFile.value)
-      if (!fotoResult.success) {
-        console.warn('⚠️ No se pudo subir la foto:', fotoResult.error)
-      }
-    }
-    
-    // Guardar PIN si existe
-    if (result.pin) {
-      localStorage.setItem('financoop_pin_temp', result.pin)
-    }
-    
-    // Redirigir a éxito
-    router.push(`/registro-exitoso/${encodeURIComponent(registro.cedula)}`)
-
   } catch (err) {
-    console.error('❌ Error:', err)
-    errorMsg.value = err.message
-    alert('Error al registrar:\n\n' + err.message)
+    alert('Error al registrar. Intenta de nuevo.\n\n' + err.message)
   } finally {
     enviando.value = false
   }
