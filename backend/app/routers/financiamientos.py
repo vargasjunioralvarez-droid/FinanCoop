@@ -1,11 +1,11 @@
-# routers/financiamientos.py
+# backend/app/routers/financiamientos.py
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Cliente, Financiamiento, Cuota
 from app.schemas import FinanciamientoCreate, AprobacionExtra
 from app.utils import calcular_nivel, actualizar_score_cliente, calcular_usado_disponible, obtener_tasa_actual
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone  # 👈 AGREGAR timezone
 import random
 
 router = APIRouter(prefix="/financiamientos", tags=["Financiamientos"])
@@ -16,7 +16,7 @@ def crear_financiamiento(f: FinanciamientoCreate, db: Session = Depends(get_db))
     if not cliente:
         return {"error": "Cliente no encontrado"}
     
-    hoy = datetime.now()
+    hoy = datetime.now(timezone.utc)  # 👈 CORREGIDO
     deudas_vencidas = db.query(Cuota).join(Financiamiento).filter(
         Financiamiento.cliente_id == f.cliente_id,
         Cuota.estado == "pendiente",
@@ -77,7 +77,7 @@ def crear_financiamiento(f: FinanciamientoCreate, db: Session = Depends(get_db))
     monto_cuota_usd_ref = monto_cuota_bs / tasa
     
     codigo = f"F-{random.randint(100000, 999999)}"
-    fecha_primera = datetime.now() + timedelta(days=15)
+    fecha_primera = datetime.now(timezone.utc) + timedelta(days=15)  # 👈 CORREGIDO
     
     fin = Financiamiento(
         cliente_id=f.cliente_id,
@@ -180,7 +180,8 @@ def obtener_financiamiento(id: int, db: Session = Depends(get_db)):
 def ver_cuotas(id: int, db: Session = Depends(get_db)):
     cuotas = db.query(Cuota).filter(Cuota.financiamiento_id == id).all()
     
-    hoy = datetime.now()
+    hoy = datetime.now(timezone.utc)  # 👈 CORREGIDO
+    
     resultado = []
     
     for c in cuotas:
