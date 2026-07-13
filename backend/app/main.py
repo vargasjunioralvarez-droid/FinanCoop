@@ -99,27 +99,45 @@ async def security_headers(request: Request, call_next):
 # ─────────────────────────────────────────────────────────────
 
 # Orígenes permitidos (NUNCA usar "*" en producción)
+# 🔥 FIX: Agregados orígenes de Capacitor para iOS y Android
 ALLOWED_ORIGINS = [
+    # Desarrollo local (Vite)
     "http://localhost:5173",
     "http://localhost:5174",
     "http://127.0.0.1:5173",
     "http://127.0.0.1:5174",
+    # Capacitor / Ionic (iOS)
     "capacitor://localhost",
+    "ionic://localhost",
+    # Capacitor / Ionic (Android)
+    "http://localhost",
     "https://localhost",
+    # Producción
     "https://financash-frontend.onrender.com",
     "https://financash-backend.onrender.com",
     "https://financoop.onrender.com",
 ]
 
-# En producción, filtrar solo orígenes HTTPS
+# 🔥 FIX: En producción, mantener orígenes de Capacitor + HTTPS
 if IS_PROD:
-    ALLOWED_ORIGINS = [o for o in ALLOWED_ORIGINS if o.startswith("https://")]
+    # Orígenes de Capacitor (siempre necesarios para la app móvil)
+    capacitor_origins = [
+        "capacitor://localhost",
+        "ionic://localhost",
+        "http://localhost",
+        "https://localhost",
+    ]
+    # Orígenes HTTPS de producción
+    https_origins = [o for o in ALLOWED_ORIGINS if o.startswith("https://")]
+    # Combinar: HTTPS + Capacitor (la app móvil necesita estos incluso en prod)
+    ALLOWED_ORIGINS = list(set(https_origins + capacitor_origins))
+    logger.info(f"🔒 CORS en producción: {ALLOWED_ORIGINS}")
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,  # ✅ Necesario para cookies/auth headers
-    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
     max_age=600,  # Cache preflight 10 minutos
 )
@@ -247,6 +265,7 @@ app.include_router(auth_router)
 @app.on_event("startup")
 def startup():
     logger.info(f"🚀 FinanCash API iniciando | Entorno: {ENV}")
+    logger.info(f"🌐 CORS orígenes permitidos: {ALLOWED_ORIGINS}")
     init_db()
 
 # ─────────────────────────────────────────────────────────────
