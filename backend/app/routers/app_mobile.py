@@ -1,31 +1,77 @@
 # backend/app/routers/app_mobile.py
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Response, Header, Request
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Cliente, Financiamiento, Cuota, ConfiguracionPago
 from app.schemas import LoginApp
-from app.utils import generar_token, obtener_tasa_actual, calcular_usado_disponible, actualizar_score_cliente, calcular_nivel
+from app.utils import generar_token, obtener_tasa_actual, calcular_usado_disponible
 from datetime import datetime
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/app", tags=["App Móvil"])
 
-# 🔥 FIX: Handler para OPTIONS preflight de CORS
+
+# ============ HELPERS ============
+
+def extraer_token(request: Request, authorization: str = Header(None)) -> str | None:
+    """
+    🔥 EXTRAER TOKEN de:
+    1. Header Authorization: Bearer <token>
+    2. Query param ?token=<token>
+    3. Header X-Token (fallback)
+    """
+    # 1. Intentar header Authorization
+    if authorization:
+        parts = authorization.split()
+        if len(parts) == 2 and parts[0].lower() == 'bearer':
+            return parts[1]
+        # Si viene solo el token sin "Bearer"
+        return authorization.strip()
+    
+    # 2. Intentar query param
+    token_param = request.query_params.get('token')
+    if token_param:
+        return token_param
+    
+    # 3. Intentar header X-Token
+    return request.headers.get('x-token')
+
+
+def get_cliente_por_token(token: str, db: Session) -> Cliente | None:
+    """Buscar cliente por token de app"""
+    if not token:
+        return None
+    return db.query(Cliente).filter(Cliente.token_app == token).first()
+
+
+# ============ LOGIN ============
+
 @router.options("/login")
 def options_login():
+    """Handler para OPTIONS preflight de CORS"""
     return Response(status_code=200)
+
 
 @router.post("/login")
 def login_app(login: LoginApp, db: Session = Depends(get_db)):
+    logger.info(f"🔑 Login intento: cedula={login.cedula}")
+    
     cliente = db.query(Cliente).filter(Cliente.cedula == login.cedula).first()
     if not cliente:
+        logger.warning(f"❌ Cliente no encontrado: {login.cedula}")
         return {"error": "Cliente no encontrado"}
     
     if cliente.pin != login.pin:
+        logger.warning(f"❌ PIN incorrecto para: {login.cedula}")
         return {"error": "PIN incorrecto"}
     
     cliente.token_app = generar_token()
     cliente.ultimo_acceso = datetime.now()
     db.commit()
+    
+    logger.info(f"✅ Login exitoso: {cliente.nombre} (id={cliente.id})")
     
     return {
         "token": cliente.token_app,
@@ -37,10 +83,25 @@ def login_app(login: LoginApp, db: Session = Depends(get_db)):
         }
     }
 
+
+# ============ MIS DATOS ============
+
 @router.get("/mis-datos")
-def mis_datos(token: str, db: Session = Depends(get_db)):
-    cliente = db.query(Cliente).filter(Cliente.token_app == token).first()
+def mis_datos(
+    request: Request,
+    authorization: str = Header(None),
+    db: Session = Depends(get_db)
+):
+    token = extraer_token(request, authorization)
+    logger.info(f"📊 /mis-datos - Token recibido: {token[:8] + '...' if token else 'NINGUNO'}")
+    
+    if not token:
+        logger.warning("❌ Token no proporcionado")
+        return {"error": "Token no proporcionado"}
+    
+    cliente = get_cliente_por_token(token, db)
     if not cliente:
+        logger.warning(f"❌ Token inválido: {token[:8]}...")
         return {"error": "Sesión no válida"}
     
     tasa = obtener_tasa_actual(db)
@@ -92,7 +153,6 @@ def mis_datos(token: str, db: Session = Depends(get_db)):
     
     config = db.query(ConfiguracionPago).first()
     
-    # 🔥 FIX: Usar getattr para campos opcionales
     return {
         "cliente": {
             "id": cliente.id,
@@ -122,9 +182,22 @@ def mis_datos(token: str, db: Session = Depends(get_db)):
         }
     }
 
+
+# ============ MIS CUOTAS ============
+
 @router.get("/mis-cuotas")
-def mis_cuotas(token: str, db: Session = Depends(get_db)):
-    cliente = db.query(Cliente).filter(Cliente.token_app == token).first()
+def mis_cuotas(
+    request: Request,
+    authorization: str = Header(None),
+    db: Session = Depends(get_db)
+):
+    token = extraer_token(request, authorization)
+    logger.info(f"📋 /mis-cuotas - Token recibido: {token[:8] + '...' if token else 'NINGUNO'}")
+    
+    if not token:
+        return {"error": "Token no proporcionado"}
+    
+    cliente = get_cliente_por_token(token, db)
     if not cliente:
         return {"error": "Sesión no válida"}
     
@@ -168,13 +241,15 @@ def mis_cuotas(token: str, db: Session = Depends(get_db)):
         "cuotas": todas_cuotas
     }
 
+
+# ============ CONFIGURACIÓN PAGOS PÚBLICA ============
+
 @router.get("/configuracion-pagos")
 def configuracion_pagos_publica(db: Session = Depends(get_db)):
     config = db.query(ConfiguracionPago).first()
     if not config:
         return {"error": "Configuración no encontrada"}
     
-    # 🔥 FIX: Usar getattr para campos opcionales
     return {
         "pago_movil": {
             "banco": config.banco_pago_movil,

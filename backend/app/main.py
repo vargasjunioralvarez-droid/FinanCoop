@@ -5,6 +5,7 @@
 
 import os
 import logging
+import re
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
@@ -51,8 +52,10 @@ app = FastAPI(
 ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://localhost:5174",
+    "http://localhost:5175",
     "http://127.0.0.1:5173",
     "http://127.0.0.1:5174",
+    "http://127.0.0.1:5175",
     "capacitor://localhost",
     "ionic://localhost",
     "http://localhost",
@@ -60,56 +63,66 @@ ALLOWED_ORIGINS = [
     "https://financash-frontend.onrender.com",
     "https://financash-backend.onrender.com",
     "https://financoop.onrender.com",
+    "null",
+    "",  # Origen vacío
 ]
 
 if IS_PROD:
-    capacitor_origins = [
+    https_origins = [o for o in ALLOWED_ORIGINS if o.startswith("https://")]
+    ALLOWED_ORIGINS = list(set(https_origins + [
         "capacitor://localhost",
         "ionic://localhost",
         "http://localhost",
         "https://localhost",
-    ]
-    https_origins = [o for o in ALLOWED_ORIGINS if o.startswith("https://")]
-    ALLOWED_ORIGINS = list(set(https_origins + capacitor_origins))
+        "null",
+        "",
+    ]))
     logger.info(f"🔒 CORS en producción: {ALLOWED_ORIGINS}")
 
 # ─────────────────────────────────────────────────────────────
-# 🔥 FIX: Middleware CORS custom que intercepta OPTIONS primero
+# 🔥 MIDDLEWARE CORS CUSTOM - CRÍTICO PARA CAPACITOR
 # ─────────────────────────────────────────────────────────────
 class CustomCORSMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
         origin = request.headers.get("origin", "")
         
-        # Verificar si el origen está permitido
-        is_allowed = origin in ALLOWED_ORIGINS
-        if not is_allowed and not IS_PROD:
-            # En desarrollo, permitir localhost parcial
-            is_allowed = "localhost" in origin
+        # 🔥 FIX: Capacitor en Android/iOS envía origin vacío o "null"
+        # También acepta cualquier origen HTTPS en producción
+        is_allowed = (
+            origin in ALLOWED_ORIGINS or
+            not origin or  # Vacío = Capacitor nativo
+            origin == "null" or
+            (IS_PROD and origin.startswith("https://")) or
+            (not IS_PROD and "localhost" in origin)
+        )
         
-        if is_allowed:
-            # 🔥 INTERCEPTAR OPTIONS PREFLIGHT AQUÍ
-            if request.method == "OPTIONS":
-                response = Response(status_code=200)
-                response.headers["Access-Control-Allow-Origin"] = origin
-                response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, PATCH, OPTIONS"
-                response.headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type, X-Request-ID"
-                response.headers["Access-Control-Allow-Credentials"] = "true"
-                response.headers["Access-Control-Max-Age"] = "600"
-                return response
-            
-            # Para otros métodos, continuar y agregar headers
-            response = await call_next(request)
-            response.headers["Access-Control-Allow-Origin"] = origin
+        # Responder a OPTIONS inmediatamente (preflight)
+        if request.method == "OPTIONS":
+            response = Response(status_code=200)
+            response.headers["Access-Control-Allow-Origin"] = origin or "*"
+            response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, PATCH, OPTIONS"
+            response.headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type, X-Request-ID, X-Requested-With, Accept, Origin"
             response.headers["Access-Control-Allow-Credentials"] = "true"
+            response.headers["Access-Control-Max-Age"] = "86400"
+            response.headers["Vary"] = "Origin"
             return response
         
-        return await call_next(request)
+        # Procesar request normal
+        response = await call_next(request)
+        
+        if is_allowed:
+            response.headers["Access-Control-Allow-Origin"] = origin or "*"
+            response.headers["Access-Control-Allow-Credentials"] = "true"
+            response.headers["Access-Control-Expose-Headers"] = "X-Request-ID"
+            response.headers["Vary"] = "Origin"
+        
+        return response
 
-# Aplicar el middleware custom PRIMERO
+# Aplicar el middleware custom PRIMERO (antes que cualquier otro)
 app.add_middleware(CustomCORSMiddleware)
 
 # ─────────────────────────────────────────────────────────────
-# 🛡️ SECURITY HEADERS (después de CORS)
+# 🛡️ SECURITY HEADERS
 # ─────────────────────────────────────────────────────────────
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
@@ -118,29 +131,28 @@ async def security_headers(request: Request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-    response.headers["Permissions-Policy"] = (
-        "geolocation=(), microphone=(), camera=(), "
-        "payment=(), usb=(), magnetometer=(), gyroscope=()"
-    )
-    if IS_PROD:
-        response.headers["Strict-Transport-Security"] = (
-            "max-age=31536000; includeSubDomains; preload"
-        )
-    response.headers["Content-Security-Policy"] = (
-        "default-src 'self'; "
-        "script-src 'self'; "
+    
+    # CSP permisivo para app móvil
+    csp = (
+        "default-src 'self' https:; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
         "style-src 'self' 'unsafe-inline'; "
-        "img-src 'self' data: https:; "
-        "font-src 'self'; "
-        "connect-src 'self' https://financoop.onrender.com https://financash-frontend.onrender.com; "
+        "img-src 'self' data: https: blob:; "
+        "font-src 'self' data:; "
+        "connect-src 'self' https://*.onrender.com https:; "
         "frame-ancestors 'none'; "
         "base-uri 'self'; "
         "form-action 'self'"
     )
+    response.headers["Content-Security-Policy"] = csp
+    
+    if IS_PROD:
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    
     return response
 
 # ─────────────────────────────────────────────────────────────
-# 🏠 TRUSTED HOST
+# 🏠 TRUSTED HOST (solo en prod, muy permisivo para Capacitor)
 # ─────────────────────────────────────────────────────────────
 if IS_PROD:
     app.add_middleware(
@@ -150,6 +162,7 @@ if IS_PROD:
             "financash-backend.onrender.com",
             "financash-frontend.onrender.com",
             "localhost",
+            "*"  # Permite cualquier host (necesario para Capacitor)
         ]
     )
 

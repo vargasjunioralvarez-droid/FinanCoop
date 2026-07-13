@@ -1,4 +1,6 @@
+// mobile/src/composables/useFinanCash.js
 import { ref, computed } from 'vue'
+import { CapacitorHttp } from '@capacitor/core'
 
 const API_URL = 'https://financoop.onrender.com'
 
@@ -184,41 +186,47 @@ async function apiCall(endpoint, options = {}) {
   
   const headers = {
     'Content-Type': 'application/json',
+    'Accept': 'application/json',
     'Cache-Control': 'no-cache',
+    'X-Requested-With': 'XMLHttpRequest',
     ...options.headers
   }
   
-  let finalUrl = url
-  
+  // Token en header Authorization (NO en query param)
   if (token.value && endpoint.includes('/app/')) {
-    const separator = endpoint.includes('?') ? '&' : '?'
-    finalUrl = `${url}${separator}token=${token.value}`
-  }
-  
-  const config = {
-    headers,
-    ...options
-  }
-  
-  if (config.body && typeof config.body === 'object') {
-    config.body = JSON.stringify(config.body)
+    headers['Authorization'] = `Bearer ${token.value}`
   }
   
   try {
-    console.log(`🌐 API Call: ${finalUrl}`)
-    const res = await fetch(finalUrl, config)
+    console.log(`🌐 API Call: ${options.method || 'GET'} ${url}`)
     
-    if (!res.ok) {
-      const errorData = await res.json().catch(() => ({}))
-      console.error(`❌ API Error ${res.status}:`, errorData)
-      throw new Error(errorData.error || `HTTP ${res.status}`)
+    const response = await CapacitorHttp.request({
+      method: options.method || 'GET',
+      url: url,
+      headers: headers,
+      data: options.body || undefined,
+      connectTimeout: 30000,
+      readTimeout: 30000
+    })
+    
+    console.log(`✅ Response status:`, response.status)
+    
+    if (response.status >= 400) {
+      const errorMsg = response.data?.detail || response.data?.error || `HTTP ${response.status}`
+      throw new Error(errorMsg)
     }
     
-    const data = await res.json()
-    console.log(`✅ API Response:`, data)
-    return data
+    return response.data
+    
   } catch (err) {
     console.error('❌ API Error:', err)
+    
+    // Si es error de token, cerrar sesión
+    if (err.message?.includes('401') || err.message?.includes('Sesión no válida')) {
+      console.log('🔒 Token inválido, cerrando sesión...')
+      cerrarSesion()
+    }
+    
     throw err
   }
 }
@@ -237,15 +245,20 @@ async function iniciarSesion() {
     return false
   }
   
-  console.log('🔑 Intentando login con:', { cedula, pin })
-  
   try {
-    const data = await apiCall('/app/login', {
+    const response = await CapacitorHttp.request({
       method: 'POST',
-      body: { cedula, pin }
+      url: `${API_URL}/app/login`,
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      data: { cedula, pin },
+      connectTimeout: 30000,
+      readTimeout: 30000
     })
     
-    console.log('📥 Respuesta login:', data)
+    const data = response.data
     
     if (data.error) {
       error.value = data.error
@@ -256,27 +269,22 @@ async function iniciarSesion() {
     if (data.token) {
       token.value = data.token
       localStorage.setItem('financoop_token', data.token)
-      console.log('✅ Token guardado:', token.value)
+      console.log('✅ Login exitoso, token guardado')
     } else {
-      console.error('❌ No se recibió token en la respuesta')
       error.value = 'Error: No se recibió token'
       cargando.value = false
       return false
     }
     
     usuario.value = data.cliente || {}
-    console.log('✅ Usuario:', usuario.value)
-    
     await cargarDatos()
-    
-    console.log('✅ Datos cargados exitosamente')
     
     cargando.value = false
     return true
     
   } catch (err) {
     console.error('❌ Error en login:', err)
-    error.value = 'Error de conexión con el servidor'
+    error.value = 'Error de conexión: ' + (err.message || 'desconocido')
     cargando.value = false
     return false
   }
@@ -298,38 +306,44 @@ async function registrarCliente(formData) {
   error.value = null
   
   try {
-    const url = `${API_URL}/clientes`
-    console.log('📤 Enviando a:', url)
-    
-    const res = await fetch(url, {
-      method: 'POST',
-      body: formData
+    // Convertir FormData a objeto plano para CapacitorHttp
+    const data = {}
+    formData.forEach((value, key) => {
+      data[key] = value
     })
     
-    console.log('📥 Status:', res.status)
+    const response = await CapacitorHttp.request({
+      method: 'POST',
+      url: `${API_URL}/clientes`,
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      },
+      data: data,
+      connectTimeout: 60000,
+      readTimeout: 60000
+    })
     
-    const data = await res.json()
-    console.log('📥 Respuesta:', data)
+    const resData = response.data
     
-    if (data.error || data.success === false) {
-      error.value = data.error || 'Error al registrar'
+    if (resData.error || resData.success === false) {
+      error.value = resData.error || 'Error al registrar'
       cargando.value = false
       return { success: false, error: error.value }
     }
     
-    if (data.pin_generado) {
-      localStorage.setItem('financoop_pin_temp', data.pin_generado)
+    if (resData.pin_generado) {
+      localStorage.setItem('financoop_pin_temp', resData.pin_generado)
     }
     
     cargando.value = false
     return { 
       success: true, 
-      pin: data.pin_generado, 
-      mensaje: data.mensaje 
+      pin: resData.pin_generado, 
+      mensaje: resData.mensaje 
     }
   } catch (err) {
     console.error('❌ Error registrando:', err)
-    error.value = 'Error de conexión con el servidor'
+    error.value = 'Error de conexión: ' + (err.message || 'desconocido')
     cargando.value = false
     return { success: false, error: error.value }
   }
@@ -344,25 +358,21 @@ async function verificarCedula(cedula) {
   }
 }
 
-// ============ CARGAR DATOS DEL CLIENTE ============
+// ============ CARGAR DATOS ============
 async function cargarDatos() {
   if (!token.value) {
-    console.log('⚠️ No hay token, no se cargan datos')
+    console.log('⚠️ No hay token')
     return
   }
   
-  console.log('🔄 Cargando datos del cliente...')
-  console.log('🔑 Token usado:', token.value)
+  console.log('🔄 Cargando datos...')
   
   try {
     const data = await apiCall('/app/mis-datos')
-    console.log('📥 Datos del cliente:', data)
     
     if (data.error) {
-      console.error('❌ Error en mis-datos:', data.error)
-      
-      if (data.error.includes('Sesión no válida') || data.error.includes('Token no proporcionado')) {
-        console.log('⚠️ Token inválido, cerrando sesión...')
+      console.error('❌ Error:', data.error)
+      if (data.error.includes('Sesión') || data.error.includes('Token')) {
         cerrarSesion()
       }
       return
@@ -379,33 +389,22 @@ async function cargarDatos() {
     datosPago.value = data.datos_pago || {}
     
     try {
-      console.log('🔄 Cargando cuotas...')
       const cuotasData = await apiCall('/app/mis-cuotas')
-      console.log('📥 Respuesta de cuotas:', cuotasData)
-      
       if (cuotasData && !cuotasData.error) {
         todasCuotas.value = cuotasData.cuotas || []
-        console.log('✅ Cuotas cargadas:', todasCuotas.value.length)
-      } else {
-        console.warn('⚠️ No se pudieron cargar cuotas:', cuotasData?.error)
-        todasCuotas.value = []
       }
     } catch (err) {
-      console.error('❌ Error cargando cuotas:', err)
+      console.error('❌ Error cuotas:', err)
       todasCuotas.value = []
     }
-    
-    console.log('✅ Datos cargados exitosamente')
     
   } catch (err) {
     console.error('❌ Error cargando datos:', err)
   }
 }
 
-// ============ RECALCULAR MONTOS CON NUEVA TASA ============
+// ============ RECALCULAR MONTOS ============
 function recalcularMontosConNuevaTasa(nuevaTasa) {
-  console.log('🔄 Recalculando montos con nueva tasa:', nuevaTasa)
-  
   tasaActual.value = nuevaTasa
   
   financiamientos.value = financiamientos.value.map(fin => {
@@ -416,7 +415,6 @@ function recalcularMontosConNuevaTasa(nuevaTasa) {
     if (fin.proxima_cuota) {
       fin.proxima_cuota.monto_bs = (fin.proxima_cuota.monto_usd_ref || 0) * nuevaTasa
     }
-    
     return fin
   })
   
@@ -426,29 +424,24 @@ function recalcularMontosConNuevaTasa(nuevaTasa) {
     c.monto_bs = usdRef * nuevaTasa
     return c
   })
-  
-  console.log('✅ Montos recalculados con nueva tasa:', nuevaTasa)
 }
 
 // ============ PAGOS ============
 async function reportarPago() {
   if (!cuotaSeleccionada.value) {
     error.value = 'No hay cuota seleccionada'
-    console.error('❌ Error: No hay cuota seleccionada')
     return false
   }
   
   const cuotaId = cuotaSeleccionada.value.cuota_id || cuotaSeleccionada.value.id
   if (!cuotaId) {
     error.value = 'ID de cuota no válido'
-    console.error('❌ Error: ID de cuota no válido', cuotaSeleccionada.value)
     return false
   }
   
   const monto = cuotaSeleccionada.value.monto_bs || cuotaSeleccionada.value.monto_total_bs
   if (!monto) {
     error.value = 'Monto de cuota no válido'
-    console.error('❌ Error: Monto no válido', cuotaSeleccionada.value)
     return false
   }
   
@@ -476,20 +469,19 @@ async function reportarPago() {
       cedula_pago: pagoForm.value.cedula_pago || ''
     }
     
-    console.log('📤 Enviando pago:', pagoData)
-    
-    const url = `${API_URL}/pagos/reportar`
-    const res = await fetch(url, {
+    const response = await CapacitorHttp.request({
       method: 'POST',
+      url: `${API_URL}/pagos/reportar`,
       headers: {
         'Content-Type': 'application/json',
-        ...(token.value ? { 'Authorization': `Bearer ${token.value}` } : {})
+        'Authorization': token.value ? `Bearer ${token.value}` : ''
       },
-      body: JSON.stringify(pagoData)
+      data: pagoData,
+      connectTimeout: 30000,
+      readTimeout: 30000
     })
     
-    const data = await res.json()
-    console.log('📥 Respuesta del servidor:', data)
+    const data = response.data
     
     if (data.error) {
       error.value = data.error
@@ -497,6 +489,7 @@ async function reportarPago() {
       return false
     }
     
+    // Reset form
     pagoForm.value = {
       metodo: 'pago_movil',
       referencia: '',
@@ -513,8 +506,8 @@ async function reportarPago() {
     return true
     
   } catch (err) {
-    console.error('❌ Error en reportarPago:', err)
-    error.value = 'Error al reportar el pago. Intenta de nuevo.'
+    console.error('❌ Error reportando pago:', err)
+    error.value = 'Error al reportar el pago'
     cargandoPago.value = false
     return false
   }
@@ -522,7 +515,7 @@ async function reportarPago() {
 
 // ============ SELECCIONAR CUOTA ============
 function setCuotaSeleccionada(cuota) {
-  console.log('📌 Seteando cuota seleccionada:', cuota)
+  console.log('📌 Cuota seleccionada:', cuota)
   cuotaSeleccionada.value = cuota
 }
 
@@ -541,7 +534,7 @@ async function actualizarPerfil(datos) {
     await cargarDatos()
     return { success: true }
   } catch (err) {
-    return { success: false, error: 'Error de conexión' }
+    return { success: false, error: err.message || 'Error de conexión' }
   }
 }
 
