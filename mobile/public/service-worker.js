@@ -34,21 +34,42 @@ self.addEventListener('fetch', event => {
   const { request } = event
   const url = new URL(request.url)
 
-  // 🔥 FIX: NO interceptar peticiones de API (evita CORS doble)
+  // 🔥 FIX 1: NO interceptar peticiones de API
   if (
     url.pathname.startsWith('/app/') ||
     url.pathname.startsWith('/pagos/') ||
     url.pathname.startsWith('/clientes/') ||
     url.pathname.startsWith('/config/') ||
     url.pathname.startsWith('/admin/') ||
-    url.protocol === 'chrome-extension:' ||
     url.hostname.includes('onrender.com')
   ) {
     return
   }
 
-  // 🔥 FIX: NO interceptar WebSocket
-  if (request.mode === 'websocket' || url.protocol === 'ws:' || url.protocol === 'wss:') {
+  // 🔥 FIX 2: NO interceptar esquemas no soportados (chrome-extension, etc.)
+  if (
+    url.protocol === 'chrome-extension:' ||
+    url.protocol === 'chrome:' ||
+    url.protocol === 'edge:' ||
+    url.protocol === 'about:' ||
+    url.protocol === 'data:' ||
+    url.protocol === 'blob:' ||
+    url.protocol === 'filesystem:'
+  ) {
+    return
+  }
+
+  // 🔥 FIX 3: NO interceptar WebSocket
+  if (
+    request.mode === 'websocket' || 
+    url.protocol === 'ws:' || 
+    url.protocol === 'wss:'
+  ) {
+    return
+  }
+
+  // 🔥 FIX 4: NO interceptar métodos que no sean GET
+  if (request.method !== 'GET') {
     return
   }
 
@@ -59,7 +80,7 @@ self.addEventListener('fetch', event => {
         
         return fetch(request)
           .then(response => {
-            // Cachear solo respuestas GET exitosas de mismo origen
+            // Cachear solo respuestas GET exitosas de mismo origen y tipo basic
             if (
               request.method === 'GET' && 
               response.status === 200 &&
@@ -77,7 +98,7 @@ self.addEventListener('fetch', event => {
             if (request.mode === 'navigate') {
               return caches.match('/index.html')
             }
-            // 🔥 FIX: Devolver Response válido en vez de undefined
+            // Devolver Response válido
             return new Response('Sin conexión', { 
               status: 503, 
               statusText: 'Service Unavailable',

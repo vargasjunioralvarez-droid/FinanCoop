@@ -80,13 +80,14 @@ class NivelConfig(Base):
     actualizado_en = Column(DateTime(timezone=True), onupdate=func.now())
 
 # ============================================================
-# ✅ MODELO: FINANCIAMIENTO
+# ✅ MODELO: FINANCIAMIENTO (UNIFICADO CON CODIGO)
 # ============================================================
 class Financiamiento(Base):
     __tablename__ = "financiamientos"
     
     id = Column(Integer, primary_key=True, index=True)
     cliente_id = Column(Integer, ForeignKey("clientes.id"), nullable=False)
+    codigo = Column(String(20), unique=True, nullable=True)  # 👈 CAMPO AGREGADO
     monto = Column(Float, nullable=False)
     monto_usd = Column(Float, nullable=False)
     tasa_dolar = Column(Float, nullable=False)
