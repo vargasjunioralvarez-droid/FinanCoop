@@ -42,7 +42,8 @@
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="(config, nivel) in niveles" :key="nivel">
+                <!-- 🔥 nivelesOrdenados asegura el orden correcto -->
+                <tr v-for="([nivel, config], index) in nivelesOrdenados" :key="nivel">
                   <td>
                     <v-chip :color="colorNivel(nivel)" size="small">
                       {{ nivel.toUpperCase() }}
@@ -146,7 +147,7 @@
           <v-card-text>
             <v-row>
               <v-col 
-                v-for="(config, nivel) in niveles" 
+                v-for="([nivel, config]) in nivelesOrdenados" 
                 :key="nivel"
                 cols="12" 
                 sm="6" 
@@ -175,12 +176,22 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { api } from '@/config/api'  // ✅ Usar 'api'
+import { ref, onMounted, computed } from 'vue'
+import { api } from '@/config/api'
 
 const niveles = ref({})
 const cargandoNivel = ref('')
 const cargandoReset = ref(false)
+
+// 🔥 ORDENAR: "nuevo" primero, luego por min_score
+const nivelesOrdenados = computed(() => {
+  const entries = Object.entries(niveles.value)
+  
+  // Ordenar por min_score (ascendente)
+  return entries.sort((a, b) => {
+    return a[1].min_score - b[1].min_score
+  })
+})
 
 const colorNivel = (nivel) => {
   const colores = { 
@@ -207,7 +218,7 @@ const guardarNivel = async (nivel) => {
   cargandoNivel.value = nivel
   try {
     const config = niveles.value[nivel]
-    const data = await api.put(`/config/niveles/${nivel}`, {
+    await api.put(`/config/niveles/${nivel}`, {
       monto_max_usd: parseFloat(config.monto_max_usd),
       entrada_pct: parseFloat(config.entrada_pct),
       financia_pct: parseFloat(config.financia_pct),
@@ -232,8 +243,8 @@ const resetNiveles = async () => {
   
   cargandoReset.value = true
   try {
-    const data = await api.post('/config/niveles/reset')
-    alert('✅ ' + data.mensaje)
+    await api.post('/config/niveles/reset')
+    alert('✅ Niveles restaurados a valores por defecto')
     await cargarNiveles()
   } catch (e) {
     console.error('Error restaurando niveles:', e)

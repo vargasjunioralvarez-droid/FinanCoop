@@ -8,7 +8,7 @@ from app.database import get_db
 from app.models import TasaDolar, NivelConfig, Financiamiento, Cuota
 from app.config import NIVELES_CONFIG, NIVELES_CONFIG_DEFAULT
 from app.auth import get_current_admin
-from app.utils import obtener_tasa_actual
+from app.utils import obtener_tasa_actual, get_niveles_config
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/config", tags=["Configuración"])
@@ -41,15 +41,12 @@ def obtener_tasa(db: Session = Depends(get_db)):
     logger.info("🔍 [tasa-dolar] INICIO")
     
     try:
-        # Obtener tasa actual
         tasa = obtener_tasa_actual(db)
         logger.info(f"✅ [tasa-dolar] Tasa actual: {tasa}")
         
-        # Obtener historial
         historial = db.query(TasaDolar).order_by(TasaDolar.id.desc()).limit(20).all()
         logger.info(f"✅ [tasa-dolar] Historial obtenido: {len(historial)} registros")
         
-        # Construir respuesta
         response = {
             "tasa": tasa,
             "fecha": datetime.now(timezone.utc).isoformat(),
@@ -82,14 +79,12 @@ def actualizar_tasa(
     logger.info(f"🚀 [tasa-dolar] Actualizando tasa a {request.tasa} por {request.actualizado_por}")
     
     try:
-        # Guardar nueva tasa
         nueva_tasa = TasaDolar(
             tasa=request.tasa,
             fuente="manual"
         )
         db.add(nueva_tasa)
         
-        # Recalcular cuotas pendientes
         financiamientos_afectados = 0
         cuotas_recalculadas = 0
         
@@ -106,7 +101,6 @@ def actualizar_tasa(
             if cuotas_pendientes:
                 financiamientos_afectados += 1
                 for c in cuotas_pendientes:
-                    # Recalcular montos en BS según nueva tasa
                     if hasattr(c, 'monto_base_usd') and c.monto_base_usd:
                         c.monto_total_bs = c.monto_base_usd * request.tasa
                         cuotas_recalculadas += 1
@@ -127,44 +121,21 @@ def actualizar_tasa(
         logger.error(f"❌ [tasa-dolar] ERROR: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/tasa-dolar/bcv")
-def actualizar_tasa_bcv(
-    db: Session = Depends(get_db),
-    current_user=Depends(get_current_admin)
-):
-    """Consultar tasa del BCV y actualizar"""
-    logger.info("🌐 [tasa-dolar] Consultando BCV...")
-    
-    try:
-        # Aquí iría la lógica real de consulta al BCV
-        # Por ahora, simulamos que no se pudo obtener
-        tasa_actual = obtener_tasa_actual(db)
-        
-        return {
-            "error": True,
-            "mensaje": "Servicio BCV no disponible. Usando tasa manual.",
-            "tasa_actual": tasa_actual,
-            "cuotas_recalculadas": 0
-        }
-        
-    except Exception as e:
-        logger.error(f"❌ [tasa-dolar/bcv] ERROR: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
 # ============================================================
-# 🏆 NIVELES DE FINANCIAMIENTO
+# 🏆 NIVELES DE FINANCIAMIENTO - CORREGIDO
 # ============================================================
 
 @router.get("/niveles")
 def obtener_niveles(db: Session = Depends(get_db)):
-    """Obtener configuración de niveles"""
+    """Obtener configuración de niveles en orden ascendente"""
     logger.info("📋 [niveles] Obteniendo configuración")
     
     try:
+        get_niveles_config(db)  # Actualizar cache global
         niveles_db = db.query(NivelConfig).all()
         
         if not niveles_db:
-            # Inicializar con defaults
+            # Inicializar con defaults en el orden correcto
             for nivel_key, config in NIVELES_CONFIG_DEFAULT.items():
                 nc = NivelConfig(
                     nivel=nivel_key,
@@ -197,7 +168,13 @@ def obtener_niveles(db: Session = Depends(get_db)):
                 "aprobacion_extra": n.aprobacion_extra
             }
         
-        return {"niveles": niveles}
+        # 🔥 ORDENAR: "nuevo" primero, luego por min_score
+        niveles_ordenados = dict(sorted(
+            niveles.items(),
+            key=lambda x: x[1]["min_score"]
+        ))
+        
+        return {"niveles": niveles_ordenados}
         
     except Exception as e:
         logger.error(f"❌ [niveles] ERROR: {e}")
@@ -229,6 +206,9 @@ def actualizar_nivel(
         
         db.commit()
         
+        # Actualizar cache global
+        get_niveles_config(db)
+        
         logger.info(f"✅ [niveles] Nivel {nivel} actualizado")
         return {"mensaje": f"Nivel {nivel} actualizado correctamente"}
         
@@ -251,7 +231,7 @@ def reset_niveles(
         # Borrar existentes
         db.query(NivelConfig).delete()
         
-        # Crear defaults
+        # Crear defaults en el orden correcto
         for nivel_key, config in NIVELES_CONFIG_DEFAULT.items():
             nc = NivelConfig(
                 nivel=nivel_key,
@@ -268,6 +248,9 @@ def reset_niveles(
             db.add(nc)
         
         db.commit()
+        
+        # Actualizar cache global
+        get_niveles_config(db)
         
         logger.info("✅ [niveles] Valores restaurados")
         return {"mensaje": "Niveles restaurados a valores por defecto"}

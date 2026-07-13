@@ -2,7 +2,7 @@
 import os
 import random
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from twilio.rest import Client
 from twilio.base.exceptions import TwilioRestException
 from app.config import NIVELES_CONFIG, NIVELES_CONFIG_DEFAULT
@@ -24,9 +24,7 @@ if TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN:
 # ============ FUNCIONES AUXILIARES ============
 
 def normalizar_telefono(telefono: str) -> str:
-    """
-    Normaliza un número de teléfono venezolano al formato internacional.
-    """
+    """Normaliza un número de teléfono venezolano al formato internacional."""
     if not telefono:
         return ""
     
@@ -34,19 +32,14 @@ def normalizar_telefono(telefono: str) -> str:
     
     if limpio.startswith('+58') and len(limpio) == 13:
         return limpio
-    
     if limpio.startswith('+580') and len(limpio) == 14:
         return '+58' + limpio[4:]
-    
     if limpio.startswith('0') and len(limpio) == 11:
         return '+58' + limpio[1:]
-    
     if limpio.startswith('4') and len(limpio) == 10:
         return '+58' + limpio
-    
     if limpio.startswith('+'):
         return limpio
-    
     if len(limpio) == 10 and limpio.startswith('4'):
         return '+58' + limpio
     
@@ -56,11 +49,9 @@ def es_numero_valido(telefono: str) -> bool:
     """Verifica si el número tiene formato válido para Venezuela."""
     if not telefono:
         return False
-    
     if telefono.startswith('+58') and len(telefono) == 13:
         operadora = telefono[3:5]
         return operadora in ['41', '42', '412', '414', '416', '424', '426']
-    
     return False
 
 # ============ FUNCIONES DE ENVÍO DE MENSAJES ============
@@ -83,19 +74,16 @@ def enviar_whatsapp(telefono: str, mensaje: str):
             from_=TWILIO_WHATSAPP_NUMBER,
             to=f'whatsapp:{telefono}'
         )
-        
         print(f"✅ WhatsApp enviado a {telefono}. SID: {message.sid}")
         return True, message.sid
-        
     except TwilioRestException as e:
         error_msg = str(e)
         if "63016" in error_msg:
-            error_msg = "El usuario no ha iniciado conversación con el sandbox. Debe enviar 'join <palabra>' primero."
+            error_msg = "El usuario no ha iniciado conversación con el sandbox."
         elif "63018" in error_msg:
-            error_msg = "El número de destino no tiene WhatsApp o no es válido."
+            error_msg = "El número de destino no tiene WhatsApp."
         elif "429" in str(e.status):
             error_msg = "Límite de mensajes diarios excedido."
-        
         print(f"❌ Error WhatsApp: {error_msg}")
         return False, error_msg
     except Exception as e:
@@ -103,10 +91,7 @@ def enviar_whatsapp(telefono: str, mensaje: str):
         return False, str(e)
 
 def enviar_pin_cliente(telefono: str, nombre: str, cedula: str, pin: str):
-    """
-    Envía el PIN al cliente por WhatsApp.
-    Si falla, siempre devuelve el PIN para mostrar en pantalla.
-    """
+    """Envía el PIN al cliente por WhatsApp."""
     telefono = normalizar_telefono(telefono)
     
     mensaje_whatsapp = f"""🎉 *¡Bienvenido a FinanCoop, {nombre}!*
@@ -139,7 +124,6 @@ def enviar_pin_cliente(telefono: str, nombre: str, cedula: str, pin: str):
         "telefono_normalizado": telefono
     }
     
-    # Intentar WhatsApp
     print(f"📱 Intentando WhatsApp a {telefono}...")
     exito_wa, sid_wa = enviar_whatsapp(telefono, mensaje_whatsapp)
     
@@ -149,22 +133,31 @@ def enviar_pin_cliente(telefono: str, nombre: str, cedula: str, pin: str):
         resultado["mensaje"] = f"✅ WhatsApp enviado a {telefono}"
         print(f"✅ WhatsApp exitoso: {sid_wa}")
     else:
-        resultado["mensaje"] = (
-            f"⚠️ No se pudo enviar WhatsApp: {sid_wa}. "
-            f"El PIN es: {pin}. Por favor, guárdalo o comunícalo al cliente."
-        )
+        resultado["mensaje"] = f"⚠️ No se pudo enviar WhatsApp: {sid_wa}. PIN: {pin}"
         print(f"⚠️ WhatsApp falló: {sid_wa}")
     
-    # Siempre devolver el PIN para mostrar en pantalla
     return resultado
 
 # ============ FUNCIONES DE NEGOCIO ============
 
 def calcular_nivel(score: int):
-    for nivel, config in NIVELES_CONFIG.items():
+    """
+    Calcula el nivel de un cliente según su score.
+    ⚠️ IMPORTANTE: Los niveles deben estar en orden ascendente.
+    "nuevo" SIEMPRE debe tener min_score = 0.
+    """
+    # 🔥 ORDENAR niveles por min_score para asegurar el orden correcto
+    niveles_ordenados = sorted(
+        NIVELES_CONFIG.items(),
+        key=lambda x: x[1]["min_score"]
+    )
+    
+    for nivel, config in niveles_ordenados:
         if config["min_score"] <= score <= config["max_score"]:
             return nivel, config
-    return "nuevo", NIVELES_CONFIG["nuevo"]
+    
+    # Si no encuentra (por seguridad), devolver "nuevo"
+    return "nuevo", NIVELES_CONFIG.get("nuevo", NIVELES_CONFIG_DEFAULT["nuevo"])
 
 def actualizar_score_cliente(cliente: Cliente, db):
     financiamientos_completados = db.query(Financiamiento).filter(
