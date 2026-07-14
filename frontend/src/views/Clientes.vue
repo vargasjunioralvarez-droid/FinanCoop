@@ -2,104 +2,308 @@
   <v-container>
     <v-row>
       <v-col cols="12">
-        <h1 class="text-h4 mb-4">👥 Clientes</h1>
+        <h1 class="text-h4 mb-4">👥 Gestión de Clientes</h1>
       </v-col>
-      
-      <!-- Buscador -->
+
+      <!-- Tabs para cambiar entre vistas -->
       <v-col cols="12">
-        <v-card class="mb-4">
-          <v-card-text>
-            <v-text-field
-              v-model="busqueda"
-              label="Buscar por Cédula, Nombre o Código de Financiamiento"
-              prepend-inner-icon="mdi-magnify"
-              @keyup.enter="buscar"
-              clearable
-              variant="outlined"
-              density="comfortable"
-              hint="Ej: 25474725, Juan Pérez, F-123456"
-              persistent-hint
-            ></v-text-field>
-            
-            <v-btn 
-              color="primary" 
-              @click="buscar" 
-              block 
-              class="mt-3"
-              size="large"
-              :loading="cargando"
-            >
-              <v-icon start>mdi-magnify</v-icon>
-              Buscar
-            </v-btn>
-          </v-card-text>
-        </v-card>
-      </v-col>
-      
-      <!-- Resultados -->
-      <v-col cols="12" v-if="clientes.length > 0">
-        <v-data-table
-          :items="clientes"
-          :headers="headers"
-          :items-per-page="10"
-          class="elevation-1"
-        >
-          <template v-slot:item.nivel="{ item }">
-            <v-chip :color="colorNivel(item.nivel)" size="small">
-              {{ item.nivel }}
-            </v-chip>
-          </template>
+        <v-tabs v-model="tabActiva" color="primary" grow>
+          <v-tab value="verificados">
+            <v-icon start>mdi-check-circle</v-icon>
+            Verificados ({{ clientesVerificados.length }})
+          </v-tab>
+          <v-tab value="pendientes">
+            <v-icon start>mdi-clock-outline</v-icon>
+            Por Verificar ({{ clientesPendientes.length }})
+          </v-tab>
+        </v-tabs>
+
+        <v-window v-model="tabActiva" class="mt-4">
           
-          <template v-slot:item.score="{ item }">
-            <v-chip color="info" size="small">{{ item.score }}</v-chip>
-          </template>
-          
-          <template v-slot:item.total_compras="{ item }">
-            <v-chip color="primary" size="small">{{ item.total_compras }}</v-chip>
-          </template>
-          
-          <template v-slot:item.pin="{ item }">
-            <v-chip color="primary" v-if="item.pin" size="small">{{ item.pin }}</v-chip>
-            <span v-else class="text-grey text-caption">Sin PIN</span>
-          </template>
-          
-          <template v-slot:item.acciones="{ item }">
-            <div class="d-flex gap-1">
-              <v-btn 
-                icon="mdi-eye" 
-                size="small" 
-                color="info"
-                @click="verDetalle(item)"
-              ></v-btn>
-              <!-- ✅ SOLO ADMIN PUEDE EDITAR -->
-              <v-btn 
-                v-if="esAdmin"
-                icon="mdi-pencil" 
-                size="small" 
-                color="primary"
-                @click="editarCliente(item)"
-              ></v-btn>
-              <!-- ✅ SOLO ADMIN PUEDE ELIMINAR -->
-              <v-btn 
-                v-if="esAdmin"
-                icon="mdi-delete" 
-                size="small" 
-                color="error"
-                @click="eliminarCliente(item)"
-              ></v-btn>
-            </div>
-          </template>
-        </v-data-table>
-      </v-col>
-      
-      <v-col cols="12" v-else-if="busquedaRealizada && !cargando">
-        <v-alert type="info" border="start">
-          No se encontraron clientes con: <strong>{{ busqueda }}</strong>
-        </v-alert>
+          <!-- ========================================== -->
+          <!-- PESTAÑA: CLIENTES VERIFICADOS -->
+          <!-- ========================================== -->
+          <v-window-item value="verificados">
+            <v-card>
+              <v-card-title class="d-flex align-center">
+                <v-icon color="success" class="mr-2">mdi-check-circle</v-icon>
+                Clientes Verificados
+                <v-spacer></v-spacer>
+                <v-text-field
+                  v-model="busquedaVerificados"
+                  label="Buscar..."
+                  prepend-inner-icon="mdi-magnify"
+                  density="compact"
+                  hide-details
+                  variant="outlined"
+                  style="max-width: 300px;"
+                ></v-text-field>
+              </v-card-title>
+              
+              <v-data-table
+                :items="clientesVerificadosFiltrados"
+                :headers="headersVerificados"
+                :items-per-page="10"
+              >
+                <template v-slot:item.estado="{ item }">
+                  <v-chip color="success" size="small">
+                    ✅ Aprobado
+                  </v-chip>
+                </template>
+
+                <template v-slot:item.pin="{ item }">
+                  <v-chip color="primary" size="small" v-if="item.pin">
+                    {{ item.pin }}
+                  </v-chip>
+                  <span v-else class="text-grey">Sin PIN</span>
+                </template>
+
+                <template v-slot:item.nivel="{ item }">
+                  <v-chip :color="colorNivel(item.nivel)" size="small">
+                    {{ item.nivel }}
+                  </v-chip>
+                </template>
+
+                <template v-slot:item.acciones="{ item }">
+                  <div class="d-flex gap-1">
+                    <v-btn icon="mdi-eye" size="small" color="info" @click="verDetalle(item)"></v-btn>
+                    <v-btn v-if="esAdmin" icon="mdi-pencil" size="small" color="primary" @click="editarCliente(item)"></v-btn>
+                    <v-btn v-if="esAdmin" icon="mdi-delete" size="small" color="error" @click="eliminarCliente(item)"></v-btn>
+                  </div>
+                </template>
+              </v-data-table>
+            </v-card>
+          </v-window-item>
+
+          <!-- ========================================== -->
+          <!-- PESTAÑA: CLIENTES POR VERIFICAR -->
+          <!-- ========================================== -->
+          <v-window-item value="pendientes">
+            <v-card>
+              <v-card-title class="d-flex align-center">
+                <v-icon color="warning" class="mr-2">mdi-clock-outline</v-icon>
+                Clientes por Verificar
+                <v-spacer></v-spacer>
+                <v-text-field
+                  v-model="busquedaPendientes"
+                  label="Buscar..."
+                  prepend-inner-icon="mdi-magnify"
+                  density="compact"
+                  hide-details
+                  variant="outlined"
+                  style="max-width: 300px;"
+                ></v-text-field>
+              </v-card-title>
+
+              <v-data-table
+                :items="clientesPendientesFiltrados"
+                :headers="headersPendientes"
+                :items-per-page="10"
+              >
+                <template v-slot:item.estado="{ item }">
+                  <v-chip color="warning" size="small">
+                    ⏳ Pendiente
+                  </v-chip>
+                </template>
+
+                <template v-slot:item.foto="{ item }">
+                  <v-icon :color="item.url_cedula ? 'success' : 'grey'" size="small">
+                    {{ item.url_cedula ? 'mdi-check-circle' : 'mdi-image-off' }}
+                  </v-icon>
+                  {{ item.url_cedula ? 'Sí' : 'No' }}
+                </template>
+
+                <template v-slot:item.acciones="{ item }">
+                  <div class="d-flex gap-1">
+                    <v-btn icon="mdi-eye" size="small" color="info" @click="verDetalle(item)"></v-btn>
+                    
+                    <!-- ✅ BOTÓN APROBAR -->
+                    <v-btn 
+                      icon="mdi-check-circle" 
+                      size="small" 
+                      color="success"
+                      @click="aprobarCliente(item)"
+                      :loading="aprobandoId === item.id"
+                      title="Aprobar y enviar PIN"
+                    ></v-btn>
+                    
+                    <v-btn 
+                      icon="mdi-delete" 
+                      size="small" 
+                      color="error"
+                      @click="eliminarCliente(item)"
+                    ></v-btn>
+                  </div>
+                </template>
+              </v-data-table>
+
+              <!-- Mensaje si no hay pendientes -->
+              <v-alert 
+                v-if="clientesPendientes.length === 0" 
+                type="info" 
+                class="ma-4"
+              >
+                🎉 No hay clientes pendientes por verificar.
+              </v-alert>
+            </v-card>
+          </v-window-item>
+
+        </v-window>
       </v-col>
     </v-row>
-    
-    <!-- Dialog: Editar Cliente (solo admin) -->
+
+    <!-- ========================================== -->
+    <!-- DIALOG: Aprobar Cliente -->
+    <!-- ========================================== -->
+    <v-dialog v-model="dialogAprobar" max-width="450">
+      <v-card>
+        <v-card-title class="text-h5 bg-success text-white">
+          <v-icon start>mdi-check-circle</v-icon>
+          Aprobar Cliente
+        </v-card-title>
+        <v-card-text class="pt-4" v-if="clienteAprobar">
+          <p class="text-body-1">
+            ¿Aprobar a <strong>{{ clienteAprobar.nombre }}</strong>?
+          </p>
+          <v-list density="compact" class="bg-grey-lighten-4 rounded mt-2">
+            <v-list-item>
+              <v-list-item-title>Cédula</v-list-item-title>
+              <v-list-item-subtitle>{{ clienteAprobar.cedula }}</v-list-item-subtitle>
+            </v-list-item>
+            <v-list-item>
+              <v-list-item-title>Teléfono</v-list-item-title>
+              <v-list-item-subtitle>{{ clienteAprobar.telefono }}</v-list-item-subtitle>
+            </v-list-item>
+          </v-list>
+          <p class="text-caption text-grey mt-3">
+            Se enviará un SMS con el PIN de acceso al número registrado.
+          </p>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn @click="dialogAprobar = false">Cancelar</v-btn>
+          <v-btn 
+            color="success" 
+            @click="confirmarAprobar" 
+            :loading="aprobando"
+          >
+            <v-icon start>mdi-send</v-icon>
+            Aprobar y Enviar PIN
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- ========================================== -->
+    <!-- DIALOG: Detalle del Cliente -->
+    <!-- ========================================== -->
+    <v-dialog v-model="dialogDetalle" max-width="600">
+      <v-card v-if="clienteSeleccionado">
+        <v-card-title class="text-h5">
+          {{ clienteSeleccionado.nombre }}
+          <v-chip 
+            :color="clienteSeleccionado.estado === 'aprobado' ? 'success' : 'warning'" 
+            class="ml-2"
+          >
+            {{ clienteSeleccionado.estado === 'aprobado' ? '✅ Aprobado' : '⏳ Pendiente' }}
+          </v-chip>
+        </v-card-title>
+        
+        <v-card-text>
+          <v-row>
+            <v-col cols="6">
+              <p><strong>Cédula:</strong> {{ clienteSeleccionado.cedula }}</p>
+              <p><strong>Teléfono:</strong> {{ clienteSeleccionado.telefono }}</p>
+              <p><strong>Email:</strong> {{ clienteSeleccionado.email || 'N/A' }}</p>
+              <p><strong>Dirección:</strong> {{ clienteSeleccionado.direccion || 'N/A' }}</p>
+            </v-col>
+            <v-col cols="6">
+              <p><strong>Score:</strong> {{ clienteSeleccionado.score }} compras</p>
+              <p><strong>Total Compras:</strong> {{ clienteSeleccionado.total_compras }}</p>
+              <p><strong>Nivel:</strong> 
+                <v-chip :color="colorNivel(clienteSeleccionado.nivel)" size="small">
+                  {{ clienteSeleccionado.nivel }}
+                </v-chip>
+              </p>
+              <p><strong>PIN:</strong> 
+                <v-chip color="primary" size="small" v-if="clienteSeleccionado.pin">
+                  {{ clienteSeleccionado.pin }}
+                </v-chip>
+                <span v-else class="text-grey">Sin PIN</span>
+              </p>
+            </v-col>
+          </v-row>
+
+          <!-- Referencia -->
+          <v-divider class="my-3"></v-divider>
+          <h3 class="text-h6 mb-2">Referencia</h3>
+          <p><strong>Nombre:</strong> {{ clienteSeleccionado.referencia_nombre || 'N/A' }}</p>
+          <p><strong>Teléfono:</strong> {{ clienteSeleccionado.referencia_telefono || 'N/A' }}</p>
+          <p><strong>Parentesco:</strong> {{ clienteSeleccionado.referencia_parentesco || 'N/A' }}</p>
+
+          <!-- Foto de cédula -->
+          <v-divider class="my-3"></v-divider>
+          <h3 class="text-h6 mb-2">Foto de Cédula</h3>
+          <v-img 
+            v-if="clienteSeleccionado.url_cedula" 
+            :src="clienteSeleccionado.url_cedula" 
+            max-height="200"
+            contain
+            class="rounded"
+          ></v-img>
+          <v-alert v-else type="warning" density="compact">
+            No hay foto de cédula
+          </v-alert>
+          
+          <v-divider class="my-3"></v-divider>
+          
+          <h3 class="text-h6 mb-2">Financiamientos</h3>
+          <v-alert v-if="!financiamientosCliente.length" type="info" density="compact">
+            Sin financiamientos
+          </v-alert>
+          
+          <v-expansion-panels v-else>
+            <v-expansion-panel v-for="fin in financiamientosCliente" :key="fin.id">
+              <v-expansion-panel-title>
+                <div class="d-flex align-center w-100">
+                  <v-icon :color="fin.estado === 'activo' ? 'success' : 'grey'" class="mr-2">
+                    {{ fin.estado === 'activo' ? 'mdi-clock-outline' : 'mdi-check-circle' }}
+                  </v-icon>
+                  <span class="flex-grow-1">{{ fin.codigo }}</span>
+                  <v-chip :color="fin.estado === 'activo' ? 'warning' : 'success'" size="small">
+                    {{ fin.estado }}
+                  </v-chip>
+                </div>
+              </v-expansion-panel-title>
+              <v-expansion-panel-text>
+                <p><strong>Descripción:</strong> {{ fin.descripcion }}</p>
+                <p><strong>Total:</strong> BS {{ formatearBS(fin.monto_total_bs) }}</p>
+                <p><strong>Entrada:</strong> BS {{ formatearBS(fin.monto_entrada_bs) }}</p>
+                <p><strong>Cuotas:</strong> {{ fin.cuotas_aprobadas }}</p>
+                <p><strong>Cuota mensual:</strong> BS {{ formatearBS(fin.monto_cuota_bs) }}</p>
+                <v-btn color="primary" size="small" class="mt-2" @click="verCuotas(fin.id)">
+                  Ver Cuotas
+                </v-btn>
+              </v-expansion-panel-text>
+            </v-expansion-panel>
+          </v-expansion-panels>
+        </v-card-text>
+        
+        <v-card-actions>
+          <v-btn @click="dialogDetalle = false">Cerrar</v-btn>
+          <!-- Botón aprobar si está pendiente -->
+          <v-btn 
+            v-if="clienteSeleccionado.estado !== 'aprobado'"
+            color="success"
+            @click="dialogDetalle = false; aprobarCliente(clienteSeleccionado)"
+          >
+            Aprobar
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Dialog: Editar Cliente -->
     <v-dialog v-model="dialogEditar" max-width="500">
       <v-card>
         <v-card-title>✏️ Editar Cliente</v-card-title>
@@ -116,88 +320,7 @@
       </v-card>
     </v-dialog>
 
-    <!-- Dialog: Detalle del Cliente -->
-    <v-dialog v-model="dialogDetalle" max-width="600">
-      <v-card v-if="clienteSeleccionado">
-        <v-card-title class="text-h5">
-          {{ clienteSeleccionado.nombre }}
-          <v-chip :color="colorNivel(clienteSeleccionado.nivel)" class="ml-2">
-            {{ clienteSeleccionado.nivel }}
-          </v-chip>
-        </v-card-title>
-        
-        <v-card-text>
-          <v-row>
-            <v-col cols="6">
-              <p><strong>Cédula:</strong> {{ clienteSeleccionado.cedula }}</p>
-              <p><strong>Teléfono:</strong> {{ clienteSeleccionado.telefono }}</p>
-              <p><strong>Email:</strong> {{ clienteSeleccionado.email || 'N/A' }}</p>
-            </v-col>
-            <v-col cols="6">
-              <p><strong>Score:</strong> {{ clienteSeleccionado.score }} compras</p>
-              <p><strong>Total Compras:</strong> {{ clienteSeleccionado.total_compras }}</p>
-              <p><strong>PIN App:</strong> {{ clienteSeleccionado.pin || 'Sin PIN' }}</p>
-            </v-col>
-          </v-row>
-          
-          <v-divider class="my-3"></v-divider>
-          
-          <h3 class="text-h6 mb-2">Financiamientos</h3>
-          
-          <v-alert 
-            v-if="!financiamientosCliente.length" 
-            type="info" 
-            density="compact"
-          >
-            Sin financiamientos
-          </v-alert>
-          
-          <v-expansion-panels v-else>
-            <v-expansion-panel
-              v-for="fin in financiamientosCliente"
-              :key="fin.id"
-            >
-              <v-expansion-panel-title>
-                <div class="d-flex align-center w-100">
-                  <v-icon :color="fin.estado === 'activo' ? 'success' : 'grey'" class="mr-2">
-                    {{ fin.estado === 'activo' ? 'mdi-clock-outline' : 'mdi-check-circle' }}
-                  </v-icon>
-                  <span class="flex-grow-1">{{ fin.codigo }}</span>
-                  <v-chip :color="fin.estado === 'activo' ? 'warning' : 'success'" size="small">
-                    {{ fin.estado }}
-                  </v-chip>
-                </div>
-              </v-expansion-panel-title>
-              
-              <v-expansion-panel-text>
-                <p><strong>Descripción:</strong> {{ fin.descripcion }}</p>
-                <p><strong>Total:</strong> BS {{ formatearBS(fin.monto_total_bs) }}</p>
-                <p><strong>Entrada:</strong> BS {{ formatearBS(fin.monto_entrada_bs) }}</p>
-                <p><strong>Cuotas:</strong> {{ fin.cuotas_aprobadas }}</p>
-                <p><strong>Cuota mensual:</strong> BS {{ formatearBS(fin.monto_cuota_bs) }}</p>
-                <p><strong>Tasa:</strong> {{ fin.tasa_aplicada }} BS/$</p>
-                <p><strong>Fecha:</strong> {{ formatearFecha(fin.fecha_creacion) }}</p>
-                
-                <v-btn 
-                  color="primary" 
-                  size="small" 
-                  class="mt-2"
-                  @click="verCuotas(fin.id)"
-                >
-                  Ver Cuotas
-                </v-btn>
-              </v-expansion-panel-text>
-            </v-expansion-panel>
-          </v-expansion-panels>
-        </v-card-text>
-        
-        <v-card-actions>
-          <v-btn @click="dialogDetalle = false">Cerrar</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-    
-    <!-- Dialog: Cuotas del Financiamiento -->
+    <!-- Dialog: Cuotas -->
     <v-dialog v-model="dialogCuotas" max-width="500">
       <v-card>
         <v-card-title>
@@ -213,40 +336,24 @@
               :key="c.id"
               :class="{
                 'bg-success-lighten-4': c.estado === 'pagada',
-                'bg-error-lighten-4': c.dias_atraso > 0,
-                'bg-warning-lighten-4': c.estado === 'pendiente' && c.dias_atraso === 0
+                'bg-error-lighten-4': c.dias_atraso > 0
               }"
               class="mb-2 rounded"
             >
               <v-list-item-title>
-                <v-icon 
-                  :color="c.estado === 'pagada' ? 'success' : c.dias_atraso > 0 ? 'error' : 'warning'"
-                  class="mr-2"
-                >
-                  {{ c.estado === 'pagada' ? 'mdi-check-circle' : c.dias_atraso > 0 ? 'mdi-alert-circle' : 'mdi-clock-outline' }}
+                <v-icon :color="c.estado === 'pagada' ? 'success' : 'error'" class="mr-2">
+                  {{ c.estado === 'pagada' ? 'mdi-check-circle' : 'mdi-alert-circle' }}
                 </v-icon>
                 Cuota #{{ c.numero }}
               </v-list-item-title>
-              
               <v-list-item-subtitle>
-                <v-chip 
-                  :color="c.estado === 'pagada' ? 'success' : c.dias_atraso > 0 ? 'error' : 'warning'" 
-                  size="small"
-                >
+                <v-chip :color="c.estado === 'pagada' ? 'success' : 'warning'" size="small">
                   {{ c.estado }}
                 </v-chip>
-                <span v-if="c.dias_atraso > 0" class="text-error ml-2">
-                  {{ c.dias_atraso }} días atraso
-                </span>
               </v-list-item-subtitle>
-              
               <template v-slot:append>
                 <div class="text-right">
                   <div class="text-h6">BS {{ formatearBS(c.monto_total_bs) }}</div>
-                  <div class="text-caption text-grey">Ref: ${{ formatearUSD(c.monto_total_usd) }}</div>
-                  <div v-if="c.monto_interes_mora_bs > 0" class="text-error text-caption">
-                    +BS {{ formatearBS(c.monto_interes_mora_bs) }} mora
-                  </div>
                   <div class="text-caption">{{ formatearFecha(c.fecha_vencimiento) }}</div>
                 </div>
               </template>
@@ -255,39 +362,100 @@
         </v-card-text>
       </v-card>
     </v-dialog>
+
+    <!-- Snackbar para notificaciones -->
+    <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="3000">
+      {{ snackbar.text }}
+      <template v-slot:actions>
+        <v-btn variant="text" @click="snackbar.show = false">Cerrar</v-btn>
+      </template>
+    </v-snackbar>
+
   </v-container>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { api } from '@/config/api'
 
-const busqueda = ref('')
+// Tabs
+const tabActiva = ref('verificados')
+
+// Búsquedas
+const busquedaVerificados = ref('')
+const busquedaPendientes = ref('')
+
+// Datos
 const clientes = ref([])
 const cargando = ref(false)
 const guardando = ref(false)
-const busquedaRealizada = ref(false)
+const aprobando = ref(false)
+const aprobandoId = ref(null)
+
+// Dialogs
 const dialogDetalle = ref(false)
 const dialogCuotas = ref(false)
 const dialogEditar = ref(false)
+const dialogAprobar = ref(false)
 const clienteSeleccionado = ref(null)
 const clienteEditando = ref(null)
+const clienteAprobar = ref(null)
 const financiamientosCliente = ref([])
 const cuotas = ref([])
 
-// ✅ VERIFICAR SI ES ADMIN
+// Snackbar
+const snackbar = ref({ show: false, text: '', color: 'success' })
+
 const esAdmin = localStorage.getItem('admin_rol') === 'admin'
 
-const headers = [
+// Headers para verificados
+const headersVerificados = [
   { title: 'Nombre', key: 'nombre', sortable: true },
   { title: 'Cédula', key: 'cedula', sortable: true },
   { title: 'Teléfono', key: 'telefono' },
-  { title: 'Nivel', key: 'nivel', sortable: true },
-  { title: 'Score', key: 'score', sortable: true },
-  { title: 'Compras', key: 'total_compras', sortable: true },
-  { title: 'PIN App', key: 'pin' },
+  { title: 'Nivel', key: 'nivel' },
+  { title: 'Score', key: 'score' },
+  { title: 'PIN', key: 'pin' },
   { title: 'Acciones', key: 'acciones', sortable: false }
 ]
+
+// Headers para pendientes
+const headersPendientes = [
+  { title: 'Nombre', key: 'nombre', sortable: true },
+  { title: 'Cédula', key: 'cedula', sortable: true },
+  { title: 'Teléfono', key: 'telefono' },
+  { title: 'Foto', key: 'foto' },
+  { title: 'Registrado', key: 'creado_en' },
+  { title: 'Acciones', key: 'acciones', sortable: false }
+]
+
+// Computed: separar clientes
+const clientesVerificados = computed(() => 
+  clientes.value.filter(c => c.estado === 'aprobado')
+)
+
+const clientesPendientes = computed(() => 
+  clientes.value.filter(c => c.estado !== 'aprobado')
+)
+
+// Filtrados por búsqueda
+const clientesVerificadosFiltrados = computed(() => {
+  if (!busquedaVerificados.value) return clientesVerificados.value
+  const q = busquedaVerificados.value.toLowerCase()
+  return clientesVerificados.value.filter(c => 
+    c.nombre.toLowerCase().includes(q) || 
+    c.cedula.includes(q)
+  )
+})
+
+const clientesPendientesFiltrados = computed(() => {
+  if (!busquedaPendientes.value) return clientesPendientes.value
+  const q = busquedaPendientes.value.toLowerCase()
+  return clientesPendientes.value.filter(c => 
+    c.nombre.toLowerCase().includes(q) || 
+    c.cedula.includes(q)
+  )
+})
 
 const colorNivel = (nivel) => {
   const colores = { 
@@ -308,14 +476,6 @@ const formatearBS = (monto) => {
   })
 }
 
-const formatearUSD = (monto) => {
-  if (!monto) return '0.00'
-  return Number(monto).toLocaleString('en-US', { 
-    minimumFractionDigits: 2, 
-    maximumFractionDigits: 2 
-  })
-}
-
 const formatearFecha = (fechaStr) => {
   if (!fechaStr) return ''
   const fecha = new Date(fechaStr)
@@ -326,51 +486,8 @@ const formatearFecha = (fechaStr) => {
   })
 }
 
-const buscar = async () => {
-  if (!busqueda.value.trim()) {
-    await cargarTodos()
-    return
-  }
-  
-  cargando.value = true
-  busquedaRealizada.value = true
-  
-  try {
-    const data = await api.get(`/clientes/buscar/${busqueda.value}`)
-    if (data.encontrado) {
-      clientes.value = [data]
-      cargando.value = false
-      return
-    }
-  } catch (e) {}
-  
-  try {
-    const financiamientos = await api.get('/financiamientos')
-    const finEncontrado = financiamientos.find(f => 
-      f.codigo.toLowerCase() === busqueda.value.toLowerCase()
-    )
-    if (finEncontrado) {
-      const cliente = await api.get(`/clientes/${finEncontrado.cliente_id}`)
-      if (!cliente.error) {
-        clientes.value = [cliente]
-        cargando.value = false
-        return
-      }
-    }
-  } catch (e) {}
-  
-  try {
-    const todos = await api.get('/clientes')
-    const filtrados = todos.filter(c => 
-      c.nombre.toLowerCase().includes(busqueda.value.toLowerCase())
-    )
-    clientes.value = filtrados
-  } catch (e) {
-    console.error('Error buscando:', e)
-    clientes.value = []
-  } finally {
-    cargando.value = false
-  }
+const mostrarMensaje = (texto, color = 'success') => {
+  snackbar.value = { show: true, text: texto, color }
 }
 
 const cargarTodos = async () => {
@@ -380,13 +497,21 @@ const cargarTodos = async () => {
     clientes.value = data
   } catch (e) {
     console.error('Error cargando clientes:', e)
+    mostrarMensaje('Error al cargar clientes', 'error')
   } finally {
     cargando.value = false
   }
 }
 
 const verDetalle = async (cliente) => {
-  clienteSeleccionado.value = cliente
+  // Obtener datos completos del cliente
+  try {
+    const data = await api.get(`/clientes/${cliente.id}`)
+    clienteSeleccionado.value = data
+  } catch (e) {
+    clienteSeleccionado.value = cliente
+  }
+  
   dialogDetalle.value = true
   
   try {
@@ -407,6 +532,51 @@ const verCuotas = async (finId) => {
   }
 }
 
+// ✅ APROBAR CLIENTE
+const aprobarCliente = (cliente) => {
+  clienteAprobar.value = cliente
+  dialogAprobar.value = true
+}
+
+const confirmarAprobar = async () => {
+  if (!clienteAprobar.value) return
+  
+  aprobando.value = true
+  aprobandoId.value = clienteAprobar.value.id
+  
+  try {
+    const token = localStorage.getItem('admin_token')
+    const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/clientes/aprobar`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ cliente_id: clienteAprobar.value.id })
+    })
+    
+    const data = await response.json()
+    
+    if (data.success) {
+      mostrarMensaje(
+        `✅ ${clienteAprobar.value.nombre} aprobado. SMS: ${data.sms_enviado ? 'Enviado' : 'Falló'}`
+      )
+      await cargarTodos()
+      // Cambiar a la pestaña de verificados para ver el resultado
+      tabActiva.value = 'verificados'
+    } else {
+      mostrarMensaje(data.error || 'Error al aprobar', 'error')
+    }
+  } catch (error) {
+    console.error('Error aprobando:', error)
+    mostrarMensaje('Error al aprobar cliente', 'error')
+  } finally {
+    aprobando.value = false
+    aprobandoId.value = null
+    dialogAprobar.value = false
+  }
+}
+
 const editarCliente = (cliente) => {
   clienteEditando.value = { ...cliente }
   dialogEditar.value = true
@@ -416,25 +586,21 @@ const guardarEdicion = async () => {
   guardando.value = true
   try {
     const token = localStorage.getItem('admin_token')
-    const formData = new FormData()
-    formData.append('nombre', clienteEditando.value.nombre)
-    formData.append('telefono', clienteEditando.value.telefono)
-    formData.append('email', clienteEditando.value.email || '')
-    formData.append('direccion', clienteEditando.value.direccion || '')
-    
-    await api.put(`/clientes/${clienteEditando.value.id}`, formData, {
-      headers: { 
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'multipart/form-data'
-      }
+    await api.put(`/clientes/${clienteEditando.value.id}`, {
+      nombre: clienteEditando.value.nombre,
+      telefono: clienteEditando.value.telefono,
+      email: clienteEditando.value.email || '',
+      direccion: clienteEditando.value.direccion || ''
+    }, {
+      headers: { 'Authorization': `Bearer ${token}` }
     })
     
-    alert('Cliente actualizado')
+    mostrarMensaje('Cliente actualizado')
     dialogEditar.value = false
     await cargarTodos()
   } catch (error) {
-    console.error('Error actualizando cliente:', error)
-    alert('Error al actualizar cliente')
+    console.error('Error actualizando:', error)
+    mostrarMensaje('Error al actualizar', 'error')
   } finally {
     guardando.value = false
   }
@@ -448,11 +614,11 @@ const eliminarCliente = async (cliente) => {
     await api.delete(`/clientes/${cliente.id}`, {
       headers: { 'Authorization': `Bearer ${token}` }
     })
-    alert('Cliente eliminado')
+    mostrarMensaje('Cliente eliminado')
     await cargarTodos()
   } catch (error) {
-    console.error('Error eliminando cliente:', error)
-    alert('Error al eliminar cliente')
+    console.error('Error eliminando:', error)
+    mostrarMensaje('Error al eliminar', 'error')
   }
 }
 
