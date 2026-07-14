@@ -18,7 +18,7 @@ import os
 router = APIRouter(prefix="/clientes", tags=["Clientes"])
 
 # ============================================================
-# ✅ SCHEMA PARA JSON
+# SCHEMAS
 # ============================================================
 class ClienteCreate(BaseModel):
     nombre: str
@@ -30,8 +30,11 @@ class ClienteCreate(BaseModel):
     referencia_telefono: Optional[str] = ""
     referencia_parentesco: Optional[str] = ""
 
+class ClienteAprobar(BaseModel):
+    cliente_id: int
+
 # ============================================================
-# ✅ CONFIGURACIÓN DE CLOUDFLARE
+# CLOUDFLARE
 # ============================================================
 CLOUDFLARE_ACCOUNT_ID = os.getenv("CLOUDFLARE_ACCOUNT_ID", "")
 CLOUDFLARE_API_TOKEN = os.getenv("CLOUDFLARE_API_TOKEN", "")
@@ -56,7 +59,7 @@ async def subir_imagen_cloudflare(archivo_bytes: bytes, nombre_archivo: str) -> 
         return None
 
 # ============================================================
-# ✅ CREAR CLIENTE (RECIBE JSON) - PÚBLICO
+# CREAR CLIENTE - PÚBLICO (NO envía PIN, NO lo muestra)
 # ============================================================
 @router.post("")
 async def crear_cliente(
@@ -71,7 +74,7 @@ async def crear_cliente(
         if existe:
             return {"error": f"Cliente con cédula {cliente_data.cedula} ya existe", "success": False}
 
-        # Crear cliente
+        # Crear cliente (sin PIN visible, sin enviar SMS)
         db_cliente = Cliente(
             nombre=cliente_data.nombre,
             cedula=cliente_data.cedula,
@@ -81,42 +84,30 @@ async def crear_cliente(
             referencia_nombre=cliente_data.referencia_nombre or "",
             referencia_telefono=cliente_data.referencia_telefono or "",
             referencia_parentesco=cliente_data.referencia_parentesco or "",
+            # PIN se genera pero NO se muestra ni envía aún
             pin=generar_pin(),
-            token_app=generar_token()
+            token_app=generar_token(),
+            estado="pendiente"  # NUEVO: estado pendiente de aprobación
         )
         
         db.add(db_cliente)
         db.commit()
         db.refresh(db_cliente)
 
-        print(f"✅ Cliente registrado: {db_cliente.id} - {db_cliente.nombre}")
+        print(f"✅ Cliente registrado (PENDIENTE): {db_cliente.id} - {db_cliente.nombre}")
 
-        # ✅ ENVIAR PIN (SMS)
-        try:
-            enviar_pin_cliente(
-                telefono=db_cliente.telefono,
-                nombre=db_cliente.nombre,
-                cedula=db_cliente.cedula,
-                pin=db_cliente.pin
-            )
-        except Exception as e:
-            print(f"⚠️ Error enviando PIN: {e}")
-
-        # ✅ RESPUESTA
+        # ✅ NO ENVIAR PIN - El admin debe aprobar primero
         return {
             "success": True,
             "id": db_cliente.id,
-            "mensaje": f"Cliente registrado exitosamente",
-            "pin": db_cliente.pin,
+            "mensaje": "Registro exitoso. Tu cuenta está en verificación. Recibirás un SMS cuando sea aprobada.",
+            # NO devolvemos el PIN
             "cliente": {
                 "id": db_cliente.id,
                 "nombre": db_cliente.nombre,
                 "cedula": db_cliente.cedula,
                 "telefono": db_cliente.telefono,
-                "email": db_cliente.email,
-                "direccion": db_cliente.direccion,
-                "nivel": db_cliente.nivel,
-                "score": db_cliente.score
+                "estado": "pendiente"
             }
         }
 
@@ -125,7 +116,62 @@ async def crear_cliente(
         return {"error": str(e), "success": False}
 
 # ============================================================
-# ✅ LISTAR CLIENTES - CUALQUIER USUARIO AUTENTICADO
+# APROBAR CLIENTE Y ENVIAR PIN (SOLO ADMIN)
+# ============================================================
+@router.post("/aprobar")
+async def aprobar_cliente(
+    data: ClienteAprobar,
+    db: Session = Depends(get_db),
+    current_admin = Depends(get_current_admin)
+):
+    try:
+        cliente = db.query(Cliente).filter(Cliente.id == data.cliente_id).first()
+        if not cliente:
+            raise HTTPException(status_code=404, detail="Cliente no encontrado")
+        
+        if cliente.estado == "aprobado":
+            return {"error": "Cliente ya está aprobado", "success": False}
+        
+        # Generar nuevo PIN si no tiene
+        if not cliente.pin:
+            cliente.pin = generar_pin()
+        
+        cliente.estado = "aprobado"
+        db.commit()
+        
+        # ✅ ENVIAR PIN POR SMS (solo al aprobar)
+        try:
+            enviar_pin_cliente(
+                telefono=cliente.telefono,
+                nombre=cliente.nombre,
+                cedula=cliente.cedula,
+                pin=cliente.pin
+            )
+            sms_enviado = True
+        except Exception as e:
+            print(f"⚠️ Error enviando PIN: {e}")
+            sms_enviado = False
+        
+        return {
+            "success": True,
+            "mensaje": f"Cliente {cliente.nombre} aprobado.",
+            "sms_enviado": sms_enviado,
+            "cliente": {
+                "id": cliente.id,
+                "nombre": cliente.nombre,
+                "cedula": cliente.cedula,
+                "telefono": cliente.telefono,
+                "estado": "aprobado",
+                "pin": cliente.pin  # Solo el admin ve el PIN en la respuesta
+            }
+        }
+        
+    except Exception as e:
+        print(f"❌ Error aprobando cliente: {e}")
+        return {"error": str(e), "success": False}
+
+# ============================================================
+# LISTAR CLIENTES (con estado)
 # ============================================================
 @router.get("")
 def listar_clientes(
@@ -142,13 +188,15 @@ def listar_clientes(
             "email": c.email,
             "direccion": c.direccion,
             "nivel": c.nivel,
-            "score": c.score
+            "score": c.score,
+            "estado": c.estado or "pendiente",
+            "pin": c.pin if current_user.rol == "admin" else None  # Solo admin ve el PIN
         }
         for c in clientes
     ]
 
 # ============================================================
-# ✅ SUBIR FOTO DE CÉDULA (endpoint separado)
+# SUBIR FOTO
 # ============================================================
 @router.post("/{id}/foto")
 async def subir_foto_cedula(
@@ -174,7 +222,7 @@ async def subir_foto_cedula(
         return {"success": False, "error": str(e)}
 
 # ============================================================
-# ✅ BUSCAR CLIENTE POR CÉDULA (PÚBLICO)
+# BUSCAR CLIENTE
 # ============================================================
 @router.get("/buscar/{cedula}")
 def buscar_cliente_por_cedula(cedula: str, db: Session = Depends(get_db)):
@@ -204,6 +252,7 @@ def buscar_cliente_por_cedula(cedula: str, db: Session = Depends(get_db)):
         "nivel": cliente.nivel,
         "total_compras": cliente.total_compras,
         "url_cedula": cliente.url_cedula,
+        "estado": cliente.estado or "pendiente",
         "limite_disponible": disponible,
         "nivel_config": {
             "monto_max_usd": config["monto_max_usd"],
@@ -217,5 +266,4 @@ def buscar_cliente_por_cedula(cedula: str, db: Session = Depends(get_db)):
         }
     }
 
-# El resto de funciones (obtener_cliente, editar_cliente, eliminar_cliente, etc.)
-# se mantienen igual...
+# El resto de funciones se mantienen igual...

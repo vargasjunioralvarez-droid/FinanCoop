@@ -5,7 +5,7 @@ from sqlalchemy.orm import relationship
 from app.database import Base
 
 # ============================================================
-# ✅ MODELO: USUARIO
+# MODELO: USUARIO
 # ============================================================
 class Usuario(Base):
     __tablename__ = "usuarios"
@@ -15,13 +15,13 @@ class Usuario(Base):
     password = Column(String(255), nullable=False)
     nombre = Column(String(200), nullable=True)
     email = Column(String(200), nullable=True)
-    rol = Column(String(50), default="usuario")  # admin, cajero, usuario
+    rol = Column(String(50), default="usuario")
     activo = Column(Boolean, default=True)
     creado_en = Column(DateTime(timezone=True), server_default=func.now())
     actualizado_en = Column(DateTime(timezone=True), onupdate=func.now())
 
 # ============================================================
-# ✅ MODELO: CLIENTE
+# MODELO: CLIENTE (CON ESTADO)
 # ============================================================
 class Cliente(Base):
     __tablename__ = "clientes"
@@ -44,12 +44,14 @@ class Cliente(Base):
     cuotas_con_mora = Column(Integer, default=0)
     pin = Column(String(10), nullable=True)
     token_app = Column(String(500), nullable=True)
+    # ✅ NUEVO: Estado del cliente
+    estado = Column(String(20), default="pendiente")  # "pendiente" o "aprobado"
     ultimo_acceso = Column(DateTime(timezone=True), nullable=True)
     creado_en = Column(DateTime(timezone=True), server_default=func.now())
     actualizado_en = Column(DateTime(timezone=True), onupdate=func.now())
 
 # ============================================================
-# ✅ MODELO: TASA DOLAR
+# MODELO: TASA DOLAR
 # ============================================================
 class TasaDolar(Base):
     __tablename__ = "tasa_dolar"
@@ -60,7 +62,7 @@ class TasaDolar(Base):
     fecha = Column(DateTime(timezone=True), server_default=func.now())
 
 # ============================================================
-# ✅ MODELO: NIVEL CONFIG
+# MODELO: NIVEL CONFIG
 # ============================================================
 class NivelConfig(Base):
     __tablename__ = "niveles_config"
@@ -80,7 +82,7 @@ class NivelConfig(Base):
     actualizado_en = Column(DateTime(timezone=True), onupdate=func.now())
 
 # ============================================================
-# ✅ MODELO: FINANCIAMIENTO (COMPLETO)
+# MODELO: FINANCIAMIENTO
 # ============================================================
 class Financiamiento(Base):
     __tablename__ = "financiamientos"
@@ -90,7 +92,6 @@ class Financiamiento(Base):
     codigo = Column(String(20), unique=True, nullable=True)
     descripcion = Column(Text, nullable=True)
     
-    # Campos principales (usados por el router)
     monto_total_bs = Column(Float, nullable=False, default=0)
     monto_entrada_bs = Column(Float, nullable=False, default=0)
     monto_financia_bs = Column(Float, nullable=False, default=0)
@@ -110,7 +111,6 @@ class Financiamiento(Base):
     fecha_primera_cuota = Column(DateTime(timezone=True), nullable=True)
     fecha_completado = Column(DateTime(timezone=True), nullable=True)
     
-    # Campos de compatibilidad (para el código existente)
     monto = Column(Float, nullable=False, default=0)
     monto_usd = Column(Float, nullable=False, default=0)
     tasa_dolar = Column(Float, nullable=False, default=0)
@@ -131,7 +131,7 @@ class Financiamiento(Base):
     cuotas = relationship("Cuota", backref="financiamiento")
 
 # ============================================================
-# ✅ MODELO: CUOTA
+# MODELO: CUOTA
 # ============================================================
 class Cuota(Base):
     __tablename__ = "cuotas"
@@ -140,17 +140,13 @@ class Cuota(Base):
     financiamiento_id = Column(Integer, ForeignKey("financiamientos.id"), nullable=False)
     numero = Column(Integer, nullable=False)
     
-    # Montos base
     monto_base_bs = Column(Float, nullable=False, default=0)
     monto_base_usd = Column(Float, nullable=False, default=0)
-    
-    # Montos con intereses (si aplica)
     monto_interes_mora_bs = Column(Float, default=0)
     monto_interes_mora_usd = Column(Float, default=0)
     monto_total_bs = Column(Float, nullable=False, default=0)
     monto_total_usd = Column(Float, nullable=False, default=0)
     
-    # Para compatibilidad con el código existente
     monto = Column(Float, default=0)
     monto_usd = Column(Float, default=0)
     mora = Column(Float, default=0)
@@ -158,13 +154,13 @@ class Cuota(Base):
     
     fecha_vencimiento = Column(DateTime(timezone=True), nullable=False)
     fecha_pago = Column(DateTime(timezone=True), nullable=True)
-    estado = Column(String(50), default="pendiente")  # pendiente, conciliando, pagada, vencida
+    estado = Column(String(50), default="pendiente")
     
     creado_en = Column(DateTime(timezone=True), server_default=func.now())
     actualizado_en = Column(DateTime(timezone=True), onupdate=func.now())
 
 # ============================================================
-# ✅ MODELO: CONFIGURACIÓN PAGO
+# MODELO: CONFIGURACIÓN PAGO
 # ============================================================
 class ConfiguracionPago(Base):
     __tablename__ = "configuracion_pago"
@@ -179,7 +175,7 @@ class ConfiguracionPago(Base):
     actualizado_en = Column(DateTime(timezone=True), onupdate=func.now())
 
 # ============================================================
-# ✅ MODELO: PAGO
+# MODELO: PAGO
 # ============================================================
 class Pago(Base):
     __tablename__ = "pagos"
@@ -188,13 +184,11 @@ class Pago(Base):
     financiamiento_id = Column(Integer, ForeignKey("financiamientos.id"), nullable=False)
     cuota_id = Column(Integer, ForeignKey("cuotas.id"), nullable=True)
     
-    # Campos base
     monto = Column(Float, nullable=False, default=0)
     monto_usd = Column(Float, nullable=False, default=0)
     metodo = Column(String(50), nullable=False, default="efectivo")
     referencia = Column(String(100), nullable=True)
     
-    # Campos para conciliación
     monto_reportado_bs = Column(Float, nullable=True)
     monto_confirmado_bs = Column(Float, nullable=True)
     banco_origen = Column(String(100), nullable=True)
@@ -202,14 +196,12 @@ class Pago(Base):
     cedula_pago = Column(String(20), nullable=True)
     comprobante = Column(String(500), nullable=True)
     
-    # Estado y fechas
-    estado = Column(String(50), default="pendiente")  # pendiente, conciliado, rechazado
+    estado = Column(String(50), default="pendiente")
     fecha_reporte = Column(DateTime(timezone=True), server_default=func.now())
     fecha_confirmacion = Column(DateTime(timezone=True), nullable=True)
     conciliado_por = Column(String(100), nullable=True)
     
     creado_en = Column(DateTime(timezone=True), server_default=func.now())
     
-    # Relaciones
     financiamiento = relationship("Financiamiento", backref="pagos")
     cuota = relationship("Cuota", backref="pagos")

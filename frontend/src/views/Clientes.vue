@@ -44,18 +44,19 @@
           :items-per-page="10"
           class="elevation-1"
         >
+          <template v-slot:item.estado="{ item }">
+            <v-chip 
+              :color="item.estado === 'aprobado' ? 'success' : 'warning'" 
+              size="small"
+            >
+              {{ item.estado === 'aprobado' ? '✅ Aprobado' : '⏳ Pendiente' }}
+            </v-chip>
+          </template>
+          
           <template v-slot:item.nivel="{ item }">
             <v-chip :color="colorNivel(item.nivel)" size="small">
               {{ item.nivel }}
             </v-chip>
-          </template>
-          
-          <template v-slot:item.score="{ item }">
-            <v-chip color="info" size="small">{{ item.score }}</v-chip>
-          </template>
-          
-          <template v-slot:item.total_compras="{ item }">
-            <v-chip color="primary" size="small">{{ item.total_compras }}</v-chip>
           </template>
           
           <template v-slot:item.pin="{ item }">
@@ -71,7 +72,17 @@
                 color="info"
                 @click="verDetalle(item)"
               ></v-btn>
-              <!-- ✅ SOLO ADMIN PUEDE EDITAR -->
+              
+              <!-- ✅ BOTÓN APROBAR (solo si está pendiente) -->
+              <v-btn 
+                v-if="esAdmin && item.estado !== 'aprobado'"
+                icon="mdi-check-circle" 
+                size="small" 
+                color="success"
+                @click="aprobarCliente(item)"
+                :loading="aprobandoId === item.id"
+              ></v-btn>
+              
               <v-btn 
                 v-if="esAdmin"
                 icon="mdi-pencil" 
@@ -79,7 +90,6 @@
                 color="primary"
                 @click="editarCliente(item)"
               ></v-btn>
-              <!-- ✅ SOLO ADMIN PUEDE ELIMINAR -->
               <v-btn 
                 v-if="esAdmin"
                 icon="mdi-delete" 
@@ -99,7 +109,32 @@
       </v-col>
     </v-row>
     
-    <!-- Dialog: Editar Cliente (solo admin) -->
+    <!-- Dialog: Aprobar Cliente -->
+    <v-dialog v-model="dialogAprobar" max-width="400">
+      <v-card>
+        <v-card-title>✅ Aprobar Cliente</v-card-title>
+        <v-card-text v-if="clienteAprobar">
+          <p>¿Aprobar a <strong>{{ clienteAprobar.nombre }}</strong>?</p>
+          <p class="text-caption text-grey">
+            Se enviará un SMS con el PIN de acceso al número:<br>
+            <strong>{{ clienteAprobar.telefono }}</strong>
+          </p>
+        </v-card-text>
+        <v-card-actions>
+          <v-btn @click="dialogAprobar = false">Cancelar</v-btn>
+          <v-btn 
+            color="success" 
+            @click="confirmarAprobar" 
+            :loading="aprobando"
+          >
+            <v-icon start>mdi-check</v-icon>
+            Aprobar y Enviar PIN
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Dialog: Editar Cliente -->
     <v-dialog v-model="dialogEditar" max-width="500">
       <v-card>
         <v-card-title>✏️ Editar Cliente</v-card-title>
@@ -136,7 +171,15 @@
             <v-col cols="6">
               <p><strong>Score:</strong> {{ clienteSeleccionado.score }} compras</p>
               <p><strong>Total Compras:</strong> {{ clienteSeleccionado.total_compras }}</p>
-              <p><strong>PIN App:</strong> {{ clienteSeleccionado.pin || 'Sin PIN' }}</p>
+              <p><strong>Estado:</strong> 
+                <v-chip 
+                  :color="clienteSeleccionado.estado === 'aprobado' ? 'success' : 'warning'" 
+                  size="small"
+                >
+                  {{ clienteSeleccionado.estado === 'aprobado' ? 'Aprobado' : 'Pendiente' }}
+                </v-chip>
+              </p>
+              <p><strong>PIN:</strong> {{ clienteSeleccionado.pin || 'Sin PIN' }}</p>
             </v-col>
           </v-row>
           
@@ -197,7 +240,7 @@
       </v-card>
     </v-dialog>
     
-    <!-- Dialog: Cuotas del Financiamiento -->
+    <!-- Dialog: Cuotas -->
     <v-dialog v-model="dialogCuotas" max-width="500">
       <v-card>
         <v-card-title>
@@ -266,26 +309,30 @@ const busqueda = ref('')
 const clientes = ref([])
 const cargando = ref(false)
 const guardando = ref(false)
+const aprobando = ref(false)
+const aprobandoId = ref(null)
 const busquedaRealizada = ref(false)
 const dialogDetalle = ref(false)
 const dialogCuotas = ref(false)
 const dialogEditar = ref(false)
+const dialogAprobar = ref(false)
 const clienteSeleccionado = ref(null)
 const clienteEditando = ref(null)
+const clienteAprobar = ref(null)
 const financiamientosCliente = ref([])
 const cuotas = ref([])
 
-// ✅ VERIFICAR SI ES ADMIN
 const esAdmin = localStorage.getItem('admin_rol') === 'admin'
 
 const headers = [
   { title: 'Nombre', key: 'nombre', sortable: true },
   { title: 'Cédula', key: 'cedula', sortable: true },
   { title: 'Teléfono', key: 'telefono' },
+  { title: 'Estado', key: 'estado' },
   { title: 'Nivel', key: 'nivel', sortable: true },
   { title: 'Score', key: 'score', sortable: true },
   { title: 'Compras', key: 'total_compras', sortable: true },
-  { title: 'PIN App', key: 'pin' },
+  { title: 'PIN', key: 'pin' },
   { title: 'Acciones', key: 'acciones', sortable: false }
 ]
 
@@ -404,6 +451,47 @@ const verCuotas = async (finId) => {
     dialogCuotas.value = true
   } catch (e) {
     console.error('Error cargando cuotas:', e)
+  }
+}
+
+// ✅ APROBAR CLIENTE
+const aprobarCliente = (cliente) => {
+  clienteAprobar.value = cliente
+  dialogAprobar.value = true
+}
+
+const confirmarAprobar = async () => {
+  if (!clienteAprobar.value) return
+  
+  aprobando.value = true
+  aprobandoId.value = clienteAprobar.value.id
+  
+  try {
+    const token = localStorage.getItem('admin_token')
+    const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/clientes/aprobar`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ cliente_id: clienteAprobar.value.id })
+    })
+    
+    const data = await response.json()
+    
+    if (data.success) {
+      alert(`✅ Cliente aprobado.\n📱 SMS enviado: ${data.sms_enviado ? 'Sí' : 'No'}\n🔑 PIN: ${data.cliente.pin}`)
+      await cargarTodos()
+    } else {
+      alert('Error: ' + (data.error || 'No se pudo aprobar'))
+    }
+  } catch (error) {
+    console.error('Error aprobando:', error)
+    alert('Error al aprobar cliente')
+  } finally {
+    aprobando.value = false
+    aprobandoId.value = null
+    dialogAprobar.value = false
   }
 }
 
