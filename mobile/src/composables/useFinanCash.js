@@ -1,11 +1,10 @@
 // mobile/src/composables/useFinanCash.js
 import { ref, computed } from 'vue'
-import { CapacitorHttp } from '@capacitor/core'
 
 const API_URL = 'https://financoop.onrender.com'
 
 // ============ TIMEOUT DE INACTIVIDAD ============
-const INACTIVITY_TIMEOUT = 15 * 60 * 1000 // 15 minutos
+const INACTIVITY_TIMEOUT = 15 * 60 * 1000
 let inactivityTimer = null
 let listenersAdded = false
 let lastResetTime = 0
@@ -66,11 +65,8 @@ const metodosPago = [
 
 // ============ FUNCIONES DE INACTIVIDAD ============
 function resetInactivityTimer() {
-  // Evita reinicios excesivos (mínimo 1 segundo entre reinicios)
   const now = Date.now()
-  if (now - lastResetTime < 1000) {
-    return
-  }
+  if (now - lastResetTime < 1000) return
   lastResetTime = now
   
   if (inactivityTimer) {
@@ -89,13 +85,11 @@ function resetInactivityTimer() {
 
 function cerrarSesionPorInactividad() {
   console.log('🔒 Cerrando sesión por inactividad')
-  
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('inactividad', { 
       detail: { mensaje: 'Sesión cerrada por inactividad' }
     }))
   }
-  
   cerrarSesion()
 }
 
@@ -105,11 +99,7 @@ function iniciarListenersInactividad() {
   
   console.log('📡 Activando listeners de inactividad')
   
-  const eventos = [
-    'click', 'touchstart', 'mousemove', 'scroll', 
-    'keydown', 'focus', 'input', 'change'
-  ]
-  
+  const eventos = ['click', 'touchstart', 'mousemove', 'scroll', 'keydown', 'focus', 'input', 'change']
   let throttleTimer = null
   
   const reiniciar = () => {
@@ -129,12 +119,9 @@ function iniciarListenersInactividad() {
 
 function limpiarListenersInactividad() {
   if (!listenersAdded) return
-  
   const { eventos, reiniciar } = window.__inactivityListeners || {}
   if (eventos && reiniciar) {
-    eventos.forEach(evento => {
-      document.removeEventListener(evento, reiniciar)
-    })
+    eventos.forEach(evento => document.removeEventListener(evento, reiniciar))
   }
   listenersAdded = false
   window.__inactivityListeners = null
@@ -142,7 +129,6 @@ function limpiarListenersInactividad() {
 
 // ============ COMPUTED ============
 const nivelActual = computed(() => nivelesConfig.value[usuario.value.nivel] || {})
-
 const siguienteNivel = computed(() => {
   const orden = ['nuevo', 'bronce', 'plata', 'oro', 'platino']
   const idx = orden.indexOf(usuario.value.nivel)
@@ -151,7 +137,6 @@ const siguienteNivel = computed(() => {
   const config = nivelesConfig.value[key]
   return { key, max_score: config ? config.min_score : 999 }
 })
-
 const progresoNivel = computed(() => {
   if (!siguienteNivel.value) return 100
   const min = nivelesConfig.value[usuario.value.nivel]?.min_score || 0
@@ -159,112 +144,71 @@ const progresoNivel = computed(() => {
   const current = usuario.value.score || 0
   return Math.min(100, ((current - min) / (max - min)) * 100)
 })
-
 const lineaUsada = computed(() => datosCliente.value?.limite?.usado_usd || 0)
 const lineaDisponible = computed(() => datosCliente.value?.limite?.disponible_usd || 0)
-
 const cuotasPendientes = computed(() => 
   todasCuotas.value.filter(c => c.estado === 'pendiente' && new Date(c.fecha_vencimiento) >= new Date())
 )
-
 const cuotasVencidas = computed(() =>
   todasCuotas.value.filter(c => c.estado === 'pendiente' && new Date(c.fecha_vencimiento) < new Date())
 )
-
 const cuotasProximas = computed(() => {
   return todasCuotas.value
     .filter(c => c.estado === 'pendiente')
     .sort((a, b) => new Date(a.fecha_vencimiento) - new Date(b.fecha_vencimiento))
 })
-
 const totalDeudaBs = computed(() => 
   financiamientos.value.reduce((sum, f) => sum + (f.saldo_pendiente_bs || 0), 0)
 )
-
 const totalDeudaUsd = computed(() => 
   financiamientos.value.reduce((sum, f) => sum + (f.saldo_pendiente_usd_ref || 0), 0)
 )
-
 const badgeCount = computed(() => cuotasVencidas.value.length)
 
 // ============ FUNCIONES AUXILIARES ============
 function formatearBS(valor) {
   if (!valor && valor !== 0) return '0,00'
-  return new Intl.NumberFormat('es-VE', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  }).format(valor)
+  return new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(valor)
 }
-
 function formatearUSD(valor) {
   if (!valor && valor !== 0) return '0.00'
-  return new Intl.NumberFormat('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  }).format(valor)
+  return new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(valor)
 }
-
 function formatearNumero(valor) {
   if (!valor && valor !== 0) return '0'
   return new Intl.NumberFormat('es-VE').format(valor)
 }
-
 function formatearFecha(fechaStr) {
   if (!fechaStr) return ''
   const fecha = new Date(fechaStr)
-  return fecha.toLocaleDateString('es-VE', {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short'
-  })
+  return fecha.toLocaleDateString('es-VE', { weekday: 'short', day: 'numeric', month: 'short' })
 }
-
 function formatearFechaCorta(fechaStr) {
   if (!fechaStr) return ''
   const fecha = new Date(fechaStr)
-  return fecha.toLocaleDateString('es-VE', {
-    day: 'numeric',
-    month: 'short'
-  })
+  return fecha.toLocaleDateString('es-VE', { day: 'numeric', month: 'short' })
 }
-
 function colorNivel(nivel) {
-  const colores = {
-    nuevo: 'grey',
-    bronce: '#cd7f32',
-    plata: '#c0c0c0',
-    oro: '#ffd700',
-    platino: '#e5e4e2'
-  }
+  const colores = { nuevo: 'grey', bronce: '#cd7f32', plata: '#c0c0c0', oro: '#ffd700', platino: '#e5e4e2' }
   return colores[nivel] || 'primary'
 }
-
 function iconoNivel(nivel) {
-  const iconos = {
-    nuevo: 'mdi-star-outline',
-    bronce: 'mdi-medal',
-    plata: 'mdi-medal-outline',
-    oro: 'mdi-trophy',
-    platino: 'mdi-crown'
-  }
+  const iconos = { nuevo: 'mdi-star-outline', bronce: 'mdi-medal', plata: 'mdi-medal-outline', oro: 'mdi-trophy', platino: 'mdi-crown' }
   return iconos[nivel] || 'mdi-account'
 }
-
 function copiarAlPortapapeles(texto) {
   if (navigator.clipboard) {
-    navigator.clipboard.writeText(texto).then(() => {
-      console.log('✅ Copiado:', texto)
-    }).catch(() => {
-      console.log('📋 Copiado (fallback):', texto)
-    })
+    navigator.clipboard.writeText(texto).then(() => console.log('✅ Copiado:', texto))
   } else {
-    console.log('📋 Copiado (fallback):', texto)
+    console.log('📋 Copiado:', texto)
   }
 }
 
-// ============ API CALLS ============
+// ============ API CALLS CON fetch ============
 async function apiCall(endpoint, options = {}) {
   const url = `${API_URL}${endpoint}`
+  
+  const currentToken = localStorage.getItem('financoop_token') || token.value
   
   const headers = {
     'Content-Type': 'application/json',
@@ -272,39 +216,44 @@ async function apiCall(endpoint, options = {}) {
     ...options.headers
   }
   
-  if (token.value && endpoint.includes('/app/')) {
-    headers['Authorization'] = `Bearer ${token.value}`
+  if (currentToken && endpoint.includes('/app/')) {
+    headers['Authorization'] = `Bearer ${currentToken}`
+    console.log('🔑 Token enviado en header:', currentToken.substring(0, 20) + '...')
   }
   
   try {
     console.log(`🌐 API Call: ${options.method || 'GET'} ${url}`)
     
-    const response = await CapacitorHttp.request({
+    const fetchOptions = {
       method: options.method || 'GET',
-      url: url,
       headers: headers,
-      data: options.body || undefined,
-      connectTimeout: 30000,
-      readTimeout: 30000
-    })
+    }
+    
+    if (options.body && (options.method === 'POST' || options.method === 'PUT')) {
+      fetchOptions.body = JSON.stringify(options.body)
+    }
+    
+    console.log('📤 Headers enviados:', JSON.stringify(headers))
+    
+    const response = await fetch(url, fetchOptions)
+    const data = await response.json()
     
     console.log(`✅ Response status:`, response.status)
+    console.log(`📥 Response data:`, JSON.stringify(data).substring(0, 200))
     
-    if (response.status >= 400) {
-      const errorMsg = response.data?.detail || response.data?.error || `HTTP ${response.status}`
+    if (!response.ok) {
+      const errorMsg = data?.detail || data?.error || `HTTP ${response.status}`
       throw new Error(errorMsg)
     }
     
-    return response.data
+    return data
     
   } catch (err) {
     console.error('❌ API Error:', err)
-    
-    if (err.message?.includes('401') || err.message?.includes('Sesión no válida')) {
+    if (err.message?.includes('401') || err.message?.includes('Sesión no válida') || err.message?.includes('Token')) {
       console.log('🔒 Token inválido, cerrando sesión...')
       cerrarSesion()
     }
-    
     throw err
   }
 }
@@ -324,19 +273,19 @@ async function iniciarSesion() {
   }
   
   try {
-    const response = await CapacitorHttp.request({
+    console.log('🔑 Intentando login con:', { cedula, pin: '***' })
+    
+    const response = await fetch(`${API_URL}/app/login`, {
       method: 'POST',
-      url: `${API_URL}/app/login`,
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json'
       },
-      data: { cedula, pin },
-      connectTimeout: 30000,
-      readTimeout: 30000
+      body: JSON.stringify({ cedula, pin })
     })
     
-    const data = response.data
+    const data = await response.json()
+    console.log('📥 Respuesta login:', JSON.stringify(data).substring(0, 300))
     
     if (data.error) {
       error.value = data.error
@@ -347,7 +296,7 @@ async function iniciarSesion() {
     if (data.token) {
       token.value = data.token
       localStorage.setItem('financoop_token', data.token)
-      console.log('✅ Login exitoso, token guardado')
+      console.log('✅ Login exitoso, token guardado:', data.token.substring(0, 20) + '...')
       
       iniciarListenersInactividad()
       resetInactivityTimer()
@@ -358,6 +307,8 @@ async function iniciarSesion() {
     }
     
     usuario.value = data.cliente || {}
+    
+    console.log('🔄 Cargando datos después del login...')
     await cargarDatos()
     
     cargando.value = false
@@ -373,14 +324,11 @@ async function iniciarSesion() {
 
 function cerrarSesion() {
   console.log('🔒 Cerrando sesión manualmente')
-  
   if (inactivityTimer) {
     clearTimeout(inactivityTimer)
     inactivityTimer = null
   }
-  
   limpiarListenersInactividad()
-  
   token.value = null
   localStorage.removeItem('financoop_token')
   usuario.value = {}
@@ -397,22 +345,15 @@ async function registrarCliente(formData) {
   
   try {
     const data = {}
-    formData.forEach((value, key) => {
-      data[key] = value
-    })
+    formData.forEach((value, key) => data[key] = value)
     
-    const response = await CapacitorHttp.request({
+    const response = await fetch(`${API_URL}/clientes`, {
       method: 'POST',
-      url: `${API_URL}/clientes`,
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      },
-      data: data,
-      connectTimeout: 60000,
-      readTimeout: 60000
+      headers: { 'Content-Type': 'multipart/form-data' },
+      body: data
     })
     
-    const resData = response.data
+    const resData = await response.json()
     
     if (resData.error || resData.success === false) {
       error.value = resData.error || 'Error al registrar'
@@ -425,11 +366,7 @@ async function registrarCliente(formData) {
     }
     
     cargando.value = false
-    return { 
-      success: true, 
-      pin: resData.pin_generado, 
-      mensaje: resData.mensaje 
-    }
+    return { success: true, pin: resData.pin_generado, mensaje: resData.mensaje }
   } catch (err) {
     console.error('❌ Error registrando:', err)
     error.value = 'Error de conexión: ' + (err.message || 'desconocido')
@@ -438,32 +375,44 @@ async function registrarCliente(formData) {
   }
 }
 
-async function verificarCedula(cedula) {
+// ============ ✅ NUEVO: OBTENER PERFIL DEL CLIENTE (APP MÓVIL) ============
+async function miPerfil() {
   try {
-    const data = await apiCall(`/clientes/buscar/${cedula}`)
-    return data.encontrado || false
+    const data = await apiCall('/app/mi-perfil')
+    if (data.error) {
+      console.error('❌ Error obteniendo perfil:', data.error)
+      return null
+    }
+    return data
   } catch (err) {
-    return false
+    console.error('❌ Error en miPerfil:', err)
+    return null
   }
 }
 
 // ============ CARGAR DATOS ============
 async function cargarDatos() {
-  if (!token.value) {
-    console.log('⚠️ No hay token')
+  const currentToken = localStorage.getItem('financoop_token')
+  
+  if (!currentToken) {
+    console.log('⚠️ No hay token en localStorage')
     return
   }
   
+  if (!token.value) {
+    token.value = currentToken
+  }
+  
   console.log('🔄 Cargando datos...')
-  console.log('🔑 Token usado:', token.value)
+  console.log('🔑 Token usado:', currentToken.substring(0, 20) + '...')
   
   try {
     const data = await apiCall('/app/mis-datos')
     
-    console.log('📥 Datos del cliente:', data)
+    console.log('📥 Datos del cliente recibidos:', JSON.stringify(data).substring(0, 300))
     
     if (data.error) {
-      console.error('❌ Error:', data.error)
+      console.error('❌ Error en mis-datos:', data.error)
       if (data.error.includes('Sesión') || data.error.includes('Token')) {
         cerrarSesion()
       }
@@ -471,49 +420,55 @@ async function cargarDatos() {
     }
     
     datosCliente.value = data
-    
     if (data.cliente) {
       usuario.value = data.cliente
+      console.log('✅ Usuario actualizado:', data.cliente.nombre)
     }
     
     tasaActual.value = data.tasa_actual || 0
     financiamientos.value = data.financiamientos_activos || []
     datosPago.value = data.datos_pago || {}
     
+    console.log('✅ Datos principales cargados. Financiamientos:', financiamientos.value.length)
+    
     try {
+      console.log('🔄 Cargando cuotas...')
       const cuotasData = await apiCall('/app/mis-cuotas')
-      console.log('📥 Respuesta de cuotas:', cuotasData)
+      console.log('📥 Respuesta de cuotas:', JSON.stringify(cuotasData).substring(0, 200))
+      
       if (cuotasData && !cuotasData.error) {
         todasCuotas.value = cuotasData.cuotas || []
+        console.log('✅ Cuotas cargadas:', todasCuotas.value.length)
+      } else if (cuotasData?.error) {
+        console.error('❌ Error en cuotas:', cuotasData.error)
+        todasCuotas.value = []
       }
     } catch (err) {
-      console.error('❌ Error cuotas:', err)
+      console.error('❌ Error cargando cuotas:', err)
       todasCuotas.value = []
     }
     
-    console.log('✅ Datos cargados exitosamente')
+    console.log('✅ Todos los datos cargados exitosamente')
     resetInactivityTimer()
     
   } catch (err) {
     console.error('❌ Error cargando datos:', err)
+    error.value = 'Error cargando datos: ' + (err.message || 'desconocido')
   }
 }
 
 // ============ RECALCULAR MONTOS ============
 function recalcularMontosConNuevaTasa(nuevaTasa) {
   tasaActual.value = nuevaTasa
-  
   financiamientos.value = financiamientos.value.map(fin => {
     fin.monto_total_bs = (fin.monto_total_usd_ref || 0) * nuevaTasa
     fin.saldo_pendiente_bs = (fin.saldo_pendiente_usd_ref || 0) * nuevaTasa
     fin.monto_entrada_bs = (fin.monto_entrada_usd_ref || 0) * nuevaTasa
-    
     if (fin.proxima_cuota) {
       fin.proxima_cuota.monto_bs = (fin.proxima_cuota.monto_usd_ref || 0) * nuevaTasa
     }
     return fin
   })
-  
   todasCuotas.value = todasCuotas.value.map(c => {
     const usdRef = c.monto_total_usd_ref || c.monto_usd_ref || 0
     c.monto_total_bs = usdRef * nuevaTasa
@@ -565,19 +520,18 @@ async function reportarPago() {
       cedula_pago: pagoForm.value.cedula_pago || ''
     }
     
-    const response = await CapacitorHttp.request({
+    const currentToken = localStorage.getItem('financoop_token') || token.value
+    
+    const response = await fetch(`${API_URL}/pagos/reportar`, {
       method: 'POST',
-      url: `${API_URL}/pagos/reportar`,
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': token.value ? `Bearer ${token.value}` : ''
+        'Authorization': currentToken ? `Bearer ${currentToken}` : ''
       },
-      data: pagoData,
-      connectTimeout: 30000,
-      readTimeout: 30000
+      body: JSON.stringify(pagoData)
     })
     
-    const data = response.data
+    const data = await response.json()
     
     if (data.error) {
       error.value = data.error
@@ -621,11 +575,7 @@ async function actualizarPerfil(datos) {
       method: 'PUT',
       body: datos
     })
-    
-    if (data.error) {
-      return { success: false, error: data.error }
-    }
-    
+    if (data.error) return { success: false, error: data.error }
     await cargarDatos()
     return { success: true }
   } catch (err) {
@@ -684,7 +634,7 @@ export function useFinanCash() {
     actualizarPerfil,
     subirFotoCedula,
     registrarCliente,
-    verificarCedula,
+    miPerfil,
     setCuotaSeleccionada,
     recalcularMontosConNuevaTasa,
     resetInactivityTimer,

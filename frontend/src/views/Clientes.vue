@@ -176,7 +176,7 @@
             </v-list-item>
           </v-list>
           <p class="text-caption text-grey mt-3">
-            Se enviará un SMS con el PIN de acceso al número registrado.
+            Se enviará un SMS/WhatsApp con el PIN de acceso al número registrado.
           </p>
         </v-card-text>
         <v-card-actions>
@@ -364,7 +364,7 @@
     </v-dialog>
 
     <!-- Snackbar para notificaciones -->
-    <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="3000">
+    <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="5000" multi-line>
       {{ snackbar.text }}
       <template v-slot:actions>
         <v-btn variant="text" @click="snackbar.show = false">Cerrar</v-btn>
@@ -490,11 +490,63 @@ const mostrarMensaje = (texto, color = 'success') => {
   snackbar.value = { show: true, text: texto, color }
 }
 
+// ============================================================
+// ✅ CARGAR SOLICITUDES LOCALES (desde RegisterView)
+// ============================================================
+const cargarSolicitudesLocales = () => {
+  const solicitudesStr = localStorage.getItem('solicitudes_clientes')
+  if (!solicitudesStr) return
+  
+  try {
+    const solicitudes = JSON.parse(solicitudesStr)
+    if (!solicitudes.length) return
+    
+    console.log(`📋 Cargando ${solicitudes.length} solicitudes locales...`)
+    
+    // Convertir solicitudes a clientes pendientes
+    const nuevosClientes = solicitudes.map((sol, index) => ({
+      id: `local_${Date.now()}_${index}`,
+      nombre: sol.nombre || 'Sin nombre',
+      cedula: sol.cedula || '000000',
+      telefono: sol.telefono || '',
+      email: sol.email || '',
+      direccion: sol.direccion || '',
+      referencia_nombre: sol.referencia_nombre || '',
+      referencia_telefono: sol.referencia_telefono || '',
+      referencia_parentesco: sol.referencia_parentesco || '',
+      estado: 'pendiente',
+      url_cedula: sol.tiene_foto ? '📷 Sí' : null,
+      creado_en: sol.fecha_solicitud ? new Date(sol.fecha_solicitud).toLocaleDateString('es-VE') : 'Hoy',
+      score: 0,
+      total_compras: 0,
+      nivel: 'nuevo',
+      pin: null,
+      _esLocal: true
+    }))
+    
+    // ✅ Agregar a la lista de clientes (evitar duplicados)
+    const cedulasExistentes = new Set(clientes.value.map(c => c.cedula))
+    const clientesFiltrados = nuevosClientes.filter(c => !cedulasExistentes.has(c.cedula))
+    
+    if (clientesFiltrados.length) {
+      clientes.value = [...clientes.value, ...clientesFiltrados]
+      console.log(`✅ ${clientesFiltrados.length} solicitudes locales agregadas`)
+    }
+    
+  } catch (error) {
+    console.error('❌ Error cargando solicitudes locales:', error)
+  }
+}
+
 const cargarTodos = async () => {
   cargando.value = true
   try {
     const data = await api.get('/clientes')
     clientes.value = data
+    
+    // ✅ SIEMPRE cargar solicitudes locales
+    cargarSolicitudesLocales()
+    
   } catch (e) {
     console.error('Error cargando clientes:', e)
     mostrarMensaje('Error al cargar clientes', 'error')
@@ -504,6 +556,14 @@ const cargarTodos = async () => {
 }
 
 const verDetalle = async (cliente) => {
+  // Si es local, no tiene ID real
+  if (cliente._esLocal) {
+    clienteSeleccionado.value = cliente
+    dialogDetalle.value = true
+    financiamientosCliente.value = []
+    return
+  }
+  
   // Obtener datos completos del cliente
   try {
     const data = await api.get(`/clientes/${cliente.id}`)
@@ -546,30 +606,98 @@ const confirmarAprobar = async () => {
   
   try {
     const token = localStorage.getItem('admin_token')
-    const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/clientes/aprobar`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({ cliente_id: clienteAprobar.value.id })
-    })
+    const esLocal = clienteAprobar.value._esLocal || 
+                    clienteAprobar.value.id?.toString().startsWith('local_')
     
-    const data = await response.json()
-    
-    if (data.success) {
-      mostrarMensaje(
-        `✅ ${clienteAprobar.value.nombre} aprobado. SMS: ${data.sms_enviado ? 'Enviado' : 'Falló'}`
-      )
-      await cargarTodos()
-      // Cambiar a la pestaña de verificados para ver el resultado
-      tabActiva.value = 'verificados'
+    if (esLocal) {
+      // 🔥 CLIENTE LOCAL: Crear en backend y luego aprobar
+      mostrarMensaje('📝 Creando cliente en el sistema...', 'info')
+      
+      const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/clientes`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          nombre: clienteAprobar.value.nombre,
+          cedula: clienteAprobar.value.cedula,
+          telefono: clienteAprobar.value.telefono,
+          email: clienteAprobar.value.email || '',
+          direccion: clienteAprobar.value.direccion || '',
+          referencia_nombre: clienteAprobar.value.referencia_nombre || '',
+          referencia_telefono: clienteAprobar.value.referencia_telefono || '',
+          referencia_parentesco: clienteAprobar.value.referencia_parentesco || ''
+        })
+      })
+      
+      const data = await response.json()
+      
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Error al crear cliente')
+      }
+      
+      // ✅ Eliminar de localStorage
+      const solicitudes = JSON.parse(localStorage.getItem('solicitudes_clientes') || '[]')
+      const nuevas = solicitudes.filter(s => s.cedula !== clienteAprobar.value.cedula)
+      localStorage.setItem('solicitudes_clientes', JSON.stringify(nuevas))
+      
+      mostrarMensaje(`✅ ${clienteAprobar.value.nombre} creado exitosamente`, 'success')
+      
+      // 🔥 Ahora aprobar el cliente recién creado (para enviar PIN)
+      if (data.id) {
+        mostrarMensaje('📱 Enviando PIN por WhatsApp...', 'info')
+        
+        const aprobarResponse = await fetch(`${import.meta.env.VITE_API_URL || ''}/clientes/aprobar`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ cliente_id: data.id })
+        })
+        
+        const aprobarData = await aprobarResponse.json()
+        
+        if (aprobarData.success) {
+          mostrarMensaje(
+            `✅ ${clienteAprobar.value.nombre} aprobado. WhatsApp: ${aprobarData.sms_enviado ? '✅ Enviado' : '⚠️ Falló'}`,
+            aprobarData.sms_enviado ? 'success' : 'warning'
+          )
+        } else {
+          throw new Error(aprobarData.error || 'Error al aprobar')
+        }
+      }
+      
     } else {
-      mostrarMensaje(data.error || 'Error al aprobar', 'error')
+      // 🔥 CLIENTE EXISTENTE: Aprobar directamente
+      const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/clientes/aprobar`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ cliente_id: clienteAprobar.value.id })
+      })
+      
+      const data = await response.json()
+      
+      if (!data.success) {
+        throw new Error(data.error || 'Error al aprobar')
+      }
+      
+      mostrarMensaje(
+        `✅ ${clienteAprobar.value.nombre} aprobado. WhatsApp: ${data.sms_enviado ? '✅ Enviado' : '⚠️ Falló'}`,
+        data.sms_enviado ? 'success' : 'warning'
+      )
     }
+    
+    // Recargar y cambiar a pestaña de verificados
+    await cargarTodos()
+    tabActiva.value = 'verificados'
+    
   } catch (error) {
     console.error('Error aprobando:', error)
-    mostrarMensaje('Error al aprobar cliente', 'error')
+    mostrarMensaje(error.message || 'Error al aprobar cliente', 'error')
   } finally {
     aprobando.value = false
     aprobandoId.value = null

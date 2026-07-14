@@ -13,8 +13,8 @@
 
           <v-divider style="border-color: rgba(255,255,255,0.06);" />
 
-          <!-- FORMULARIO DE REGISTRO (solo si NO está exitoso) -->
-          <template v-if="!registroExitoso">
+          <!-- FORMULARIO DE REGISTRO -->
+          <div v-if="!registroExitoso">
             <!-- Stepper custom -->
             <div class="stepper-custom">
               <div class="stepper-header">
@@ -38,74 +38,100 @@
 
             <!-- PASO 1 -->
             <div v-show="paso === 1" class="step-panel mt-3">
-              <v-text-field 
-                v-model="registro.nombre" 
-                label="Nombre completo *" 
-                variant="outlined" 
-                density="compact" 
-                prepend-inner-icon="mdi-account" 
-                :rules="[v => !!v || 'Requerido']" 
-                hide-details 
-                class="mb-2" 
-              />
-              <v-text-field 
-                v-model="registro.cedula" 
-                label="Cédula *" 
-                variant="outlined" 
-                density="compact" 
-                prepend-inner-icon="mdi-card-account-details" 
-                :rules="[v => !!v || 'Requerido', v => v.length >= 6 || 'Mínimo 6 dígitos']" 
-                hide-details 
-                class="mb-2" 
-                inputmode="numeric"
-              />
-              
-              <div class="phone-row mb-2">
-                <div class="codigo-wrapper">
-                  <label class="codigo-label">Cod.</label>
-                  <select v-model="codigoPais" class="codigo-select">
-                    <option v-for="c in codigosPaises" :key="c.codigo" :value="c.codigo">
-                      {{ c.codigo }}
-                    </option>
-                  </select>
-                </div>
+              <div class="field-wrapper mb-3">
+                <label class="field-label">
+                  <v-icon size="16" class="label-icon">mdi-account</v-icon>
+                  Nombre completo *
+                </label>
                 <v-text-field 
-                  v-model="registro.telefono" 
-                  label="Teléfono *" 
+                  v-model="registro.nombre" 
                   variant="outlined" 
                   density="compact" 
-                  prepend-inner-icon="mdi-phone" 
-                  :rules="[v => !!v || 'Requerido']" 
                   hide-details 
-                  class="telefono-input" 
-                  placeholder="4121234567"
+                  class="custom-field" 
+                  placeholder="Ej: Juan Pérez"
+                  bg-color="rgba(255,255,255,0.04)"
+                />
+              </div>
+
+              <div class="field-wrapper mb-3">
+                <label class="field-label">
+                  <v-icon size="16" class="label-icon">mdi-card-account-details</v-icon>
+                  Cédula *
+                </label>
+                <v-text-field 
+                  v-model="registro.cedula" 
+                  variant="outlined" 
+                  density="compact" 
+                  hide-details 
+                  class="custom-field" 
                   inputmode="numeric"
-                  type="tel"
+                  placeholder="Ej: 12345678"
+                  bg-color="rgba(255,255,255,0.04)"
                 />
               </div>
               
-              <v-text-field 
-                v-model="registro.email" 
-                label="Email (opcional)" 
-                variant="outlined" 
-                density="compact" 
-                prepend-inner-icon="mdi-email" 
-                type="email" 
-                hide-details 
-                class="mb-2" 
-              />
-              <v-textarea 
-                v-model="registro.direccion" 
-                label="Dirección completa *" 
-                variant="outlined" 
-                density="compact" 
-                rows="1" 
-                prepend-inner-icon="mdi-map-marker" 
-                :rules="[v => !!v || 'Requerido']" 
-                hide-details 
-                class="mb-2" 
-                placeholder="Calle, urbanización, ciudad" 
-              />
+              <div class="field-wrapper mb-3">
+                <label class="field-label">
+                  <v-icon size="16" class="label-icon">mdi-phone</v-icon>
+                  Teléfono *
+                </label>
+                <div class="phone-row">
+                  <div class="codigo-wrapper">
+                    <select v-model="codigoPais" class="codigo-select">
+                      <option v-for="c in codigosPaises" :key="c.codigo" :value="c.codigo">
+                        {{ c.codigo }}
+                      </option>
+                    </select>
+                  </div>
+                  <v-text-field 
+                    v-model="registro.telefono" 
+                    variant="outlined" 
+                    density="compact" 
+                    hide-details 
+                    class="telefono-input custom-field" 
+                    placeholder="Ej: 4121234567"
+                    inputmode="numeric"
+                    type="tel"
+                    bg-color="rgba(255,255,255,0.04)"
+                  />
+                </div>
+              </div>
+              
+              <div class="field-wrapper mb-3">
+                <label class="field-label">
+                  <v-icon size="16" class="label-icon">mdi-email</v-icon>
+                  Email (opcional)
+                </label>
+                <v-text-field 
+                  v-model="registro.email" 
+                  variant="outlined" 
+                  density="compact" 
+                  type="email" 
+                  hide-details 
+                  class="custom-field" 
+                  placeholder="Ej: correo@ejemplo.com"
+                  bg-color="rgba(255,255,255,0.04)"
+                />
+              </div>
+
+              <div class="field-wrapper mb-3">
+                <label class="field-label">
+                  <v-icon size="16" class="label-icon">mdi-map-marker</v-icon>
+                  Dirección completa *
+                </label>
+                <v-textarea 
+                  v-model="registro.direccion" 
+                  variant="outlined" 
+                  density="compact" 
+                  rows="1" 
+                  hide-details 
+                  class="custom-field" 
+                  placeholder="Calle, urbanización, ciudad, estado"
+                  bg-color="rgba(255,255,255,0.04)"
+                />
+              </div>
+
               <div class="d-flex justify-end mt-2">
                 <v-btn 
                   color="#4facfe" 
@@ -121,52 +147,66 @@
 
             <!-- PASO 2 -->
             <div v-show="paso === 2" class="step-panel mt-3">
-              <v-text-field 
-                v-model="registro.referencia_nombre" 
-                label="Nombre de referencia *" 
-                variant="outlined" 
-                density="compact" 
-                prepend-inner-icon="mdi-account" 
-                :rules="[v => !!v || 'Requerido']" 
-                hide-details 
-                class="mb-2" 
-              />
-              
-              <div class="phone-row mb-2">
-                <div class="codigo-wrapper">
-                  <label class="codigo-label">Cod.</label>
-                  <select v-model="codigoPaisReferencia" class="codigo-select">
-                    <option v-for="c in codigosPaises" :key="c.codigo" :value="c.codigo">
-                      {{ c.codigo }}
-                    </option>
-                  </select>
-                </div>
+              <div class="field-wrapper mb-3">
+                <label class="field-label">
+                  <v-icon size="16" class="label-icon">mdi-account</v-icon>
+                  Nombre de referencia *
+                </label>
                 <v-text-field 
-                  v-model="registro.referencia_telefono" 
-                  label="Teléfono de referencia *" 
+                  v-model="registro.referencia_nombre" 
                   variant="outlined" 
                   density="compact" 
-                  prepend-inner-icon="mdi-phone" 
-                  :rules="[v => !!v || 'Requerido']" 
                   hide-details 
-                  class="telefono-input" 
-                  placeholder="4121234567"
-                  inputmode="numeric"
-                  type="tel"
+                  class="custom-field" 
+                  placeholder="Ej: María García"
+                  bg-color="rgba(255,255,255,0.04)"
                 />
               </div>
               
-              <v-select 
-                v-model="registro.referencia_parentesco" 
-                :items="['Familiar', 'Amigo', 'Vecino', 'Compañero de trabajo', 'Otro']" 
-                label="Parentesco *" 
-                variant="outlined" 
-                density="compact" 
-                prepend-inner-icon="mdi-account-heart" 
-                :rules="[v => !!v || 'Requerido']" 
-                hide-details 
-                class="mb-2" 
-              />
+              <div class="field-wrapper mb-3">
+                <label class="field-label">
+                  <v-icon size="16" class="label-icon">mdi-phone</v-icon>
+                  Teléfono de referencia *
+                </label>
+                <div class="phone-row">
+                  <div class="codigo-wrapper">
+                    <select v-model="codigoPaisReferencia" class="codigo-select">
+                      <option v-for="c in codigosPaises" :key="c.codigo" :value="c.codigo">
+                        {{ c.codigo }}
+                      </option>
+                    </select>
+                  </div>
+                  <v-text-field 
+                    v-model="registro.referencia_telefono" 
+                    variant="outlined" 
+                    density="compact" 
+                    hide-details 
+                    class="telefono-input custom-field" 
+                    placeholder="Ej: 4121234567"
+                    inputmode="numeric"
+                    type="tel"
+                    bg-color="rgba(255,255,255,0.04)"
+                  />
+                </div>
+              </div>
+              
+              <div class="field-wrapper mb-3">
+                <label class="field-label">
+                  <v-icon size="16" class="label-icon">mdi-account-heart</v-icon>
+                  Parentesco *
+                </label>
+                <v-select 
+                  v-model="registro.referencia_parentesco" 
+                  :items="['Familiar', 'Amigo', 'Vecino', 'Compañero de trabajo', 'Otro']" 
+                  variant="outlined" 
+                  density="compact" 
+                  hide-details 
+                  class="custom-field" 
+                  placeholder="Selecciona..."
+                  bg-color="rgba(255,255,255,0.04)"
+                />
+              </div>
+
               <div class="d-flex justify-space-between mt-2">
                 <v-btn variant="text" size="small" @click="paso--">
                   <v-icon start size="16">mdi-chevron-left</v-icon>Atrás
@@ -188,7 +228,7 @@
               <div class="text-center py-2">
                 <v-icon 
                   size="40" 
-                  :color="fotoCedula ? '#4caf50' : 'rgba(255,255,255,0.1)'" 
+                  :color="fotoCedula ? '#4caf50' : 'rgba(255,255,255,0.3)'" 
                   class="mb-1"
                 >
                   {{ fotoCedula ? 'mdi-check-circle' : 'mdi-camera' }}
@@ -283,18 +323,18 @@
                   color="#4caf50" 
                   rounded="pill" 
                   size="small" 
-                  :loading="enviando" 
-                  @click="enviarRegistro"
+                  @click="guardarRegistroLocal" 
+                  :loading="guardandoLocal"
                 >
-                  <v-icon start size="16">mdi-send</v-icon>Enviar
+                  <v-icon start size="16">mdi-content-save</v-icon>
+                  Guardar Solicitud
                 </v-btn>
               </div>
             </div>
-          </template>
+          </div>
 
-          <!-- ✅ PANTALLA DE ÉXITO COMPLETA Y MEJORADA -->
-          <div v-if="registroExitoso" class="text-center py-4">
-            <!-- Animación de éxito -->
+          <!-- ✅ PANTALLA DE ÉXITO (SOLICITUD ENVIADA) -->
+          <div v-else class="text-center py-4">
             <div class="success-animation">
               <v-icon size="80" color="#4caf50" class="mb-3 success-icon">
                 mdi-check-circle
@@ -302,59 +342,46 @@
             </div>
             
             <h2 class="text-h4 text-white mb-2 font-weight-bold">
-              ¡Registro Exitoso!
+              ¡Solicitud Guardada!
             </h2>
             
             <v-divider class="my-3" style="border-color: rgba(255,255,255,0.06);" />
             
-            <!-- Mensajes informativos -->
             <div class="info-messages text-left">
               <div class="info-item mb-3">
                 <v-icon size="20" color="#4facfe" class="mr-2">mdi-account-check</v-icon>
                 <span class="text-body-1 text-white">
-                  <strong>Verificación de datos</strong>
+                  <strong>Solicitud registrada correctamente</strong>
                 </span>
                 <p class="text-body-2 text-medium-emphasis mt-1 ml-7">
-                  Estamos validando tu información para confirmar tu afiliación como socio.
+                  Tu solicitud ha sido guardada y está pendiente de revisión.
                 </p>
               </div>
               
               <div class="info-item mb-3">
                 <v-icon size="20" color="#ffc107" class="mr-2">mdi-clock</v-icon>
                 <span class="text-body-1 text-white">
-                  <strong>Tiempo de respuesta</strong>
+                  <strong>En espera de aprobación</strong>
                 </span>
                 <p class="text-body-2 text-medium-emphasis mt-1 ml-7">
-                  En un plazo máximo de <strong class="text-white">48 horas</strong> recibirás tu PIN de acceso.
+                  Un administrador revisará tus datos y te aprobará en la plataforma.
                 </p>
               </div>
               
-              <div class="info-item mb-3">
+              <div class="info-item">
                 <v-icon size="20" color="#4caf50" class="mr-2">mdi-phone-message</v-icon>
                 <span class="text-body-1 text-white">
                   <strong>Notificación por SMS</strong>
                 </span>
                 <p class="text-body-2 text-medium-emphasis mt-1 ml-7">
-                  Te enviaremos un mensaje de texto al número <strong class="text-white">{{ telefonoCompleto }}</strong> 
-                  con tus credenciales de acceso.
-                </p>
-              </div>
-              
-              <div class="info-item">
-                <v-icon size="20" color="#f44336" class="mr-2">mdi-alert-circle</v-icon>
-                <span class="text-body-1 text-white">
-                  <strong>Importante</strong>
-                </span>
-                <p class="text-body-2 text-medium-emphasis mt-1 ml-7">
-                  Si no recibes tu PIN en 48 horas, comunícate con nuestra oficina al 
-                  <strong class="text-white">+58 212-555-1212</strong>
+                  Cuando seas aprobado, recibirás un SMS al número 
+                  <strong class="text-white">{{ telefonoCompleto }}</strong> con tu PIN de acceso.
                 </p>
               </div>
             </div>
             
             <v-divider class="my-4" style="border-color: rgba(255,255,255,0.06);" />
             
-            <!-- 🔥 BOTÓN VOLVER AL LOGIN - BIEN GRANDE Y VISIBLE -->
             <v-btn 
               color="#4facfe" 
               rounded="pill" 
@@ -369,22 +396,6 @@
               Volver al Login
             </v-btn>
             
-            <!-- Temporizador opcional -->
-            <div class="mt-3">
-              <v-progress-circular 
-                :model-value="contador * 10" 
-                size="36" 
-                color="#4facfe"
-                class="mr-2"
-              >
-                {{ contador }}
-              </v-progress-circular>
-              <span class="text-caption text-medium-emphasis">
-                Redirigiendo en {{ contador }} segundos...
-              </span>
-            </div>
-            
-            <!-- Texto adicional pequeño -->
             <p class="text-caption text-medium-emphasis mt-3">
               ¿Ya tienes cuenta? Inicia sesión con tu PIN
             </p>
@@ -397,7 +408,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch, onBeforeUnmount } from 'vue'
+import { ref, reactive, computed, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera'
 
@@ -405,16 +416,12 @@ const router = useRouter()
 
 // Estados
 const paso = ref(1)
-const enviando = ref(false)
+const guardandoLocal = ref(false)
 const registroExitoso = ref(false)
 const fotoCedula = ref(null)
 const fotoFile = ref(null)
 const codigoPais = ref('+58')
 const codigoPaisReferencia = ref('+58')
-const contador = ref(10)
-let intervalo = null
-
-const API_URL = 'https://financoop.onrender.com'
 
 const codigosPaises = [
   { codigo: '+58' },
@@ -504,14 +511,16 @@ const abrirGaleria = async () => {
   }
 }
 
-const enviarRegistro = async () => {
+const guardarRegistroLocal = () => {
   if (!validarPaso(1) || !validarPaso(2) || !validarPaso(3)) {
     alert('Por favor completa todos los campos obligatorios')
     return
   }
-  enviando.value = true
+
+  guardandoLocal.value = true
+  
   try {
-    const datosCliente = {
+    const solicitud = {
       nombre: registro.nombre.trim(),
       cedula: registro.cedula.trim(),
       telefono: telefonoCompleto.value,
@@ -519,84 +528,33 @@ const enviarRegistro = async () => {
       direccion: registro.direccion.trim(),
       referencia_nombre: registro.referencia_nombre.trim(),
       referencia_telefono: telefonoReferenciaCompleto.value,
-      referencia_parentesco: registro.referencia_parentesco.trim()
+      referencia_parentesco: registro.referencia_parentesco.trim(),
+      tiene_foto: !!fotoCedula.value,
+      fecha_solicitud: new Date().toISOString(),
+      estado: 'PENDIENTE'
     }
 
-    const response = await fetch(`${API_URL}/clientes`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(datosCliente)
-    })
+    const solicitudesGuardadas = JSON.parse(localStorage.getItem('solicitudes_clientes') || '[]')
+    solicitudesGuardadas.push(solicitud)
+    localStorage.setItem('solicitudes_clientes', JSON.stringify(solicitudesGuardadas))
 
-    const data = await response.json()
-
-    if (!response.ok || data.error) {
-      throw new Error(data.error || 'Error al registrar')
-    }
-
-    console.log('✅ Cliente registrado:', data)
-
-    // Subir foto si existe
-    if (fotoFile.value && data.id) {
-      try {
-        const fotoFormData = new FormData()
-        fotoFormData.append('cedula_foto', fotoFile.value)
-        await fetch(`${API_URL}/clientes/${data.id}/foto`, {
-          method: 'POST',
-          body: fotoFormData
-        })
-      } catch (fotoErr) {
-        console.warn('⚠️ Foto:', fotoErr)
-      }
-    }
-
-    // ✅ MOSTRAR PANTALLA DE ÉXITO
+    console.log('✅ Solicitud guardada localmente:', solicitud)
     registroExitoso.value = true
-
-  } catch (err) {
-    alert('Error al registrar. Intenta de nuevo.\n\n' + err.message)
+    
+  } catch (error) {
+    console.error('Error guardando solicitud:', error)
+    alert('Error al guardar la solicitud. Intenta de nuevo.')
   } finally {
-    enviando.value = false
+    guardandoLocal.value = false
   }
 }
 
 const irAlLogin = () => {
-  if (intervalo) {
-    clearInterval(intervalo)
-    intervalo = null
-  }
   router.push('/login')
 }
 
-// Watch para el temporizador automático
-watch(registroExitoso, (nuevoValor) => {
-  if (nuevoValor) {
-    contador.value = 10
-    if (intervalo) {
-      clearInterval(intervalo)
-    }
-    intervalo = setInterval(() => {
-      contador.value--
-      if (contador.value <= 0) {
-        clearInterval(intervalo)
-        intervalo = null
-        irAlLogin()
-      }
-    }, 1000)
-  } else {
-    if (intervalo) {
-      clearInterval(intervalo)
-      intervalo = null
-    }
-  }
-})
-
-// Limpiar intervalo al destruir el componente
 onBeforeUnmount(() => {
-  if (intervalo) {
-    clearInterval(intervalo)
-    intervalo = null
-  }
+  // No hay intervalos que limpiar
 })
 </script>
 
@@ -694,34 +652,93 @@ onBeforeUnmount(() => {
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* ============ LABELS EXTERNOS (NO FLOTANTES) ============ */
+.field-wrapper {
+  margin-bottom: 16px;
+}
+
+.field-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.85);
+  margin-bottom: 6px;
+  padding-left: 4px;
+  letter-spacing: 0.3px;
+}
+
+.label-icon {
+  color: #4facfe !important;
+  opacity: 0.8;
+}
+
+/* ============ CAMPOS SIN LABEL FLOTANTE ============ */
+.custom-field :deep(.v-field) {
+  border-radius: 12px !important;
+  border: 1px solid rgba(255,255,255,0.12) !important;
+}
+
+.custom-field :deep(.v-field:hover) {
+  border-color: rgba(255,255,255,0.25) !important;
+}
+
+.custom-field :deep(.v-field--focused) {
+  border-color: #4facfe !important;
+  box-shadow: 0 0 0 3px rgba(79, 172, 254, 0.15) !important;
+}
+
+/* 🔥 ELIMINAR LABEL FLOTANTE DE VUETIFY */
+.custom-field :deep(.v-label) {
+  display: none !important;
+}
+
+/* Texto del input */
+.custom-field :deep(.v-field__input) {
+  color: #ffffff !important;
+  padding-top: 8px !important;
+  padding-bottom: 8px !important;
+}
+
+/* Placeholder visible */
+.custom-field :deep(.v-field__input::placeholder) {
+  color: rgba(255,255,255,0.35) !important;
+  font-weight: 400 !important;
+  font-size: 14px !important;
+  opacity: 1 !important;
+}
+
+/* Iconos dentro del campo */
+.custom-field :deep(.v-field__prepend-inner > .v-icon) {
+  color: rgba(255,255,255,0.4) !important;
+  opacity: 1 !important;
+}
+
 /* Teléfono */
 .phone-row {
   display: flex;
   gap: 6px;
-  align-items: flex-end;
+  align-items: flex-start;
 }
 .codigo-wrapper {
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
   width: 65px;
-}
-.codigo-label {
-  font-size: 10px;
-  color: rgba(255,255,255,0.4);
-  margin-bottom: 2px;
-  padding-left: 4px;
+  padding-top: 0;
 }
 .codigo-select {
   width: 100%;
   height: 36px;
   background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.15);
+  border: 1px solid rgba(255,255,255,0.12);
   border-radius: 10px;
   color: #ffffff;
   font-size: 13px;
   padding: 0 4px;
   outline: none;
+  margin-top: 0;
 }
 .codigo-select:focus {
   border-color: #4facfe;
@@ -735,34 +752,6 @@ onBeforeUnmount(() => {
   flex: 1;
   min-width: 0;
 }
-.telefono-input :deep(.v-field) {
-  border-radius: 12px !important;
-  background: rgba(255,255,255,0.04) !important;
-}
-
-/* Campos */
-:deep(.v-text-field .v-field),
-:deep(.v-textarea .v-field),
-:deep(.v-select .v-field) {
-  background: rgba(255,255,255,0.04) !important;
-  border-radius: 12px !important;
-}
-:deep(.v-text-field .v-field__input),
-:deep(.v-textarea .v-field__input) {
-  color: #ffffff !important;
-}
-:deep(.v-text-field .v-field__input::placeholder),
-:deep(.v-textarea .v-field__input::placeholder) {
-  color: rgba(255,255,255,0.2) !important;
-}
-:deep(.v-text-field .v-icon),
-:deep(.v-textarea .v-icon),
-:deep(.v-select .v-icon) {
-  color: rgba(255,255,255,0.3) !important;
-}
-:deep(.v-field--focused) {
-  box-shadow: 0 0 0 2px rgba(79, 172, 254, 0.15) !important;
-}
 
 .gap-2 { gap: 8px; }
 .flex-wrap { flex-wrap: wrap; }
@@ -773,17 +762,9 @@ onBeforeUnmount(() => {
 }
 
 @keyframes scaleIn {
-  0% {
-    transform: scale(0);
-    opacity: 0;
-  }
-  50% {
-    transform: scale(1.2);
-  }
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
+  0% { transform: scale(0); opacity: 0; }
+  50% { transform: scale(1.2); }
+  100% { transform: scale(1); opacity: 1; }
 }
 
 .success-icon {
@@ -791,15 +772,9 @@ onBeforeUnmount(() => {
 }
 
 @keyframes pulse {
-  0% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.05);
-  }
-  100% {
-    transform: scale(1);
-  }
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
 }
 
 .info-messages {
@@ -818,7 +793,7 @@ onBeforeUnmount(() => {
   line-height: 1.4;
 }
 
-/* 🔥 Botón de login - Super visible */
+/* 🔥 Botón de login */
 .login-btn {
   background: linear-gradient(135deg, #4facfe 0%, #6366f1 100%) !important;
   color: white !important;
@@ -848,6 +823,7 @@ onBeforeUnmount(() => {
   .codigo-wrapper { width: 58px; }
   .codigo-select { font-size: 12px; height: 34px; }
   .info-messages { padding: 12px; }
+  .field-label { font-size: 12px; }
 }
 
 @media (max-width: 320px) {

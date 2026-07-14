@@ -12,6 +12,7 @@ from app.models import Cliente, Financiamiento, Cuota, NivelConfig, TasaDolar
 TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID')
 TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
 TWILIO_WHATSAPP_NUMBER = os.getenv('TWILIO_WHATSAPP_NUMBER', 'whatsapp:+14155238886')
+TWILIO_SMS_FROM = os.getenv('TWILIO_SMS_FROM')
 
 twilio_client = None
 if TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN:
@@ -137,6 +138,124 @@ def enviar_pin_cliente(telefono: str, nombre: str, cedula: str, pin: str):
         print(f"⚠️ WhatsApp falló: {sid_wa}")
     
     return resultado
+
+def enviar_pin_sms(telefono: str, nombre: str, cedula: str, pin: str):
+    """
+    Envía el PIN al cliente por SMS (sin necesidad de "join").
+    Esta es la opción recomendada para producción.
+    """
+    telefono = normalizar_telefono(telefono)
+    
+    if not es_numero_valido(telefono):
+        return {
+            "success": False,
+            "error": f"Número inválido: {telefono}",
+            "sms_enviado": False
+        }
+    
+    if not twilio_client:
+        return {
+            "success": False,
+            "error": "Twilio no disponible",
+            "sms_enviado": False
+        }
+    
+    if not TWILIO_SMS_FROM:
+        return {
+            "success": False,
+            "error": "TWILIO_SMS_FROM no configurado",
+            "sms_enviado": False
+        }
+    
+    mensaje_sms = f"""FinanCoop
+
+¡Bienvenido {nombre}!
+
+🔑 Tu PIN de acceso es: {pin}
+
+📱 Descarga la app e inicia sesión con tu cédula y este PIN.
+
+⚠️ No compartas este PIN con nadie.
+
+¡Gracias por confiar en FinanCoop!"""
+
+    try:
+        message = twilio_client.messages.create(
+            body=mensaje_sms,
+            from_=TWILIO_SMS_FROM,
+            to=telefono
+        )
+        
+        print(f"✅ SMS enviado a {telefono}. SID: {message.sid}")
+        
+        return {
+            "success": True,
+            "sid": message.sid,
+            "sms_enviado": True,
+            "mensaje": f"SMS enviado a {telefono}"
+        }
+        
+    except TwilioRestException as e:
+        error_msg = str(e)
+        if "21211" in error_msg:
+            error_msg = "Número de teléfono inválido"
+        elif "21610" in error_msg:
+            error_msg = "Número no tiene capacidad para recibir SMS"
+        elif "429" in str(e.status):
+            error_msg = "Límite de mensajes diarios excedido"
+        
+        print(f"❌ Error SMS: {error_msg}")
+        return {
+            "success": False,
+            "error": error_msg,
+            "sms_enviado": False
+        }
+        
+    except Exception as e:
+        print(f"❌ Error SMS: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "sms_enviado": False
+        }
+
+def enviar_pin_cliente_completo(telefono: str, nombre: str, cedula: str, pin: str):
+    """
+    Envía el PIN al cliente primero por SMS (más confiable),
+    y si falla, intenta por WhatsApp.
+    """
+    print(f"📱 Enviando PIN a {telefono}...")
+    
+    # Intentar primero por SMS (sin necesidad de "join")
+    resultado_sms = enviar_pin_sms(telefono, nombre, cedula, pin)
+    
+    if resultado_sms["success"]:
+        return {
+            "success": True,
+            "mensaje": "PIN enviado por SMS",
+            "canal": "sms",
+            "sid": resultado_sms.get("sid")
+        }
+    
+    # Si SMS falla, intentar por WhatsApp
+    print(f"⚠️ SMS falló, intentando WhatsApp...")
+    resultado_whatsapp = enviar_pin_cliente(telefono, nombre, cedula, pin)
+    
+    if resultado_whatsapp["whatsapp_enviado"]:
+        return {
+            "success": True,
+            "mensaje": "PIN enviado por WhatsApp",
+            "canal": "whatsapp",
+            "sid": resultado_whatsapp.get("whatsapp_sid")
+        }
+    
+    # Si ambos fallan
+    return {
+        "success": False,
+        "mensaje": "No se pudo enviar el PIN por ningún canal",
+        "error_sms": resultado_sms.get("error"),
+        "error_whatsapp": resultado_whatsapp.get("mensaje")
+    }
 
 # ============ FUNCIONES DE NEGOCIO ============
 

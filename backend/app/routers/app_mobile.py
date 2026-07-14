@@ -5,7 +5,7 @@ from app.database import get_db
 from app.models import Cliente, Financiamiento, Cuota, ConfiguracionPago
 from app.schemas import LoginApp
 from app.utils import generar_token, obtener_tasa_actual, calcular_usado_disponible
-from datetime import datetime, timezone  # 👈 AGREGAR timezone
+from datetime import datetime, timezone
 
 router = APIRouter(prefix="/app", tags=["App Móvil"])
 
@@ -29,7 +29,7 @@ def login_app(login: LoginApp, db: Session = Depends(get_db)):
         return {"error": "PIN incorrecto"}
     
     cliente.token_app = generar_token()
-    cliente.ultimo_acceso = datetime.now(timezone.utc)  # 👈 CORREGIDO
+    cliente.ultimo_acceso = datetime.now(timezone.utc)
     db.commit()
     
     return {
@@ -40,6 +40,40 @@ def login_app(login: LoginApp, db: Session = Depends(get_db)):
             "nivel": cliente.nivel,
             "score": cliente.score
         }
+    }
+
+@router.get("/mi-perfil")
+def mi_perfil(
+    token: str = None,
+    authorization: str = Header(None),
+    db: Session = Depends(get_db)
+):
+    """Obtener perfil del cliente logueado (para app móvil)"""
+    token_final = obtener_token(token, authorization)
+    
+    if not token_final:
+        return {"error": "Token no proporcionado"}
+    
+    cliente = db.query(Cliente).filter(Cliente.token_app == token_final).first()
+    if not cliente:
+        return {"error": "Sesión no válida"}
+    
+    return {
+        "id": cliente.id,
+        "nombre": cliente.nombre,
+        "cedula": cliente.cedula,
+        "telefono": cliente.telefono,
+        "email": cliente.email,
+        "direccion": cliente.direccion,
+        "referencia_nombre": cliente.referencia_nombre,
+        "referencia_telefono": cliente.referencia_telefono,
+        "referencia_parentesco": cliente.referencia_parentesco,
+        "score": cliente.score,
+        "nivel": cliente.nivel,
+        "total_compras": cliente.total_compras,
+        "url_cedula": cliente.url_cedula,
+        "estado": cliente.estado or "pendiente",
+        "pin": cliente.pin
     }
 
 @router.get("/mis-datos")
@@ -66,7 +100,7 @@ def mis_datos(
         Financiamiento.estado == "activo"
     ).all()
     
-    hoy = datetime.now(timezone.utc)  # 👈 CORREGIDO
+    hoy = datetime.now(timezone.utc)
     
     financiamientos_data = []
     for fin in activos:
@@ -160,7 +194,7 @@ def mis_cuotas(
         Financiamiento.cliente_id == cliente.id
     ).all()
     
-    hoy = datetime.now(timezone.utc)  # 👈 CORREGIDO
+    hoy = datetime.now(timezone.utc)
     
     todas_cuotas = []
     for fin in financiamientos:
