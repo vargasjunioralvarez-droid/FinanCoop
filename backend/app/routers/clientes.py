@@ -33,6 +33,12 @@ class ClienteCreate(BaseModel):
 class ClienteAprobar(BaseModel):
     cliente_id: int
 
+class ClienteUpdate(BaseModel):
+    nombre: Optional[str] = None
+    telefono: Optional[str] = None
+    email: Optional[str] = None
+    direccion: Optional[str] = None
+
 # ============================================================
 # CLOUDFLARE
 # ============================================================
@@ -69,12 +75,10 @@ async def crear_cliente(
     try:
         print(f"📝 Registrando cliente: {cliente_data.cedula}")
         
-        # Verificar si ya existe
         existe = db.query(Cliente).filter(Cliente.cedula == cliente_data.cedula).first()
         if existe:
             return {"error": f"Cliente con cédula {cliente_data.cedula} ya existe", "success": False}
 
-        # Crear cliente (sin PIN visible, sin enviar SMS)
         db_cliente = Cliente(
             nombre=cliente_data.nombre,
             cedula=cliente_data.cedula,
@@ -84,10 +88,9 @@ async def crear_cliente(
             referencia_nombre=cliente_data.referencia_nombre or "",
             referencia_telefono=cliente_data.referencia_telefono or "",
             referencia_parentesco=cliente_data.referencia_parentesco or "",
-            # PIN se genera pero NO se muestra ni envía aún
             pin=generar_pin(),
             token_app=generar_token(),
-            estado="pendiente"  # NUEVO: estado pendiente de aprobación
+            estado="pendiente"
         )
         
         db.add(db_cliente)
@@ -96,12 +99,10 @@ async def crear_cliente(
 
         print(f"✅ Cliente registrado (PENDIENTE): {db_cliente.id} - {db_cliente.nombre}")
 
-        # ✅ NO ENVIAR PIN - El admin debe aprobar primero
         return {
             "success": True,
             "id": db_cliente.id,
             "mensaje": "Registro exitoso. Tu cuenta está en verificación. Recibirás un SMS cuando sea aprobada.",
-            # NO devolvemos el PIN
             "cliente": {
                 "id": db_cliente.id,
                 "nombre": db_cliente.nombre,
@@ -132,14 +133,12 @@ async def aprobar_cliente(
         if cliente.estado == "aprobado":
             return {"error": "Cliente ya está aprobado", "success": False}
         
-        # Generar nuevo PIN si no tiene
         if not cliente.pin:
             cliente.pin = generar_pin()
         
         cliente.estado = "aprobado"
         db.commit()
         
-        # ✅ ENVIAR PIN POR SMS (solo al aprobar)
         try:
             enviar_pin_cliente(
                 telefono=cliente.telefono,
@@ -162,7 +161,7 @@ async def aprobar_cliente(
                 "cedula": cliente.cedula,
                 "telefono": cliente.telefono,
                 "estado": "aprobado",
-                "pin": cliente.pin  # Solo el admin ve el PIN en la respuesta
+                "pin": cliente.pin
             }
         }
         
@@ -171,7 +170,7 @@ async def aprobar_cliente(
         return {"error": str(e), "success": False}
 
 # ============================================================
-# LISTAR CLIENTES (con estado)
+# LISTAR CLIENTES
 # ============================================================
 @router.get("")
 def listar_clientes(
@@ -190,10 +189,109 @@ def listar_clientes(
             "nivel": c.nivel,
             "score": c.score,
             "estado": c.estado or "pendiente",
-            "pin": c.pin if current_user.rol == "admin" else None  # Solo admin ve el PIN
+            "pin": c.pin if current_user.rol == "admin" else None
         }
         for c in clientes
     ]
+
+# ============================================================
+# ✅ OBTENER CLIENTE POR ID (FALTABA)
+# ============================================================
+@router.get("/{id}")
+def obtener_cliente(
+    id: int,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    cliente = db.query(Cliente).filter(Cliente.id == id).first()
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+    
+    return {
+        "id": cliente.id,
+        "nombre": cliente.nombre,
+        "cedula": cliente.cedula,
+        "telefono": cliente.telefono,
+        "email": cliente.email,
+        "direccion": cliente.direccion,
+        "referencia_nombre": cliente.referencia_nombre,
+        "referencia_telefono": cliente.referencia_telefono,
+        "referencia_parentesco": cliente.referencia_parentesco,
+        "score": cliente.score,
+        "nivel": cliente.nivel,
+        "total_compras": cliente.total_compras,
+        "url_cedula": cliente.url_cedula,
+        "estado": cliente.estado or "pendiente",
+        "pin": cliente.pin if current_user.rol == "admin" else None
+    }
+
+# ============================================================
+# ✅ ACTUALIZAR CLIENTE (FALTABA)
+# ============================================================
+@router.put("/{id}")
+def actualizar_cliente(
+    id: int,
+    cliente_data: ClienteUpdate,
+    db: Session = Depends(get_db),
+    current_admin = Depends(get_current_admin)
+):
+    cliente = db.query(Cliente).filter(Cliente.id == id).first()
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+    
+    if cliente_data.nombre is not None:
+        cliente.nombre = cliente_data.nombre
+    if cliente_data.telefono is not None:
+        cliente.telefono = cliente_data.telefono
+    if cliente_data.email is not None:
+        cliente.email = cliente_data.email
+    if cliente_data.direccion is not None:
+        cliente.direccion = cliente_data.direccion
+    
+    db.commit()
+    db.refresh(cliente)
+    
+    return {
+        "success": True,
+        "mensaje": "Cliente actualizado",
+        "cliente": {
+            "id": cliente.id,
+            "nombre": cliente.nombre,
+            "cedula": cliente.cedula,
+            "telefono": cliente.telefono,
+            "email": cliente.email,
+            "direccion": cliente.direccion
+        }
+    }
+
+# ============================================================
+# ✅ ELIMINAR CLIENTE (FALTABA - ESTE ES EL QUE NECESITAS)
+# ============================================================
+@router.delete("/{id}")
+def eliminar_cliente(
+    id: int,
+    db: Session = Depends(get_db),
+    current_admin = Depends(get_current_admin)
+):
+    cliente = db.query(Cliente).filter(Cliente.id == id).first()
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+    
+    nombre = cliente.nombre
+    
+    # Eliminar financiamientos y cuotas asociadas (cascade)
+    financiamientos = db.query(Financiamiento).filter(Financiamiento.cliente_id == id).all()
+    for fin in financiamientos:
+        db.query(Cuota).filter(Cuota.financiamiento_id == fin.id).delete()
+        db.delete(fin)
+    
+    db.delete(cliente)
+    db.commit()
+    
+    return {
+        "success": True,
+        "mensaje": f"Cliente {nombre} eliminado correctamente"
+    }
 
 # ============================================================
 # SUBIR FOTO
@@ -265,5 +363,3 @@ def buscar_cliente_por_cedula(cedula: str, db: Session = Depends(get_db)):
             "aprobacion_extra": config["aprobacion_extra"]
         }
     }
-
-# El resto de funciones se mantienen igual...
