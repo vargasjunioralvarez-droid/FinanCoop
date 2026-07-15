@@ -452,3 +452,149 @@ def buscar_cliente_por_cedula(cedula: str, db: Session = Depends(get_db)):
             "aprobacion_extra": config["aprobacion_extra"]
         }
     }
+
+# ============================================================
+# ✅ NUEVO ENDPOINT: OBTENER ESTADO DE CUENTA DEL CLIENTE
+# ============================================================
+@router.get("/{id}/estado-cuenta")
+def obtener_estado_cuenta(
+    id: int,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """
+    Obtiene el estado de cuenta completo de un cliente
+    Incluye: resumen financiero, financiamientos activos, historial de pagos
+    """
+    try:
+        # Verificar que el cliente existe
+        cliente = db.query(Cliente).filter(Cliente.id == id).first()
+        if not cliente:
+            raise HTTPException(status_code=404, detail="Cliente no encontrado")
+        
+        # Obtener todos los financiamientos del cliente
+        financiamientos = db.query(Financiamiento).filter(
+            Financiamiento.cliente_id == id
+        ).order_by(Financiamiento.fecha_creacion.desc()).all()
+        
+        # Variables para resumen financiero
+        total_financiado = 0
+        total_pagado = 0
+        total_deuda = 0
+        total_cuotas = 0
+        cuotas_pagadas = 0
+        cuotas_pendientes = 0
+        financiamientos_activos = 0
+        financiamientos_completados = 0
+        financiamientos_atrasados = 0
+        
+        # Lista para financiamientos con detalles
+        financiamientos_detalle = []
+        
+        for fin in financiamientos:
+            # Obtener cuotas de este financiamiento
+            cuotas = db.query(Cuota).filter(Cuota.financiamiento_id == fin.id).all()
+            
+            # Contar cuotas por estado
+            pagadas = [c for c in cuotas if c.estado == "pagada"]
+            pendientes = [c for c in cuotas if c.estado != "pagada"]
+            atrasadas = [c for c in cuotas if c.estado == "vencida" or c.estado == "atrasada"]
+            
+            # Sumar montos
+            monto_financiado = fin.monto_total or 0
+            monto_pagado = sum(c.monto_pagado or c.monto_cuota or 0 for c in pagadas)
+            monto_deuda = sum(c.monto_cuota or 0 for c in pendientes)
+            
+            total_financiado += monto_financiado
+            total_pagado += monto_pagado
+            total_deuda += monto_deuda
+            total_cuotas += len(cuotas)
+            cuotas_pagadas += len(pagadas)
+            cuotas_pendientes += len(pendientes)
+            
+            # Estado del financiamiento
+            if fin.estado in ["activo", "aprobado"]:
+                financiamientos_activos += 1
+                if len(atrasadas) > 0:
+                    financiamientos_atrasados += 1
+            elif fin.estado == "completado":
+                financiamientos_completados += 1
+            
+            # Crear detalle del financiamiento
+            financiamientos_detalle.append({
+                "id": fin.id,
+                "monto_total": round(fin.monto_total or 0, 2),
+                "monto_pagado": round(monto_pagado, 2),
+                "deuda_restante": round(monto_deuda, 2),
+                "fecha_creacion": fin.fecha_creacion.isoformat() if fin.fecha_creacion else None,
+                "estado": fin.estado,
+                "cuotas_totales": len(cuotas),
+                "cuotas_pagadas": len(pagadas),
+                "cuotas_pendientes": len(pendientes),
+                "cuotas_atrasadas": len(atrasadas),
+                "descripcion": fin.descripcion or "",
+                "tasa_interes": fin.tasa_interes or 0
+            })
+        
+        # Calcular nivel y tasa
+        nivel, config = calcular_nivel(cliente.score)
+        tasa = obtener_tasa_actual(db)
+        disponible = calcular_usado_disponible(cliente.id, db)
+        
+        # Calcular porcentaje de cumplimiento
+        porcentaje_cumplimiento = 0
+        if total_cuotas > 0:
+            porcentaje_cumplimiento = round((cuotas_pagadas / total_cuotas) * 100, 2)
+        
+        return {
+            "success": True,
+            "cliente": {
+                "id": cliente.id,
+                "nombre": cliente.nombre,
+                "cedula": cliente.cedula,
+                "telefono": cliente.telefono,
+                "email": cliente.email,
+                "direccion": cliente.direccion,
+                "nivel": cliente.nivel,
+                "score": cliente.score,
+                "estado": cliente.estado,
+                "fecha_registro": cliente.fecha_creacion.isoformat() if cliente.fecha_creacion else None
+            },
+            "resumen_financiero": {
+                "total_financiado_bs": round(total_financiado, 2),
+                "total_financiado_usd": round(total_financiado / tasa, 2) if tasa > 0 else 0,
+                "total_pagado_bs": round(total_pagado, 2),
+                "total_pagado_usd": round(total_pagado / tasa, 2) if tasa > 0 else 0,
+                "deuda_pendiente_bs": round(total_deuda, 2),
+                "deuda_pendiente_usd": round(total_deuda / tasa, 2) if tasa > 0 else 0,
+                "limite_disponible_bs": disponible,
+                "limite_disponible_usd": round(disponible / tasa, 2) if tasa > 0 else 0,
+                "total_cuotas": total_cuotas,
+                "cuotas_pagadas": cuotas_pagadas,
+                "cuotas_pendientes": cuotas_pendientes,
+                "porcentaje_cumplimiento": porcentaje_cumplimiento,
+                "financiamientos_activos": financiamientos_activos,
+                "financiamientos_completados": financiamientos_completados,
+                "financiamientos_atrasados": financiamientos_atrasados,
+                "total_financiamientos": len(financiamientos)
+            },
+            "financiamientos": financiamientos_detalle[:10],  # Últimos 10 financiamientos
+            "tasa_dolar_actual": tasa,
+            "fecha_consulta": datetime.now().isoformat(),
+            "nivel_config": {
+                "monto_max_usd": config["monto_max_usd"],
+                "monto_max_bs": round(config["monto_max_usd"] * tasa, 2),
+                "entrada_pct": config["entrada_pct"],
+                "financia_pct": config["financia_pct"],
+                "cuotas_base": config["cuotas_base"],
+                "cuotas_max": config["cuotas_max"],
+                "mora_diaria": config["mora_diaria"],
+                "aprobacion_extra": config["aprobacion_extra"]
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error obteniendo estado de cuenta: {e}")
+        raise HTTPException(status_code=500, detail=f"Error al obtener estado de cuenta: {str(e)}")
