@@ -1,6 +1,6 @@
 # backend/app/routers/upload.py
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
-from app.auth import get_current_user
+from app.auth import get_current_user  # ← IMPORTAR get_current_user en lugar de get_current_admin
 import httpx
 import os
 import uuid
@@ -14,21 +14,33 @@ CLOUDFLARE_API_TOKEN = os.getenv("CLOUDFLARE_API_TOKEN", "")
 @router.post("/comprobante")
 async def upload_comprobante(
     file: UploadFile = File(...),
-    current_user = Depends(get_current_user)
+    current_user = Depends(get_current_user)  # ← Cambiar a get_current_user
 ):
     """
     Sube un comprobante de pago a Cloudflare Images
+    Cualquier usuario autenticado puede subir comprobantes
     """
     try:
+        print("=" * 50)
+        print("📤 UPLOAD COMPROBANTE - INICIO")
+        print(f"👤 Usuario: {current_user.username if hasattr(current_user, 'username') else 'Cliente'}")
+        print(f"📸 Archivo: {file.filename}")
+        print(f"📸 Tipo: {file.content_type}")
+        
         # Validar que las credenciales estén configuradas
         if not CLOUDFLARE_ACCOUNT_ID or not CLOUDFLARE_API_TOKEN:
+            print("❌ Cloudflare NO configurado")
             raise HTTPException(
                 status_code=500, 
                 detail="Cloudflare no configurado. Contacte al administrador."
             )
         
+        print(f"✅ Cloudflare Account ID: {CLOUDFLARE_ACCOUNT_ID[:10]}...")
+        print(f"✅ Cloudflare Token: {CLOUDFLARE_API_TOKEN[:10]}...")
+        
         # Validar tipo de archivo
         if not file.content_type or not file.content_type.startswith('image/'):
+            print(f"❌ Tipo de archivo inválido: {file.content_type}")
             raise HTTPException(
                 status_code=400, 
                 detail="Solo se permiten imágenes (jpg, png, jpeg, webp)"
@@ -36,7 +48,11 @@ async def upload_comprobante(
         
         # Validar tamaño (máximo 5MB)
         contenido = await file.read()
+        tamaño_mb = len(contenido) / (1024 * 1024)
+        print(f"📊 Tamaño: {tamaño_mb:.2f} MB")
+        
         if len(contenido) > 5 * 1024 * 1024:
+            print(f"❌ Archivo demasiado grande: {tamaño_mb:.2f} MB")
             raise HTTPException(
                 status_code=400, 
                 detail="La imagen no puede superar los 5MB"
@@ -46,14 +62,12 @@ async def upload_comprobante(
         extension = file.filename.split('.')[-1] if file.filename else 'jpg'
         nombre_archivo = f"comprobante_{uuid.uuid4().hex[:8]}_{int(datetime.now().timestamp())}.{extension}"
         
+        print(f"📤 Subiendo a Cloudflare: {nombre_archivo}")
+        
         # Subir a Cloudflare Images
         url = f"https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/images/v1"
         files = {'file': (nombre_archivo, contenido, file.content_type)}
         headers = {'Authorization': f'Bearer {CLOUDFLARE_API_TOKEN}'}
-        
-        print(f"📤 Subiendo comprobante a Cloudflare: {nombre_archivo}")
-        print(f"📤 Account ID: {CLOUDFLARE_ACCOUNT_ID}")
-        print(f"📤 Token: {CLOUDFLARE_API_TOKEN[:10]}...")
         
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(url, headers=headers, files=files)
@@ -65,7 +79,9 @@ async def upload_comprobante(
                 if result.get('success'):
                     # Obtener la URL de la imagen (variants[0] es la URL completa)
                     image_url = result['result']['variants'][0]
-                    print(f"✅ Comprobante subido: {image_url}")
+                    print(f"✅ Comprobante subido exitosamente")
+                    print(f"🔗 URL: {image_url}")
+                    print("=" * 50)
                     return {
                         "success": True,
                         "url": image_url,
@@ -73,14 +89,17 @@ async def upload_comprobante(
                     }
                 else:
                     error = result.get('errors', [{'message': 'Error desconocido'}])[0]
+                    print(f"❌ Error Cloudflare: {error}")
                     raise HTTPException(
                         status_code=500,
                         detail=f"Error de Cloudflare: {error.get('message')}"
                     )
             else:
+                print(f"❌ Error HTTP: {response.status_code}")
+                print(f"📄 Respuesta: {response.text[:200]}")
                 raise HTTPException(
                     status_code=response.status_code,
-                    detail=f"Error subiendo a Cloudflare: {response.text}"
+                    detail=f"Error subiendo a Cloudflare: {response.text[:100]}"
                 )
             
     except HTTPException:
