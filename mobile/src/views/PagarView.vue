@@ -181,6 +181,7 @@ const {
 
 onMounted(() => {
   console.log('📋 PagarView montado')
+  console.log('📋 cuotaSeleccionada:', cuotaSeleccionada.value)
 })
 
 const datosBancariosMetodo = computed(() => {
@@ -217,20 +218,27 @@ function metodoIcono(metodo) {
   return iconos[metodo] || 'mdi-cash'
 }
 
-// ============================================================
-// ✅ HANDLE PAGO - CORREGIDO
-// ============================================================
 const handlePago = async () => {
   try {
     console.log('📝 Iniciando proceso de pago')
-    console.log('📋 Cuota seleccionada:', cuotaSeleccionada.value)
+    console.log('📋 Cuota seleccionada (completa):', JSON.stringify(cuotaSeleccionada.value, null, 2))
+    
+    // ✅ OBTENER EL ID DE LA CUOTA CORRECTAMENTE
+    const cuotaId = cuotaSeleccionada.value?.cuota_id || cuotaSeleccionada.value?.id
+    
+    if (!cuotaId) {
+      console.error('❌ No se encontró cuota_id en:', cuotaSeleccionada.value)
+      alert('Error: No se pudo identificar la cuota. Intenta de nuevo.')
+      return
+    }
+    
+    console.log(`✅ Cuota ID: ${cuotaId}`)
     console.log('📋 Método:', pagoForm.value.metodo)
     console.log('📋 Referencia:', pagoForm.value.referencia)
     console.log('📸 Comprobante file:', pagoForm.value.comprobante)
     
     let comprobanteUrl = null
     
-    // Si hay un archivo seleccionado, subirlo a Cloudflare
     if (pagoForm.value.comprobante && pagoForm.value.comprobante instanceof File) {
       console.log('📸 Subiendo comprobante a Cloudflare...')
       comprobanteUrl = await subirComprobante(pagoForm.value.comprobante)
@@ -243,19 +251,19 @@ const handlePago = async () => {
       console.log('⚠️ No hay comprobante para subir')
     }
     
-    // ✅ PREPARAR PAYLOAD - USAR CAMPOS CORRECTOS SEGÚN PagoReporte
+    // ✅ PAYLOAD CON CUOTA_ID INCLUIDO
     const payload = {
-      cuota_id: cuotaSeleccionada.value.id,
-      monto_bs: parseFloat(cuotaSeleccionada.value.monto_bs || cuotaSeleccionada.value.monto_total_bs || 0),
-      metodo: pagoForm.value.metodo,
-      referencia: pagoForm.value.referencia,
-      banco_origen: pagoForm.value.banco_origen || '',
-      telefono_pago: pagoForm.value.telefono_pago || '',
-      cedula_pago: pagoForm.value.cedula_pago || '',
-      comprobante: comprobanteUrl || ''
+      cuota_id: Number(cuotaId),
+      monto_bs: Number(cuotaSeleccionada.value?.monto_bs || cuotaSeleccionada.value?.monto_total_bs || 0),
+      metodo: String(pagoForm.value.metodo),
+      referencia: String(pagoForm.value.referencia).trim(),
+      banco_origen: String(pagoForm.value.banco_origen || '').trim(),
+      telefono_pago: String(pagoForm.value.telefono_pago || '').trim(),
+      cedula_pago: String(pagoForm.value.cedula_pago || '').trim(),
+      comprobante: String(comprobanteUrl || '')
     }
     
-    console.log('📤 Enviando pago al backend:', payload)
+    console.log('📤 Enviando pago al backend:', JSON.stringify(payload, null, 2))
     
     const success = await reportarPago(payload)
     if (success) {

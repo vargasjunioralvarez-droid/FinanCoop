@@ -443,7 +443,7 @@ def buscar_cliente_por_cedula(cedula: str, db: Session = Depends(get_db)):
     }
 
 # ============================================================
-# ✅ OBTENER ESTADO DE CUENTA DEL CLIENTE
+# ✅ OBTENER ESTADO DE CUENTA DEL CLIENTE (CORREGIDO)
 # ============================================================
 @router.get("/{id}/estado-cuenta")
 def obtener_estado_cuenta(
@@ -451,15 +451,22 @@ def obtener_estado_cuenta(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
+    """
+    Obtiene el estado de cuenta completo de un cliente
+    Incluye: resumen financiero, financiamientos activos, historial de pagos
+    """
     try:
+        # Verificar que el cliente existe
         cliente = db.query(Cliente).filter(Cliente.id == id).first()
         if not cliente:
             raise HTTPException(status_code=404, detail="Cliente no encontrado")
         
+        # Obtener todos los financiamientos del cliente
         financiamientos = db.query(Financiamiento).filter(
             Financiamiento.cliente_id == id
         ).order_by(Financiamiento.id.desc()).all()
         
+        # Variables para resumen financiero
         total_financiado = 0
         total_pagado = 0
         total_deuda = 0
@@ -469,18 +476,47 @@ def obtener_estado_cuenta(
         financiamientos_activos = 0
         financiamientos_completados = 0
         financiamientos_atrasados = 0
+        cuotas_con_deuda = 0
+        
+        # Lista para financiamientos con detalles
         financiamientos_detalle = []
+        hoy = datetime.now(timezone.utc)
         
         for fin in financiamientos:
+            # Obtener cuotas de este financiamiento
             cuotas = db.query(Cuota).filter(Cuota.financiamiento_id == fin.id).all()
             
+            # Contar cuotas por estado
             pagadas = [c for c in cuotas if c.estado == "pagada"]
             pendientes = [c for c in cuotas if c.estado != "pagada"]
-            atrasadas = [c for c in cuotas if c.estado == "vencida" or c.estado == "atrasada" or (c.estado == "pendiente" and c.fecha_vencimiento and c.fecha_vencimiento < datetime.now(timezone.utc))]
+            atrasadas = [c for c in cuotas if c.estado == "pendiente" and c.fecha_vencimiento and c.fecha_vencimiento < hoy]
             
+            # Calcular montos
             monto_financiado = fin.monto_total_bs or 0
-            monto_pagado = sum(c.monto_pagado or c.monto_total_bs or 0 for c in pagadas)
-            monto_deuda = sum(c.monto_total_bs or 0 for c in pendientes)
+            
+            # ✅ CORREGIDO: Calcular monto pagado correctamente (sin usar monto_pagado)
+            monto_pagado = 0
+            for c in pagadas:
+                if c.monto_total_bs:
+                    monto_pagado += c.monto_total_bs
+                elif c.monto:
+                    monto_pagado += c.monto
+                elif c.monto_base_bs:
+                    monto_pagado += c.monto_base_bs
+                else:
+                    monto_pagado += 0
+            
+            # Calcular deuda pendiente
+            monto_deuda = 0
+            for c in pendientes:
+                if c.monto_total_bs:
+                    monto_deuda += c.monto_total_bs
+                elif c.monto:
+                    monto_deuda += c.monto
+                elif c.monto_base_bs:
+                    monto_deuda += c.monto_base_bs
+                else:
+                    monto_deuda += 0
             
             total_financiado += monto_financiado
             total_pagado += monto_pagado
@@ -488,7 +524,9 @@ def obtener_estado_cuenta(
             total_cuotas += len(cuotas)
             cuotas_pagadas += len(pagadas)
             cuotas_pendientes += len(pendientes)
+            cuotas_con_deuda += len([c for c in pendientes if (c.monto_total_bs or 0) > 0 or (c.monto_base_bs or 0) > 0])
             
+            # Estado del financiamiento
             if fin.estado in ["activo", "aprobado"]:
                 financiamientos_activos += 1
                 if len(atrasadas) > 0:
@@ -496,16 +534,22 @@ def obtener_estado_cuenta(
             elif fin.estado == "completado":
                 financiamientos_completados += 1
             
+            # Fecha de creación
+            fecha_creacion = None
+            if fin.fecha_primera_cuota:
+                fecha_creacion = fin.fecha_primera_cuota.isoformat()
+            
+            # Crear detalle del financiamiento
             financiamientos_detalle.append({
                 "id": fin.id,
                 "codigo": fin.codigo,
                 "monto_total_bs": round(fin.monto_total_bs or 0, 2),
                 "monto_total_usd": round(fin.monto_total_usd or 0, 2),
                 "monto_pagado_bs": round(monto_pagado, 2),
-                "monto_pagado_usd": round(monto_pagado / (fin.tasa_aplicada or 1), 2),
+                "monto_pagado_usd": round(monto_pagado / (fin.tasa_aplicada or 1), 2) if fin.tasa_aplicada else 0,
                 "deuda_restante_bs": round(monto_deuda, 2),
-                "deuda_restante_usd": round(monto_deuda / (fin.tasa_aplicada or 1), 2),
-                "fecha_creacion": fin.fecha_primera_cuota.isoformat() if fin.fecha_primera_cuota else None,
+                "deuda_restante_usd": round(monto_deuda / (fin.tasa_aplicada or 1), 2) if fin.tasa_aplicada else 0,
+                "fecha_creacion": fecha_creacion,
                 "estado": fin.estado,
                 "cuotas_totales": len(cuotas),
                 "cuotas_pagadas": len(pagadas),
@@ -516,10 +560,12 @@ def obtener_estado_cuenta(
                 "nivel_aplicado": fin.nivel_aplicado
             })
         
+        # Calcular nivel y tasa
         nivel, config = calcular_nivel(cliente.score)
         tasa = obtener_tasa_actual(db)
         disponible = calcular_usado_disponible(cliente.id, db)
         
+        # Calcular porcentaje de cumplimiento
         porcentaje_cumplimiento = 0
         if total_cuotas > 0:
             porcentaje_cumplimiento = round((cuotas_pagadas / total_cuotas) * 100, 2)
@@ -536,7 +582,7 @@ def obtener_estado_cuenta(
                 "nivel": cliente.nivel,
                 "score": cliente.score,
                 "estado": cliente.estado,
-                "fecha_registro": cliente.fecha_creacion.isoformat() if hasattr(cliente, 'fecha_creacion') and cliente.fecha_creacion else None
+                "fecha_registro": cliente.fecha_creacion.isoformat() if cliente.fecha_creacion else None
             },
             "resumen_financiero": {
                 "total_financiado_bs": round(total_financiado, 2),
@@ -550,6 +596,7 @@ def obtener_estado_cuenta(
                 "total_cuotas": total_cuotas,
                 "cuotas_pagadas": cuotas_pagadas,
                 "cuotas_pendientes": cuotas_pendientes,
+                "cuotas_con_deuda": cuotas_con_deuda,
                 "porcentaje_cumplimiento": porcentaje_cumplimiento,
                 "financiamientos_activos": financiamientos_activos,
                 "financiamientos_completados": financiamientos_completados,
@@ -580,7 +627,7 @@ def obtener_estado_cuenta(
         raise HTTPException(status_code=500, detail=f"Error al obtener estado de cuenta: {str(e)}")
 
 # ============================================================
-# ✅ CALCULAR PROPUESTA DE NIVEL Y FINANCIAMIENTO (NUEVO)
+# ✅ CALCULAR PROPUESTA DE NIVEL Y FINANCIAMIENTO
 # ============================================================
 @router.get("/{id}/nivel-propuesta")
 def calcular_propuesta_nivel(
