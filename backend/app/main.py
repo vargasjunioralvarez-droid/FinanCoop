@@ -16,8 +16,8 @@ from app.models import NivelConfig, TasaDolar, ConfiguracionPago
 from app.config import NIVELES_CONFIG_DEFAULT
 from app.routers import (
     clientes_router, financiamientos_router, pagos_router, 
-    config_router,
-    config_router, app_mobile_router, admin_router, auth_router
+    config_router,  # ← AGREGADO
+    app_mobile_router, admin_router, auth_router
 )
 from datetime import datetime, timezone
 
@@ -85,8 +85,6 @@ if IS_PROD:
 # ─────────────────────────────────────────────────────────────
 # ✅ FIX: CORS NATIVO DE FASTAPI (MÁS CONFIABLE)
 # ─────────────────────────────────────────────────────────────
-# Usar el CORS nativo de FastAPI que es más robusto
-# El middleware custom se eliminó porque causaba problemas con Capacitor
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
@@ -118,7 +116,6 @@ async def security_headers(request: Request, call_next):
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
 
-    # ✅ CSP CORREGIDO - Permite recursos de CDN para Swagger
     csp = (
         "default-src 'self' https: http://localhost:*; "
         "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; "
@@ -142,9 +139,6 @@ async def security_headers(request: Request, call_next):
 # ─────────────────────────────────────────────────────────────
 @app.get("/docs", include_in_schema=False)
 async def custom_swagger_ui_html():
-    """
-    Swagger UI personalizado que funciona con CSP
-    """
     html = """
     <!DOCTYPE html>
     <html>
@@ -269,8 +263,7 @@ def init_db():
 app.include_router(clientes_router)
 app.include_router(financiamientos_router)
 app.include_router(pagos_router)
-app.include_router(config_router)
-app.include_router(config_router)
+app.include_router(config_router)  # ← AGREGADO
 app.include_router(app_mobile_router)
 app.include_router(admin_router)
 app.include_router(auth_router)

@@ -25,7 +25,6 @@ const error = ref(null)
 const cargandoPago = ref(false)
 
 // ============ CONFIGURACIÓN DE NIVELES (DINÁMICO DESDE BACKEND) ============
-// ✅ ANTES estaba hardcodeado, AHORA se carga desde /config/niveles
 const nivelesConfig = ref({})
 const nivelesCargados = ref(false)
 
@@ -129,18 +128,20 @@ async function cargarNiveles() {
     console.log('🔄 Cargando niveles desde backend...')
     const data = await apiCall('/config/niveles')
     
-    if (data && !data.error) {
-      nivelesConfig.value = data
+    // ✅ FIX: Manejar ambos formatos (con o sin wrapper "niveles")
+    const niveles = data.niveles || data
+    
+    if (niveles && typeof niveles === 'object' && !niveles.error) {
+      nivelesConfig.value = niveles
       nivelesCargados.value = true
-      console.log('✅ Niveles cargados desde backend:', Object.keys(data))
+      console.log('✅ Niveles cargados desde backend:', Object.keys(niveles))
       return true
     } else {
-      console.error('❌ Error en respuesta de niveles:', data?.error)
+      console.error('❌ Respuesta de niveles inválida:', data)
       return false
     }
   } catch (err) {
     console.error('❌ Error cargando niveles:', err)
-    // Fallback: si falla, dejar vacío para que no muestre datos incorrectos
     nivelesConfig.value = {}
     nivelesCargados.value = false
     return false
@@ -149,10 +150,9 @@ async function cargarNiveles() {
 
 // ============ COMPUTED ============
 const nivelActual = computed(() => {
-  // ✅ Ahora usa niveles cargados dinámicamente del backend
   const nivel = usuario.value.nivel
   if (!nivel || !nivelesConfig.value[nivel]) {
-    console.warn('⚠️ Nivel no encontrado en config:', nivel, 'Disponibles:', Object.keys(nivelesConfig.value))
+    console.warn('⚠️ Nivel no encontrado:', nivel, 'Disponibles:', Object.keys(nivelesConfig.value))
     return {}
   }
   return nivelesConfig.value[nivel]
@@ -267,12 +267,8 @@ async function apiCall(endpoint, options = {}) {
     headers['Content-Type'] = 'application/json'
   }
 
-  if (currentToken && endpoint.includes('/app/')) {
-    headers['Authorization'] = `Bearer ${currentToken}`
-  }
-  
-  // ✅ FIX: También proteger /config/niveles con token
-  if (currentToken && endpoint.includes('/config/')) {
+  // ✅ FIX: Enviar token para /app/ y /config/
+  if (currentToken && (endpoint.includes('/app/') || endpoint.includes('/config/'))) {
     headers['Authorization'] = `Bearer ${currentToken}`
   }
 
@@ -397,7 +393,7 @@ function cerrarSesion() {
   financiamientos.value = []
   todasCuotas.value = []
   cuotaSeleccionada.value = null
-  nivelesConfig.value = {}  // ✅ Limpiar niveles al cerrar sesión
+  nivelesConfig.value = {}
   nivelesCargados.value = false
 }
 
@@ -475,8 +471,7 @@ async function cargarDatos() {
   console.log('🔄 Cargando datos...')
 
   try {
-    // ✅ CARGAR NIVELES PRIMERO (antes de los datos del cliente)
-    // Esto asegura que nivelActual, siguienteNivel, etc. funcionen correctamente
+    // ✅ CARGAR NIVELES PRIMERO
     if (!nivelesCargados.value) {
       await cargarNiveles()
     }
@@ -670,7 +665,7 @@ export function useFinanCash() {
     error,
     cargandoPago,
     nivelesConfig,
-    nivelesCargados,  // ✅ NUEVO: expuesto para saber si ya cargaron
+    nivelesCargados,
     loginForm,
     pagoForm,
     registroForm,
@@ -706,6 +701,6 @@ export function useFinanCash() {
     recalcularMontosConNuevaTasa,
     resetInactivityTimer,
     cerrarSesionPorInactividad,
-    cargarNiveles  // ✅ NUEVO: expuesto para recargar manualmente si se necesita
+    cargarNiveles
   }
 }
