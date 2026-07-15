@@ -202,6 +202,8 @@ async def crear_cliente_json(
 # ============================================================
 # APROBAR CLIENTE Y ENVIAR PIN (SOLO ADMIN)
 # ============================================================
+# backend/app/routers/clientes.py (solo la parte modificada del endpoint aprobar)
+
 @router.post("/aprobar")
 async def aprobar_cliente(
     data: ClienteAprobar,
@@ -222,22 +224,20 @@ async def aprobar_cliente(
         cliente.estado = "aprobado"
         db.commit()
         
-        try:
-            enviar_pin_cliente(
-                telefono=cliente.telefono,
-                nombre=cliente.nombre,
-                cedula=cliente.cedula,
-                pin=cliente.pin
-            )
-            sms_enviado = True
-        except Exception as e:
-            print(f"⚠️ Error enviando PIN: {e}")
-            sms_enviado = False
+        # ✅ USAR LA FUNCIÓN COMPLETA QUE INTENTA SMS PRIMERO
+        from app.utils import enviar_pin_cliente_completo
+        
+        resultado_envio = enviar_pin_cliente_completo(
+            telefono=cliente.telefono,
+            nombre=cliente.nombre,
+            cedula=cliente.cedula,
+            pin=cliente.pin
+        )
         
         return {
             "success": True,
             "mensaje": f"Cliente {cliente.nombre} aprobado.",
-            "sms_enviado": sms_enviado,
+            "envio": resultado_envio,
             "cliente": {
                 "id": cliente.id,
                 "nombre": cliente.nombre,
@@ -251,7 +251,6 @@ async def aprobar_cliente(
     except Exception as e:
         print(f"❌ Error aprobando cliente: {e}")
         return {"error": str(e), "success": False}
-
 # ============================================================
 # LISTAR CLIENTES
 # ============================================================

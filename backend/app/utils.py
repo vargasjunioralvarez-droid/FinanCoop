@@ -29,19 +29,35 @@ def normalizar_telefono(telefono: str) -> str:
     if not telefono:
         return ""
     
+    # Eliminar espacios y caracteres especiales
     limpio = ''.join(c for c in telefono if c.isdigit() or c == '+')
     
+    # Si ya tiene +58, verificar que tenga 13 dígitos totales
     if limpio.startswith('+58') and len(limpio) == 13:
         return limpio
+    
+    # Si tiene +580, eliminar el 0 extra
     if limpio.startswith('+580') and len(limpio) == 14:
         return '+58' + limpio[4:]
+    
+    # Si empieza con 0 (formato local venezolano)
     if limpio.startswith('0') and len(limpio) == 11:
         return '+58' + limpio[1:]
+    
+    # Si empieza con 4 (solo el número sin código de país)
     if limpio.startswith('4') and len(limpio) == 10:
         return '+58' + limpio
+    
+    # Si tiene + pero no es +58, devolver tal cual
     if limpio.startswith('+'):
         return limpio
+    
+    # Si tiene 10 dígitos y empieza con 4
     if len(limpio) == 10 and limpio.startswith('4'):
+        return '+58' + limpio
+    
+    # Si tiene 11 dígitos y empieza con 4 (con 0 adicional)
+    if len(limpio) == 11 and limpio.startswith('4'):
         return '+58' + limpio
     
     return limpio
@@ -58,7 +74,10 @@ def es_numero_valido(telefono: str) -> bool:
 # ============ FUNCIONES DE ENVÍO DE MENSAJES ============
 
 def enviar_whatsapp(telefono: str, mensaje: str):
-    """Envía mensaje por WhatsApp usando Twilio."""
+    """
+    Envía mensaje por WhatsApp usando Twilio.
+    ⚠️ REQUIERE que el usuario haya escrito "join" primero (sandbox)
+    """
     if not twilio_client:
         print("❌ Twilio no disponible")
         return False, "Twilio no disponible"
@@ -91,8 +110,95 @@ def enviar_whatsapp(telefono: str, mensaje: str):
         print(f"❌ Error WhatsApp: {e}")
         return False, str(e)
 
+def enviar_pin_sms(telefono: str, nombre: str, cedula: str, pin: str):
+    """
+    Envía el PIN al cliente por SMS.
+    ✅ NO requiere que el usuario escriba "join"
+    ✅ Es la opción más confiable para mensajes transaccionales
+    """
+    telefono = normalizar_telefono(telefono)
+    
+    if not es_numero_valido(telefono):
+        return {
+            "success": False,
+            "error": f"Número inválido: {telefono}",
+            "sms_enviado": False
+        }
+    
+    if not twilio_client:
+        return {
+            "success": False,
+            "error": "Twilio no disponible",
+            "sms_enviado": False
+        }
+    
+    if not TWILIO_SMS_FROM:
+        return {
+            "success": False,
+            "error": "TWILIO_SMS_FROM no configurado en variables de entorno",
+            "sms_enviado": False
+        }
+    
+    mensaje_sms = f"""FinanCoop
+
+¡Bienvenido {nombre}!
+
+🔑 Tu PIN de acceso es: {pin}
+🆔 Cédula: {cedula}
+
+📱 Descarga la app e inicia sesión con tu cédula y este PIN.
+
+⚠️ No compartas este PIN con nadie.
+
+¡Gracias por confiar en FinanCoop!"""
+
+    try:
+        message = twilio_client.messages.create(
+            body=mensaje_sms,
+            from_=TWILIO_SMS_FROM,
+            to=telefono
+        )
+        
+        print(f"✅ SMS enviado a {telefono}. SID: {message.sid}")
+        
+        return {
+            "success": True,
+            "sid": message.sid,
+            "sms_enviado": True,
+            "mensaje": f"SMS enviado a {telefono}"
+        }
+        
+    except TwilioRestException as e:
+        error_msg = str(e)
+        if "21211" in error_msg:
+            error_msg = "Número de teléfono inválido"
+        elif "21610" in error_msg:
+            error_msg = "Número no tiene capacidad para recibir SMS"
+        elif "429" in str(e.status):
+            error_msg = "Límite de mensajes diarios excedido"
+        elif "20003" in error_msg:
+            error_msg = "Credenciales de Twilio inválidas"
+        
+        print(f"❌ Error SMS: {error_msg}")
+        return {
+            "success": False,
+            "error": error_msg,
+            "sms_enviado": False
+        }
+        
+    except Exception as e:
+        print(f"❌ Error SMS: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "sms_enviado": False
+        }
+
 def enviar_pin_cliente(telefono: str, nombre: str, cedula: str, pin: str):
-    """Envía el PIN al cliente por WhatsApp."""
+    """
+    Envía el PIN al cliente por WhatsApp (sandbox).
+    ⚠️ REQUIERE que el usuario haya escrito "join" primero
+    """
     telefono = normalizar_telefono(telefono)
     
     mensaje_whatsapp = f"""🎉 *¡Bienvenido a FinanCoop, {nombre}!*
@@ -139,123 +245,85 @@ def enviar_pin_cliente(telefono: str, nombre: str, cedula: str, pin: str):
     
     return resultado
 
-def enviar_pin_sms(telefono: str, nombre: str, cedula: str, pin: str):
-    """
-    Envía el PIN al cliente por SMS (sin necesidad de "join").
-    Esta es la opción recomendada para producción.
-    """
-    telefono = normalizar_telefono(telefono)
-    
-    if not es_numero_valido(telefono):
-        return {
-            "success": False,
-            "error": f"Número inválido: {telefono}",
-            "sms_enviado": False
-        }
-    
-    if not twilio_client:
-        return {
-            "success": False,
-            "error": "Twilio no disponible",
-            "sms_enviado": False
-        }
-    
-    if not TWILIO_SMS_FROM:
-        return {
-            "success": False,
-            "error": "TWILIO_SMS_FROM no configurado",
-            "sms_enviado": False
-        }
-    
-    mensaje_sms = f"""FinanCoop
-
-¡Bienvenido {nombre}!
-
-🔑 Tu PIN de acceso es: {pin}
-
-📱 Descarga la app e inicia sesión con tu cédula y este PIN.
-
-⚠️ No compartas este PIN con nadie.
-
-¡Gracias por confiar en FinanCoop!"""
-
-    try:
-        message = twilio_client.messages.create(
-            body=mensaje_sms,
-            from_=TWILIO_SMS_FROM,
-            to=telefono
-        )
-        
-        print(f"✅ SMS enviado a {telefono}. SID: {message.sid}")
-        
-        return {
-            "success": True,
-            "sid": message.sid,
-            "sms_enviado": True,
-            "mensaje": f"SMS enviado a {telefono}"
-        }
-        
-    except TwilioRestException as e:
-        error_msg = str(e)
-        if "21211" in error_msg:
-            error_msg = "Número de teléfono inválido"
-        elif "21610" in error_msg:
-            error_msg = "Número no tiene capacidad para recibir SMS"
-        elif "429" in str(e.status):
-            error_msg = "Límite de mensajes diarios excedido"
-        
-        print(f"❌ Error SMS: {error_msg}")
-        return {
-            "success": False,
-            "error": error_msg,
-            "sms_enviado": False
-        }
-        
-    except Exception as e:
-        print(f"❌ Error SMS: {e}")
-        return {
-            "success": False,
-            "error": str(e),
-            "sms_enviado": False
-        }
-
 def enviar_pin_cliente_completo(telefono: str, nombre: str, cedula: str, pin: str):
     """
-    Envía el PIN al cliente primero por SMS (más confiable),
-    y si falla, intenta por WhatsApp.
+    🚀 FUNCIÓN PRINCIPAL - Envía el PIN al cliente:
+    1. Primero intenta por SMS (NO requiere "join")
+    2. Si SMS falla, intenta por WhatsApp (requiere "join")
+    3. Retorna el resultado detallado
+    
+    Esta es la función que debe usarse desde el endpoint de aprobación.
     """
-    print(f"📱 Enviando PIN a {telefono}...")
+    print(f"📱 Enviando PIN a {nombre} ({telefono})...")
     
     # Intentar primero por SMS (sin necesidad de "join")
+    print("📤 Intentando SMS...")
     resultado_sms = enviar_pin_sms(telefono, nombre, cedula, pin)
     
     if resultado_sms["success"]:
+        print(f"✅ PIN enviado por SMS a {telefono}")
         return {
             "success": True,
             "mensaje": "PIN enviado por SMS",
             "canal": "sms",
-            "sid": resultado_sms.get("sid")
+            "sid": resultado_sms.get("sid"),
+            "pin": pin
         }
     
     # Si SMS falla, intentar por WhatsApp
-    print(f"⚠️ SMS falló, intentando WhatsApp...")
+    print(f"⚠️ SMS falló: {resultado_sms.get('error')}")
+    print("📤 Intentando WhatsApp como fallback...")
+    
     resultado_whatsapp = enviar_pin_cliente(telefono, nombre, cedula, pin)
     
     if resultado_whatsapp["whatsapp_enviado"]:
+        print(f"✅ PIN enviado por WhatsApp a {telefono}")
         return {
             "success": True,
-            "mensaje": "PIN enviado por WhatsApp",
+            "mensaje": "PIN enviado por WhatsApp (fallback)",
             "canal": "whatsapp",
-            "sid": resultado_whatsapp.get("whatsapp_sid")
+            "sid": resultado_whatsapp.get("whatsapp_sid"),
+            "pin": pin,
+            "sms_error": resultado_sms.get("error")
         }
     
-    # Si ambos fallan
+    # Si ambos fallan, devolver error detallado
+    print(f"❌ No se pudo enviar PIN por ningún canal")
     return {
         "success": False,
         "mensaje": "No se pudo enviar el PIN por ningún canal",
         "error_sms": resultado_sms.get("error"),
-        "error_whatsapp": resultado_whatsapp.get("mensaje")
+        "error_whatsapp": resultado_whatsapp.get("mensaje"),
+        "pin": pin,
+        "sms_info": resultado_sms
     }
+
+def enviar_notificacion_generica(telefono: str, mensaje: str):
+    """
+    Envía una notificación genérica por SMS o WhatsApp.
+    Primero intenta SMS, si falla usa WhatsApp.
+    """
+    telefono = normalizar_telefono(telefono)
+    
+    # Intentar SMS
+    if twilio_client and TWILIO_SMS_FROM:
+        try:
+            message = twilio_client.messages.create(
+                body=mensaje[:160],  # SMS limitado a 160 caracteres
+                from_=TWILIO_SMS_FROM,
+                to=telefono
+            )
+            print(f"✅ SMS genérico enviado: {message.sid}")
+            return {"success": True, "canal": "sms", "sid": message.sid}
+        except Exception as e:
+            print(f"⚠️ SMS genérico falló: {e}")
+    
+    # Intentar WhatsApp
+    exito, sid = enviar_whatsapp(telefono, mensaje)
+    if exito:
+        return {"success": True, "canal": "whatsapp", "sid": sid}
+    
+    return {"success": False, "error": "No se pudo enviar por ningún canal"}
 
 # ============ FUNCIONES DE NEGOCIO ============
 
