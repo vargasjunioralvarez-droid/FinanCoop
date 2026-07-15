@@ -1,11 +1,12 @@
 # backend/app/routers/pagos.py
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from datetime import datetime
+from datetime import datetime, timezone
 from app.database import get_db
 from app.models import Cuota, Pago, Financiamiento, Cliente
 from app.schemas import PagoReporte, ConciliacionPago
 from app.utils import actualizar_score_cliente, calcular_nivel, obtener_tasa_actual
+from app.auth import get_current_admin
 
 router = APIRouter(prefix="/pagos", tags=["Pagos"])
 
@@ -30,7 +31,8 @@ def reportar_pago(pago: PagoReporte, db: Session = Depends(get_db)):
             telefono_pago=pago.telefono_pago,
             cedula_pago=pago.cedula_pago,
             comprobante=pago.comprobante,
-            estado="pendiente"
+            estado="pendiente",
+            fecha_reporte=datetime.now(timezone.utc)
         )
         
         db.add(nuevo_pago)
@@ -51,7 +53,10 @@ def reportar_pago(pago: PagoReporte, db: Session = Depends(get_db)):
 # ✅ PAGOS PENDIENTES DE CONCILIACIÓN
 # ============================================================
 @router.get("/pendientes")
-def pagos_pendientes_conciliacion(db: Session = Depends(get_db)):
+def pagos_pendientes_conciliacion(
+    db: Session = Depends(get_db),
+    current_admin = Depends(get_current_admin)
+):
     try:
         pagos = db.query(Pago).filter(Pago.estado == "pendiente").all()
         
@@ -68,18 +73,27 @@ def pagos_pendientes_conciliacion(db: Session = Depends(get_db)):
             if fin:
                 cliente = db.query(Cliente).filter(Cliente.id == fin.cliente_id).first()
             
+            # Calcular monto en USD si no está
+            tasa = obtener_tasa_actual(db)
+            monto_bs = p.monto_reportado_bs or p.monto or 0
+            monto_usd = round(monto_bs / tasa, 2) if tasa > 0 else 0
+            
             resultado.append({
+                "id": p.id,
                 "pago_id": p.id,
                 "fecha_reporte": p.fecha_reporte.isoformat() if p.fecha_reporte else None,
-                "cliente": cliente.nombre if cliente else "Desconocido",
-                "cedula": cliente.cedula if cliente else "",
+                "cliente_nombre": cliente.nombre if cliente else "Desconocido",
+                "cliente_cedula": cliente.cedula if cliente else "",
                 "cuota_numero": cuota.numero if cuota else 0,
-                "monto_reportado_bs": p.monto_reportado_bs or p.monto,
+                "cuota_id": p.cuota_id,
+                "monto_reportado_bs": monto_bs,
+                "monto_reportado_usd": monto_usd,
                 "metodo": p.metodo,
                 "referencia": p.referencia,
                 "banco_origen": p.banco_origen,
                 "telefono_pago": p.telefono_pago,
-                "comprobante": p.comprobante
+                "comprobante_url": p.comprobante,
+                "estado": p.estado
             })
         
         return resultado
@@ -94,51 +108,72 @@ def pagos_pendientes_conciliacion(db: Session = Depends(get_db)):
 # ✅ CONCILIAR PAGO
 # ============================================================
 @router.post("/conciliar")
-def conciliar_pago(conciliacion: ConciliacionPago, db: Session = Depends(get_db)):
+def conciliar_pago(
+    conciliacion: ConciliacionPago, 
+    db: Session = Depends(get_db),
+    current_admin = Depends(get_current_admin)
+):
     try:
         pago = db.query(Pago).filter(Pago.id == conciliacion.pago_id).first()
         if not pago:
-            return {"error": "Pago no encontrado"}
+            raise HTTPException(status_code=404, detail="Pago no encontrado")
+        
+        if pago.estado != "pendiente":
+            raise HTTPException(status_code=400, detail="Este pago ya fue procesado")
         
         pago.monto_confirmado_bs = conciliacion.monto_confirmado_bs
         pago.estado = conciliacion.estado
         pago.conciliado_por = conciliacion.conciliado_por
-        pago.fecha_confirmacion = datetime.now()
+        pago.fecha_confirmacion = datetime.now(timezone.utc)
         
         cuota = db.query(Cuota).filter(Cuota.id == pago.cuota_id).first()
+        if not cuota:
+            raise HTTPException(status_code=404, detail="Cuota no encontrada")
         
         if conciliacion.estado == "conciliado":
+            # Aprobar pago
             cuota.estado = "pagada"
-            cuota.fecha_pago = datetime.now()
+            cuota.fecha_pago = datetime.now(timezone.utc)
+            cuota.monto_pagado = conciliacion.monto_confirmado_bs
             
             fin = db.query(Financiamiento).filter(Financiamiento.id == pago.financiamiento_id).first()
-            cliente = db.query(Cliente).filter(Cliente.id == fin.cliente_id).first()
-            
-            cuotas_pendientes = db.query(Cuota).filter(
-                Cuota.financiamiento_id == fin.id,
-                Cuota.estado.in_(["pendiente", "conciliando"])
-            ).count()
-            
-            if cuotas_pendientes == 0:
-                fin.estado = "completado"
-                fin.fecha_completado = datetime.now()
-                db.commit()
-                actualizar_score_cliente(cliente, db)
+            if fin:
+                cliente = db.query(Cliente).filter(Cliente.id == fin.cliente_id).first()
+                
+                cuotas_pendientes = db.query(Cuota).filter(
+                    Cuota.financiamiento_id == fin.id,
+                    Cuota.estado.in_(["pendiente", "conciliando"])
+                ).count()
+                
+                if cuotas_pendientes == 0:
+                    fin.estado = "completado"
+                    fin.fecha_completado = datetime.now(timezone.utc)
+                    db.commit()
+                    if cliente:
+                        actualizar_score_cliente(cliente, db)
             
             db.commit()
             return {
+                "success": True,
                 "estado": "conciliado",
                 "cuota_pagada": cuota.numero,
                 "monto_bs": conciliacion.monto_confirmado_bs,
-                "mensaje": "Pago conciliado correctamente"
+                "mensaje": "✅ Pago conciliado correctamente"
             }
         else:
+            # Rechazar pago
             cuota.estado = "pendiente"
+            pago.rechazado_por = conciliacion.conciliado_por
+            pago.fecha_rechazo = datetime.now(timezone.utc)
             db.commit()
             return {
+                "success": True,
                 "estado": "rechazado",
-                "mensaje": "Pago rechazado. Cuota vuelve a pendiente."
+                "mensaje": "❌ Pago rechazado. Cuota vuelve a pendiente."
             }
+            
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"❌ Error conciliando pago: {e}")
         db.rollback()
@@ -148,7 +183,11 @@ def conciliar_pago(conciliacion: ConciliacionPago, db: Session = Depends(get_db)
 # ✅ PAGAR CUOTA EN EFECTIVO
 # ============================================================
 @router.post("/cuotas/{id}/pagar-efectivo")
-def pagar_cuota_efectivo(id: int, db: Session = Depends(get_db)):
+def pagar_cuota_efectivo(
+    id: int, 
+    db: Session = Depends(get_db),
+    current_admin = Depends(get_current_admin)
+):
     try:
         cuota = db.query(Cuota).filter(Cuota.id == id).first()
         if not cuota:
@@ -157,7 +196,7 @@ def pagar_cuota_efectivo(id: int, db: Session = Depends(get_db)):
         fin = db.query(Financiamiento).filter(Financiamiento.id == cuota.financiamiento_id).first()
         cliente = db.query(Cliente).filter(Cliente.id == fin.cliente_id).first()
         
-        hoy = datetime.now()
+        hoy = datetime.now(timezone.utc)
         
         # Calcular mora si aplica
         interes_bs = 0
@@ -230,3 +269,28 @@ def pagar_cuota_efectivo(id: int, db: Session = Depends(get_db)):
         print(f"❌ Error pagando cuota: {e}")
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+
+# ============================================================
+# ✅ OBTENER PAGOS DE UN FINANCIAMIENTO
+# ============================================================
+@router.get("/financiamiento/{financiamiento_id}")
+def obtener_pagos_financiamiento(
+    financiamiento_id: int,
+    db: Session = Depends(get_db),
+    current_admin = Depends(get_current_admin)
+):
+    pagos = db.query(Pago).filter(Pago.financiamiento_id == financiamiento_id).all()
+    
+    return [
+        {
+            "id": p.id,
+            "cuota_id": p.cuota_id,
+            "metodo": p.metodo,
+            "monto_bs": p.monto_confirmado_bs or p.monto_reportado_bs or p.monto,
+            "referencia": p.referencia,
+            "estado": p.estado,
+            "fecha_reporte": p.fecha_reporte.isoformat() if p.fecha_reporte else None,
+            "fecha_confirmacion": p.fecha_confirmacion.isoformat() if p.fecha_confirmacion else None
+        }
+        for p in pagos
+    ]
