@@ -24,14 +24,10 @@ const cargando = ref(false)
 const error = ref(null)
 const cargandoPago = ref(false)
 
-// ============ CONFIGURACIÓN DE NIVELES ============
-const nivelesConfig = ref({
-  nuevo: { monto_max_usd: 160, entrada_pct: 60, cuotas_max: 3, mora_diaria: 2.0, min_score: 0 },
-  bronce: { monto_max_usd: 200, entrada_pct: 50, cuotas_max: 5, mora_diaria: 1.5, min_score: 100 },
-  plata: { monto_max_usd: 250, entrada_pct: 40, cuotas_max: 8, mora_diaria: 1.0, min_score: 250 },
-  oro: { monto_max_usd: 350, entrada_pct: 30, cuotas_max: 12, mora_diaria: 0.5, min_score: 500 },
-  platino: { monto_max_usd: 500, entrada_pct: 20, cuotas_max: 15, mora_diaria: 0.5, min_score: 1000 }
-})
+// ============ CONFIGURACIÓN DE NIVELES (DINÁMICO DESDE BACKEND) ============
+// ✅ ANTES estaba hardcodeado, AHORA se carga desde /config/niveles
+const nivelesConfig = ref({})
+const nivelesCargados = ref(false)
 
 // ============ FORMULARIOS ============
 const loginForm = ref({ cedula: '', pin: '' })
@@ -127,42 +123,87 @@ function limpiarListenersInactividad() {
   window.__inactivityListeners = null
 }
 
+// ============ ✅ NUEVO: CARGAR NIVELES DESDE BACKEND ============
+async function cargarNiveles() {
+  try {
+    console.log('🔄 Cargando niveles desde backend...')
+    const data = await apiCall('/config/niveles')
+    
+    if (data && !data.error) {
+      nivelesConfig.value = data
+      nivelesCargados.value = true
+      console.log('✅ Niveles cargados desde backend:', Object.keys(data))
+      return true
+    } else {
+      console.error('❌ Error en respuesta de niveles:', data?.error)
+      return false
+    }
+  } catch (err) {
+    console.error('❌ Error cargando niveles:', err)
+    // Fallback: si falla, dejar vacío para que no muestre datos incorrectos
+    nivelesConfig.value = {}
+    nivelesCargados.value = false
+    return false
+  }
+}
+
 // ============ COMPUTED ============
-const nivelActual = computed(() => nivelesConfig.value[usuario.value.nivel] || {})
+const nivelActual = computed(() => {
+  // ✅ Ahora usa niveles cargados dinámicamente del backend
+  const nivel = usuario.value.nivel
+  if (!nivel || !nivelesConfig.value[nivel]) {
+    console.warn('⚠️ Nivel no encontrado en config:', nivel, 'Disponibles:', Object.keys(nivelesConfig.value))
+    return {}
+  }
+  return nivelesConfig.value[nivel]
+})
+
 const siguienteNivel = computed(() => {
   const orden = ['nuevo', 'bronce', 'plata', 'oro', 'platino']
   const idx = orden.indexOf(usuario.value.nivel)
   if (idx >= orden.length - 1) return null
   const key = orden[idx + 1]
   const config = nivelesConfig.value[key]
-  return { key, max_score: config ? config.min_score : 999 }
+  if (!config) return null
+  return { key, max_score: config.min_score }
 })
+
 const progresoNivel = computed(() => {
   if (!siguienteNivel.value) return 100
-  const min = nivelesConfig.value[usuario.value.nivel]?.min_score || 0
+  const currentConfig = nivelesConfig.value[usuario.value.nivel]
+  if (!currentConfig) return 0
+  const min = currentConfig.min_score || 0
   const max = siguienteNivel.value.max_score
   const current = usuario.value.score || 0
-  return Math.min(100, ((current - min) / (max - min)) * 100)
+  if (max <= min) return 100
+  return Math.min(100, Math.max(0, ((current - min) / (max - min)) * 100))
 })
+
 const lineaUsada = computed(() => datosCliente.value?.limite?.usado_usd || 0)
 const lineaDisponible = computed(() => datosCliente.value?.limite?.disponible_usd || 0)
+
 const cuotasPendientes = computed(() => 
   todasCuotas.value.filter(c => c.estado === 'pendiente' && new Date(c.fecha_vencimiento) >= new Date())
 )
+
 const cuotasVencidas = computed(() =>
   todasCuotas.value.filter(c => c.estado === 'pendiente' && new Date(c.fecha_vencimiento) < new Date())
 )
+
 const cuotasProximas = computed(() => {
   return todasCuotas.value
     .filter(c => c.estado === 'pendiente')
     .sort((a, b) => new Date(a.fecha_vencimiento) - new Date(b.fecha_vencimiento))
 })
+
 const totalDeudaBs = computed(() => 
   financiamientos.value.reduce((sum, f) => sum + (f.saldo_pendiente_bs || 0), 0)
 )
+
 const totalDeudaUsd = computed(() => 
   financiamientos.value.reduce((sum, f) => sum + (f.saldo_pendiente_usd_ref || 0), 0)
 )
+
 const badgeCount = computed(() => cuotasVencidas.value.length)
 
 // ============ FUNCIONES AUXILIARES ============
@@ -170,32 +211,39 @@ function formatearBS(valor) {
   if (!valor && valor !== 0) return '0,00'
   return new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(valor)
 }
+
 function formatearUSD(valor) {
   if (!valor && valor !== 0) return '0.00'
   return new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(valor)
 }
+
 function formatearNumero(valor) {
   if (!valor && valor !== 0) return '0'
   return new Intl.NumberFormat('es-VE').format(valor)
 }
+
 function formatearFecha(fechaStr) {
   if (!fechaStr) return ''
   const fecha = new Date(fechaStr)
   return fecha.toLocaleDateString('es-VE', { weekday: 'short', day: 'numeric', month: 'short' })
 }
+
 function formatearFechaCorta(fechaStr) {
   if (!fechaStr) return ''
   const fecha = new Date(fechaStr)
   return fecha.toLocaleDateString('es-VE', { day: 'numeric', month: 'short' })
 }
+
 function colorNivel(nivel) {
   const colores = { nuevo: 'grey', bronce: '#cd7f32', plata: '#c0c0c0', oro: '#ffd700', platino: '#e5e4e2' }
   return colores[nivel] || 'primary'
 }
+
 function iconoNivel(nivel) {
   const iconos = { nuevo: 'mdi-star-outline', bronce: 'mdi-medal', plata: 'mdi-medal-outline', oro: 'mdi-trophy', platino: 'mdi-crown' }
   return iconos[nivel] || 'mdi-account'
 }
+
 function copiarAlPortapapeles(texto) {
   if (navigator.clipboard) {
     navigator.clipboard.writeText(texto).then(() => console.log('✅ Copiado:', texto))
@@ -204,11 +252,10 @@ function copiarAlPortapapeles(texto) {
   }
 }
 
-// ============ API CALLS CON fetch (CORREGIDO) ============
+// ============ API CALLS CON fetch ============
 async function apiCall(endpoint, options = {}) {
   const url = `${API_URL}${endpoint}`
 
-  // ✅ FIX: Siempre leer token de localStorage (fuente de verdad)
   const currentToken = localStorage.getItem('financoop_token') || token.value
 
   const headers = {
@@ -216,14 +263,16 @@ async function apiCall(endpoint, options = {}) {
     ...options.headers
   }
 
-  // ✅ FIX: Solo agregar Content-Type si NO es FormData
-  // Cuando se envía FormData, el navegador debe establecer el boundary automáticamente
   if (!(options.body instanceof FormData)) {
     headers['Content-Type'] = 'application/json'
   }
 
-  // ✅ FIX: Token en header Authorization para TODOS los endpoints protegidos
   if (currentToken && endpoint.includes('/app/')) {
+    headers['Authorization'] = `Bearer ${currentToken}`
+  }
+  
+  // ✅ FIX: También proteger /config/niveles con token
+  if (currentToken && endpoint.includes('/config/')) {
     headers['Authorization'] = `Bearer ${currentToken}`
   }
 
@@ -245,7 +294,6 @@ async function apiCall(endpoint, options = {}) {
 
     const response = await fetch(url, fetchOptions)
 
-    // ✅ FIX: Manejar respuesta vacía o no-JSON
     let data = {}
     const contentType = response.headers.get('content-type')
     if (contentType && contentType.includes('application/json')) {
@@ -276,7 +324,7 @@ async function apiCall(endpoint, options = {}) {
   }
 }
 
-// ============ AUTH (CORREGIDO - usa apiCall) ============
+// ============ AUTH ============
 async function iniciarSesion() {
   cargando.value = true
   error.value = null
@@ -293,7 +341,6 @@ async function iniciarSesion() {
   try {
     console.log('🔑 Intentando login con:', { cedula, pin: '***' })
 
-    // ✅ FIX: Usar apiCall en lugar de fetch directo
     const data = await apiCall('/app/login', {
       method: 'POST',
       body: { cedula, pin }
@@ -308,7 +355,6 @@ async function iniciarSesion() {
     }
 
     if (data.token) {
-      // ✅ FIX: Guardar en localStorage Y en la ref
       token.value = data.token
       localStorage.setItem('financoop_token', data.token)
       console.log('✅ Login exitoso, token guardado:', data.token.substring(0, 20) + '...')
@@ -351,15 +397,16 @@ function cerrarSesion() {
   financiamientos.value = []
   todasCuotas.value = []
   cuotaSeleccionada.value = null
+  nivelesConfig.value = {}  // ✅ Limpiar niveles al cerrar sesión
+  nivelesCargados.value = false
 }
 
-// ============ REGISTRO (CORREGIDO) ============
+// ============ REGISTRO ============
 async function registrarCliente(formData) {
   cargando.value = true
   error.value = null
 
   try {
-    // ✅ FIX: Verificar que formData sea realmente FormData
     if (!(formData instanceof FormData)) {
       console.error('❌ registrarCliente: formData no es FormData')
       error.value = 'Error interno: formato de datos incorrecto'
@@ -369,10 +416,8 @@ async function registrarCliente(formData) {
 
     console.log('📤 Enviando registro...')
 
-    // ✅ FIX: NO enviar Content-Type header - el navegador lo maneja automáticamente con FormData
     const response = await fetch(`${API_URL}/clientes`, {
       method: 'POST',
-      // ❌ NO poner headers: { 'Content-Type': 'multipart/form-data' }
       body: formData
     })
 
@@ -399,7 +444,7 @@ async function registrarCliente(formData) {
   }
 }
 
-// ============ ✅ NUEVO: OBTENER PERFIL DEL CLIENTE (APP MÓVIL) ============
+// ============ OBTENER PERFIL ============
 async function miPerfil() {
   try {
     const data = await apiCall('/app/mi-perfil')
@@ -414,9 +459,8 @@ async function miPerfil() {
   }
 }
 
-// ============ CARGAR DATOS (CORREGIDO) ============
+// ============ CARGAR DATOS (CORREGIDO CON NIVELES) ============
 async function cargarDatos() {
-  // ✅ FIX: Siempre leer de localStorage (fuente de verdad)
   const currentToken = localStorage.getItem('financoop_token')
 
   if (!currentToken) {
@@ -424,15 +468,19 @@ async function cargarDatos() {
     return
   }
 
-  // Sincronizar la ref con localStorage
   if (!token.value) {
     token.value = currentToken
   }
 
   console.log('🔄 Cargando datos...')
-  console.log('🔑 Token usado:', currentToken.substring(0, 20) + '...')
 
   try {
+    // ✅ CARGAR NIVELES PRIMERO (antes de los datos del cliente)
+    // Esto asegura que nivelActual, siguienteNivel, etc. funcionen correctamente
+    if (!nivelesCargados.value) {
+      await cargarNiveles()
+    }
+
     const data = await apiCall('/app/mis-datos')
 
     console.log('📥 Datos del cliente recibidos:', JSON.stringify(data).substring(0, 300))
@@ -448,7 +496,7 @@ async function cargarDatos() {
     datosCliente.value = data
     if (data.cliente) {
       usuario.value = data.cliente
-      console.log('✅ Usuario actualizado:', data.cliente.nombre)
+      console.log('✅ Usuario actualizado:', data.cliente.nombre, '| Nivel:', data.cliente.nivel)
     }
 
     tasaActual.value = data.tasa_actual || 0
@@ -503,7 +551,7 @@ function recalcularMontosConNuevaTasa(nuevaTasa) {
   })
 }
 
-// ============ PAGOS (CORREGIDO) ============
+// ============ PAGOS ============
 async function reportarPago() {
   if (!cuotaSeleccionada.value) {
     error.value = 'No hay cuota seleccionada'
@@ -546,7 +594,6 @@ async function reportarPago() {
       cedula_pago: pagoForm.value.cedula_pago || ''
     }
 
-    // ✅ FIX: Usar apiCall para consistencia
     const data = await apiCall('/pagos/reportar', {
       method: 'POST',
       body: pagoData
@@ -623,6 +670,7 @@ export function useFinanCash() {
     error,
     cargandoPago,
     nivelesConfig,
+    nivelesCargados,  // ✅ NUEVO: expuesto para saber si ya cargaron
     loginForm,
     pagoForm,
     registroForm,
@@ -657,6 +705,7 @@ export function useFinanCash() {
     setCuotaSeleccionada,
     recalcularMontosConNuevaTasa,
     resetInactivityTimer,
-    cerrarSesionPorInactividad
+    cerrarSesionPorInactividad,
+    cargarNiveles  // ✅ NUEVO: expuesto para recargar manualmente si se necesita
   }
 }

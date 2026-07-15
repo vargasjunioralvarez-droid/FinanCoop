@@ -16,6 +16,7 @@ from app.models import NivelConfig, TasaDolar, ConfiguracionPago
 from app.config import NIVELES_CONFIG_DEFAULT
 from app.routers import (
     clientes_router, financiamientos_router, pagos_router, 
+    config_router,
     config_router, app_mobile_router, admin_router, auth_router
 )
 from datetime import datetime, timezone
@@ -268,6 +269,7 @@ def init_db():
 app.include_router(clientes_router)
 app.include_router(financiamientos_router)
 app.include_router(pagos_router)
+app.include_router(config_router)
 app.include_router(config_router)
 app.include_router(app_mobile_router)
 app.include_router(admin_router)

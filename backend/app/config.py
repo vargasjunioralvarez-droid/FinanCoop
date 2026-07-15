@@ -39,7 +39,7 @@ class Nivel(str, enum.Enum):
 NIVELES_CONFIG_DEFAULT = {
     "nuevo": {
         "min_score": 0,
-        "max_score": 9,           # 👈 Ajustado: 0-9 = nuevo
+        "max_score": 9,
         "monto_max_usd": 160,
         "entrada_pct": 60,
         "financia_pct": 40,
@@ -49,7 +49,7 @@ NIVELES_CONFIG_DEFAULT = {
         "aprobacion_extra": False
     },
     "bronce": {
-        "min_score": 10,          # 👈 Ajustado: 10-24 = bronce
+        "min_score": 10,
         "max_score": 24,
         "monto_max_usd": 200,
         "entrada_pct": 50,
@@ -60,7 +60,7 @@ NIVELES_CONFIG_DEFAULT = {
         "aprobacion_extra": True
     },
     "plata": {
-        "min_score": 25,          # 👈 Ajustado: 25-49 = plata
+        "min_score": 25,
         "max_score": 49,
         "monto_max_usd": 250,
         "entrada_pct": 40,
@@ -71,7 +71,7 @@ NIVELES_CONFIG_DEFAULT = {
         "aprobacion_extra": True
     },
     "oro": {
-        "min_score": 50,          # 👈 Ajustado: 50-99 = oro
+        "min_score": 50,
         "max_score": 99,
         "monto_max_usd": 350,
         "entrada_pct": 30,
@@ -82,7 +82,7 @@ NIVELES_CONFIG_DEFAULT = {
         "aprobacion_extra": True
     },
     "platino": {
-        "min_score": 100,         # 👈 Ajustado: 100+ = platino
+        "min_score": 100,
         "max_score": 99999,
         "monto_max_usd": 500,
         "entrada_pct": 20,
