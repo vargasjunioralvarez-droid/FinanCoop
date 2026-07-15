@@ -84,12 +84,10 @@ async def crear_cliente(
         print(f"📝 Registrando cliente: {cedula}")
         print(f"📸 Foto recibida: {cedula_foto.filename if cedula_foto else 'No'}")
 
-        # Verificar si ya existe
         existe = db.query(Cliente).filter(Cliente.cedula == cedula).first()
         if existe:
             return {"error": f"Cliente con cédula {cedula} ya existe", "success": False}
 
-        # Procesar foto si existe
         url_cedula = None
         if cedula_foto and cedula_foto.size > 0:
             try:
@@ -102,7 +100,6 @@ async def crear_cliente(
             except Exception as e:
                 print(f"⚠️ Error procesando foto: {e}")
 
-        # Crear cliente
         db_cliente = Cliente(
             nombre=nombre,
             cedula=cedula,
@@ -222,7 +219,6 @@ async def aprobar_cliente(
         cliente.estado = "aprobado"
         db.commit()
         
-        # ✅ USAR LA FUNCIÓN COMPLETA QUE INTENTA SMS PRIMERO
         from app.utils import enviar_pin_cliente_completo
         
         resultado_envio = enviar_pin_cliente_completo(
@@ -347,7 +343,7 @@ def actualizar_cliente(
     }
 
 # ============================================================
-# ✅ ELIMINAR CLIENTE - CORREGIDO (BORRA PAGOS → CUOTAS → FINANCIAMIENTOS → CLIENTE)
+# ✅ ELIMINAR CLIENTE
 # ============================================================
 @router.delete("/{id}")
 def eliminar_cliente(
@@ -361,19 +357,12 @@ def eliminar_cliente(
     
     nombre = cliente.nombre
     
-    # ✅ CORREGIDO: Eliminar en orden correcto (hijos primero, padres después)
     financiamientos = db.query(Financiamiento).filter(Financiamiento.cliente_id == id).all()
     for fin in financiamientos:
-        # 1. Primero eliminar PAGOS asociados a este financiamiento
         db.query(Pago).filter(Pago.financiamiento_id == fin.id).delete(synchronize_session=False)
-        
-        # 2. Luego eliminar CUOTAS
         db.query(Cuota).filter(Cuota.financiamiento_id == fin.id).delete(synchronize_session=False)
-        
-        # 3. Eliminar el FINANCIAMIENTO
         db.delete(fin)
     
-    # 4. Finalmente eliminar el CLIENTE
     db.delete(cliente)
     db.commit()
     
@@ -383,7 +372,7 @@ def eliminar_cliente(
     }
 
 # ============================================================
-# SUBIR FOTO (ENDOPOINT SEPARADO)
+# SUBIR FOTO
 # ============================================================
 @router.post("/{id}/foto")
 async def subir_foto_cedula(
@@ -462,22 +451,15 @@ def obtener_estado_cuenta(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
-    """
-    Obtiene el estado de cuenta completo de un cliente
-    Incluye: resumen financiero, financiamientos activos, historial de pagos
-    """
     try:
-        # Verificar que el cliente existe
         cliente = db.query(Cliente).filter(Cliente.id == id).first()
         if not cliente:
             raise HTTPException(status_code=404, detail="Cliente no encontrado")
         
-        # Obtener todos los financiamientos del cliente
         financiamientos = db.query(Financiamiento).filter(
             Financiamiento.cliente_id == id
         ).order_by(Financiamiento.id.desc()).all()
         
-        # Variables para resumen financiero
         total_financiado = 0
         total_pagado = 0
         total_deuda = 0
@@ -487,20 +469,15 @@ def obtener_estado_cuenta(
         financiamientos_activos = 0
         financiamientos_completados = 0
         financiamientos_atrasados = 0
-        
-        # Lista para financiamientos con detalles
         financiamientos_detalle = []
         
         for fin in financiamientos:
-            # Obtener cuotas de este financiamiento
             cuotas = db.query(Cuota).filter(Cuota.financiamiento_id == fin.id).all()
             
-            # Contar cuotas por estado
             pagadas = [c for c in cuotas if c.estado == "pagada"]
             pendientes = [c for c in cuotas if c.estado != "pagada"]
             atrasadas = [c for c in cuotas if c.estado == "vencida" or c.estado == "atrasada" or (c.estado == "pendiente" and c.fecha_vencimiento and c.fecha_vencimiento < datetime.now(timezone.utc))]
             
-            # Sumar montos
             monto_financiado = fin.monto_total_bs or 0
             monto_pagado = sum(c.monto_pagado or c.monto_total_bs or 0 for c in pagadas)
             monto_deuda = sum(c.monto_total_bs or 0 for c in pendientes)
@@ -512,7 +489,6 @@ def obtener_estado_cuenta(
             cuotas_pagadas += len(pagadas)
             cuotas_pendientes += len(pendientes)
             
-            # Estado del financiamiento
             if fin.estado in ["activo", "aprobado"]:
                 financiamientos_activos += 1
                 if len(atrasadas) > 0:
@@ -520,7 +496,6 @@ def obtener_estado_cuenta(
             elif fin.estado == "completado":
                 financiamientos_completados += 1
             
-            # Crear detalle del financiamiento
             financiamientos_detalle.append({
                 "id": fin.id,
                 "codigo": fin.codigo,
@@ -541,12 +516,10 @@ def obtener_estado_cuenta(
                 "nivel_aplicado": fin.nivel_aplicado
             })
         
-        # Calcular nivel y tasa
         nivel, config = calcular_nivel(cliente.score)
         tasa = obtener_tasa_actual(db)
         disponible = calcular_usado_disponible(cliente.id, db)
         
-        # Calcular porcentaje de cumplimiento
         porcentaje_cumplimiento = 0
         if total_cuotas > 0:
             porcentaje_cumplimiento = round((cuotas_pagadas / total_cuotas) * 100, 2)
@@ -605,3 +578,125 @@ def obtener_estado_cuenta(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error al obtener estado de cuenta: {str(e)}")
+
+# ============================================================
+# ✅ CALCULAR PROPUESTA DE NIVEL Y FINANCIAMIENTO (NUEVO)
+# ============================================================
+@router.get("/{id}/nivel-propuesta")
+def calcular_propuesta_nivel(
+    id: int,
+    monto_total_bs: float,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """
+    Calcula la propuesta de financiamiento basada en el nivel del cliente
+    y el monto solicitado en Bs
+    """
+    try:
+        # Verificar que el cliente existe
+        cliente = db.query(Cliente).filter(Cliente.id == id).first()
+        if not cliente:
+            raise HTTPException(status_code=404, detail="Cliente no encontrado")
+        
+        # Obtener tasa actual
+        tasa = obtener_tasa_actual(db)
+        
+        # Calcular nivel y configuración
+        nivel, config = calcular_nivel(cliente.score)
+        
+        # Obtener disponible del cliente
+        disponible = calcular_usado_disponible(cliente.id, db)
+        
+        # Convertir monto a USD para validaciones
+        monto_total_usd = monto_total_bs / tasa if tasa > 0 else 0
+        
+        # Calcular límites
+        limite_max_usd = config["monto_max_usd"]
+        limite_max_bs = round(limite_max_usd * tasa, 2) if tasa > 0 else 0
+        
+        # Verificar si el monto excede el límite
+        excede_limite = monto_total_usd > limite_max_usd
+        
+        # Verificar si tiene disponible
+        disponible_usd = disponible.get("disponible_usd", 0) if isinstance(disponible, dict) else disponible
+        disponible_bs = disponible_usd * tasa if tasa > 0 else 0
+        
+        # Calcular entrada, financiamiento y cuotas
+        entrada_pct = config["entrada_pct"]
+        financia_pct = config["financia_pct"]
+        
+        entrada_bs = monto_total_bs * (entrada_pct / 100)
+        financia_bs = monto_total_bs - entrada_bs
+        entrada_usd = entrada_bs / tasa if tasa > 0 else 0
+        financia_usd = financia_bs / tasa if tasa > 0 else 0
+        
+        # Calcular cuotas base y máximas
+        cuotas_base = config["cuotas_base"]
+        cuotas_max = config["cuotas_max"]
+        
+        # Determinar si requiere aprobación extra
+        requiere_aprobacion = config["aprobacion_extra"]
+        
+        # Calcular monto de cuota base
+        monto_cuota_base_bs = financia_bs / cuotas_base if cuotas_base > 0 else 0
+        monto_cuota_base_usd = financia_usd / cuotas_base if cuotas_base > 0 else 0
+        
+        # Calcular monto de cuota máxima
+        monto_cuota_max_bs = financia_bs / cuotas_max if cuotas_max > 0 else 0
+        monto_cuota_max_usd = financia_usd / cuotas_max if cuotas_max > 0 else 0
+        
+        return {
+            "success": True,
+            "cliente": {
+                "id": cliente.id,
+                "nombre": cliente.nombre,
+                "cedula": cliente.cedula,
+                "nivel": cliente.nivel,
+                "score": cliente.score,
+                "estado": cliente.estado
+            },
+            "propuesta": {
+                "monto_solicitado_bs": round(monto_total_bs, 2),
+                "monto_solicitado_usd": round(monto_total_usd, 2),
+                "limite_maximo_bs": limite_max_bs,
+                "limite_maximo_usd": limite_max_usd,
+                "disponible_bs": round(disponible_bs, 2) if isinstance(disponible_bs, (int, float)) else 0,
+                "disponible_usd": round(disponible_usd, 2) if isinstance(disponible_usd, (int, float)) else 0,
+                "excede_limite": excede_limite,
+                "entrada_bs": round(entrada_bs, 2),
+                "entrada_usd": round(entrada_usd, 2),
+                "entrada_pct": entrada_pct,
+                "financia_bs": round(financia_bs, 2),
+                "financia_usd": round(financia_usd, 2),
+                "financia_pct": financia_pct,
+                "cuotas_base": cuotas_base,
+                "cuotas_max": cuotas_max,
+                "monto_cuota_base_bs": round(monto_cuota_base_bs, 2),
+                "monto_cuota_base_usd": round(monto_cuota_base_usd, 2),
+                "monto_cuota_max_bs": round(monto_cuota_max_bs, 2),
+                "monto_cuota_max_usd": round(monto_cuota_max_usd, 2),
+                "requiere_aprobacion_extra": requiere_aprobacion
+            },
+            "configuracion_nivel": {
+                "min_score": config["min_score"],
+                "max_score": config["max_score"],
+                "monto_max_usd": config["monto_max_usd"],
+                "entrada_pct": config["entrada_pct"],
+                "financia_pct": config["financia_pct"],
+                "cuotas_base": config["cuotas_base"],
+                "cuotas_max": config["cuotas_max"],
+                "mora_diaria": config["mora_diaria"],
+                "aprobacion_extra": config["aprobacion_extra"]
+            },
+            "tasa_dolar_actual": tasa,
+            "fecha_consulta": datetime.now(timezone.utc).isoformat()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error calculando propuesta: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error al calcular propuesta: {str(e)}")
