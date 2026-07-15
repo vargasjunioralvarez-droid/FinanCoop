@@ -43,7 +43,7 @@
                 
                 <span v-if="clienteEncontrado.nivel_config" class="text-caption">
                   Límite: ${{ clienteEncontrado.nivel_config.monto_max_usd }} USD 
-                  (BS {{ formatearNumero(clienteEncontrado.nivel_config.monto_max_usd * tasaDolar) }}) | 
+                  (BS {{ formatearNumero(clienteEncontrado.nivel_config.monto_max_bs) }}) | 
                   Entrada: {{ clienteEncontrado.nivel_config.entrada_pct }}% | 
                   Cuotas: {{ clienteEncontrado.nivel_config.cuotas_base }}-{{ clienteEncontrado.nivel_config.cuotas_max }}
                 </span>
@@ -54,7 +54,6 @@
             <v-alert v-if="clienteNoEncontrado" type="warning" class="mt-3" border="start">
               <p class="mb-2 font-weight-bold">Cliente no encontrado. Registre nuevo cliente:</p>
               
-              <!-- Datos básicos -->
               <v-text-field 
                 v-model="nuevoCliente.nombre" 
                 label="Nombre completo *" 
@@ -78,7 +77,6 @@
                 density="comfortable"
               ></v-text-field>
               
-              <!-- DIRECCIÓN -->
               <v-textarea
                 v-model="nuevoCliente.direccion"
                 label="Dirección completa *"
@@ -89,7 +87,6 @@
                 required
               ></v-textarea>
               
-              <!-- REFERENCIA PERSONAL -->
               <v-divider class="my-3"></v-divider>
               <p class="text-subtitle-2 mb-2 font-weight-bold">Referencia personal (obligatorio):</p>
               
@@ -130,31 +127,6 @@
               </v-btn>
             </v-alert>
             
-            <!-- BLOQUEO: Si tiene deudas vencidas -->
-            <v-alert 
-              v-if="clienteEncontrado?.bloqueado" 
-              type="error" 
-              prominent
-              class="mt-3"
-            >
-              <v-icon size="32" class="mr-2">mdi-block-helper</v-icon>
-              <div>
-                <div class="text-h6">⚠️ CLIENTE BLOQUEADO</div>
-                <div class="text-body-1">
-                  Tiene {{ clienteEncontrado.deudas_vencidas }} cuota(s) vencida(s)<br>
-                  Deuda vencida: BS {{ formatearNumero(clienteEncontrado.deuda_vencida_bs) }}
-                </div>
-                <v-btn 
-                  color="error" 
-                  block 
-                  class="mt-2"
-                  @click="mostrarDeudasVencidas"
-                >
-                  Ver Deudas Vencidas
-                </v-btn>
-              </div>
-            </v-alert>
-            
             <v-btn 
               v-if="clienteEncontrado && !clienteEncontrado.bloqueado" 
               color="primary" 
@@ -188,7 +160,7 @@
             
             <div class="text-caption mb-2" v-if="tasaDolar && montoTotalBS">
               <v-icon color="info" size="small">mdi-information</v-icon>
-              Equivalente: ~${{ (montoTotalBS / tasaDolar).toFixed(2) }} USD (referencia)
+              Equivalente: ~${{ (parseFloat(montoTotalBS) / tasaDolar).toFixed(2) }} USD (referencia)
             </div>
             
             <v-alert v-if="propuesta" type="info" class="mt-3" border="start">
@@ -197,47 +169,65 @@
               
               <div class="d-flex justify-space-between mb-1">
                 <span>Monto Total:</span>
-                <strong>BS {{ formatearNumero(propuesta.monto_total_bs) }}</strong>
+                <strong>BS {{ formatearNumero(propuesta.propuesta?.monto_solicitado_bs || propuesta.monto_total_bs) }}</strong>
               </div>
+              
+              <div class="d-flex justify-space-between mb-1 text-grey">
+                <span>Monto en USD:</span>
+                <strong>${{ formatearNumero(propuesta.propuesta?.monto_solicitado_usd || propuesta.monto_total_usd) }}</strong>
+              </div>
+              
               <div class="d-flex justify-space-between mb-1 text-error">
-                <span>Entrada a pagar HOY ({{ propuesta.entrada_pct }}%):</span>
-                <strong>BS {{ formatearNumero(propuesta.monto_entrada_bs) }}</strong>
+                <span>Entrada a pagar HOY ({{ propuesta.propuesta?.entrada_pct || propuesta.entrada_pct }}%):</span>
+                <strong>BS {{ formatearNumero(propuesta.propuesta?.entrada_bs || propuesta.monto_entrada_bs) }}</strong>
               </div>
+              
               <div class="d-flex justify-space-between mb-1 text-success">
-                <span>A financiar ({{ propuesta.financia_pct }}%):</span>
-                <strong>BS {{ formatearNumero(propuesta.monto_financia_bs) }}</strong>
+                <span>A financiar ({{ propuesta.propuesta?.financia_pct || propuesta.financia_pct }}%):</span>
+                <strong>BS {{ formatearNumero(propuesta.propuesta?.financia_bs || propuesta.monto_financia_bs) }}</strong>
               </div>
+              
+              <div class="d-flex justify-space-between mb-1">
+                <span>Límite disponible:</span>
+                <strong>BS {{ formatearNumero(propuesta.propuesta?.disponible_bs || propuesta.disponible_bs) }}</strong>
+              </div>
+              
+              <div v-if="propuesta.propuesta?.excede_limite || propuesta.excede_limite" class="text-error mt-2">
+                <v-icon color="error">mdi-alert</v-icon>
+                ⚠️ El monto excede el límite máximo permitido
+              </div>
+              
               <div class="text-caption mt-2">
-                Tasa: {{ propuesta.tasa_aplicada }} BS/$ | 
-                Equivalente USD: ${{ propuesta.monto_total_usd }}
+                Tasa: {{ propuesta.tasa_dolar_actual || propuesta.tasa_aplicada || tasaDolar }} BS/$ 
               </div>
             </v-alert>
             
-            <v-select
-              v-if="propuesta && propuesta.opciones_cuotas"
-              v-model="cuotasSeleccionadas"
-              :items="propuesta.opciones_cuotas"
-              item-title="label"
-              item-value="cuotas"
-              label="Seleccionar cantidad de cuotas"
-              class="mt-3"
-              variant="outlined"
-              density="comfortable"
-            >
-              <template v-slot:item="{ props, item }">
-                <v-list-item v-bind="props">
-                  <v-list-item-subtitle>
-                    {{ item.raw.cuotas }} cuotas quincenales de 
-                    <strong>BS {{ formatearNumero(item.raw.monto_cuota_bs) }}</strong>
-                    (USD ${{ item.raw.monto_cuota_usd }} ref.)
-                  </v-list-item-subtitle>
-                </v-list-item>
-              </template>
-            </v-select>
-            
-            <v-alert v-if="requiereAprobacion" type="warning" class="mt-2" border="start">
-              ⚠️ Requiere aprobación del establecimiento para {{ cuotasSeleccionadas }} cuotas
-            </v-alert>
+            <!-- Selector de cuotas -->
+            <div v-if="propuesta" class="mt-3">
+              <label class="text-subtitle-2 font-weight-bold">Seleccionar cuotas:</label>
+              <v-radio-group v-model="cuotasSeleccionadas" class="mt-2">
+                <v-radio
+                  v-for="cuota in opcionesCuotas"
+                  :key="cuota.value"
+                  :label="`${cuota.value} cuotas - BS ${formatearNumero(cuota.monto)} cada una`"
+                  :value="cuota.value"
+                >
+                  <template v-slot:label>
+                    <div>
+                      <strong>{{ cuota.value }} cuotas</strong>
+                      <span class="text-caption ml-2">
+                        BS {{ formatearNumero(cuota.monto) }} cada una
+                        <span class="text-grey">(${{ formatearNumero(cuota.monto_usd) }} ref.)</span>
+                      </span>
+                    </div>
+                  </template>
+                </v-radio>
+              </v-radio-group>
+              
+              <v-alert v-if="requiereAprobacion" type="warning" class="mt-2" border="start">
+                ⚠️ Requiere aprobación del establecimiento para {{ cuotasSeleccionadas }} cuotas
+              </v-alert>
+            </div>
             
             <v-btn 
               v-if="cuotasSeleccionadas" 
@@ -269,8 +259,8 @@
               <p><strong>Dirección:</strong> {{ clienteEncontrado?.direccion }}</p>
               <p><strong>Producto/Servicio:</strong> {{ descripcion || 'Sin descripción' }}</p>
               <p><strong>Monto Total:</strong> BS {{ formatearNumero(montoTotalBS) }}</p>
-              <p class="text-error"><strong>Entrada a cobrar HOY:</strong> BS {{ formatearNumero(propuesta?.monto_entrada_bs) }}</p>
-              <p class="text-success"><strong>Financia:</strong> BS {{ formatearNumero(propuesta?.monto_financia_bs) }}</p>
+              <p class="text-error"><strong>Entrada a cobrar HOY:</strong> BS {{ formatearNumero(propuesta?.propuesta?.entrada_bs || propuesta?.monto_entrada_bs) }}</p>
+              <p class="text-success"><strong>Financia:</strong> BS {{ formatearNumero(propuesta?.propuesta?.financia_bs || propuesta?.monto_financia_bs) }}</p>
               <p><strong>Cuotas:</strong> {{ cuotasSeleccionadas }} quincenales</p>
               <p><strong>Monto cuota:</strong> BS {{ formatearNumero(montoCuotaSeleccionada) }}</p>
             </v-alert>
@@ -332,7 +322,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { api } from '@/config/api'  // ✅ Usar 'api' en lugar de axios directamente
+import { api } from '@/config/api'
 
 const paso = ref(1)
 const busquedaCedula = ref('')
@@ -356,13 +346,41 @@ const resultado = ref({})
 const tasaDolar = ref(40.0)
 const requiereAprobacion = ref(false)
 
-const montoCuotaSeleccionada = computed(() => {
-  if (!propuesta.value || !propuesta.value.opciones_cuotas || !cuotasSeleccionadas.value) return 0
-  const opcion = propuesta.value.opciones_cuotas.find(o => o.cuotas === cuotasSeleccionadas.value)
-  return opcion?.monto_cuota_bs || 0
+// Calcular opciones de cuotas desde la propuesta
+const opcionesCuotas = computed(() => {
+  if (!propuesta.value) return []
+  
+  const p = propuesta.value.propuesta || propuesta.value
+  const config = propuesta.value.configuracion_nivel || {}
+  
+  // Obtener cuotas base y máxima
+  const cuotasBase = p.cuotas_base || config.cuotas_base || 4
+  const cuotasMax = p.cuotas_max || config.cuotas_max || 12
+  
+  // Obtener monto a financiar
+  const financiaBs = p.financia_bs || propuesta.value.monto_financia_bs || 0
+  
+  // Generar opciones desde base hasta max (en pasos de 1)
+  const opciones = []
+  for (let i = cuotasBase; i <= cuotasMax; i++) {
+    const montoCuota = financiaBs / i
+    opciones.push({
+      value: i,
+      monto: montoCuota,
+      monto_usd: montoCuota / (propuesta.value.tasa_dolar_actual || tasaDolar.value || 40)
+    })
+  }
+  
+  return opciones
 })
 
-// Validar que todos los campos obligatorios estén llenos
+// Calcular monto de cuota seleccionada
+const montoCuotaSeleccionada = computed(() => {
+  const opcion = opcionesCuotas.value.find(o => o.value === cuotasSeleccionadas.value)
+  return opcion?.monto || 0
+})
+
+// Validar registro
 const registroValido = computed(() => {
   return nuevoCliente.value.nombre && 
          nuevoCliente.value.telefono && 
@@ -372,6 +390,7 @@ const registroValido = computed(() => {
          nuevoCliente.value.referencia_parentesco
 })
 
+// Colores por nivel
 const colorNivel = (nivel) => {
   const colores = { 
     nuevo: 'grey', 
@@ -383,17 +402,18 @@ const colorNivel = (nivel) => {
   return colores[nivel] || 'grey'
 }
 
+// Formatear números
 const formatearNumero = (num) => {
-  if (!num) return '0,00'
+  if (!num && num !== 0) return '0,00'
   return Number(num).toLocaleString('es-VE', { 
     minimumFractionDigits: 2, 
     maximumFractionDigits: 2 
   })
 }
 
+// Cargar tasa inicial
 onMounted(async () => {
   try {
-    // ✅ Usar api.get
     const data = await api.get('/config/tasa-dolar')
     tasaDolar.value = data.tasa
   } catch (e) {
@@ -401,11 +421,11 @@ onMounted(async () => {
   }
 })
 
+// Buscar cliente
 const buscarCliente = async () => {
   if (!busquedaCedula.value) return
   
   try {
-    // ✅ Usar api.get
     const data = await api.get(`/clientes/buscar/${busquedaCedula.value}`)
     
     if (data.error || !data.encontrado) {
@@ -413,17 +433,25 @@ const buscarCliente = async () => {
       clienteNoEncontrado.value = true
       nuevoCliente.value.cedula = busquedaCedula.value
     } else {
-      // Verificar si tiene deudas vencidas
-      // ✅ Usar api.get
-      const estado = await api.get(`/clientes/${data.id}/estado-cuenta`)
-      
       clienteEncontrado.value = {
         ...data,
-        bloqueado: estado.bloqueado,
-        deudas_vencidas: estado.deudas_vencidas,
-        deuda_vencida_bs: estado.deuda_vencida_bs
+        bloqueado: false,
+        deudas_vencidas: 0,
+        deuda_vencida_bs: 0
       }
       clienteNoEncontrado.value = false
+      
+      // Verificar estado de cuenta
+      try {
+        const estado = await api.get(`/clientes/${data.id}/estado-cuenta`)
+        if (estado.bloqueado || estado.deudas_vencidas > 0) {
+          clienteEncontrado.value.bloqueado = true
+          clienteEncontrado.value.deudas_vencidas = estado.deudas_vencidas || 0
+          clienteEncontrado.value.deuda_vencida_bs = estado.deuda_vencida_bs || 0
+        }
+      } catch (e) {
+        console.log('No se pudo verificar estado de cuenta')
+      }
     }
   } catch (e) {
     console.error('Error buscando:', e)
@@ -433,6 +461,7 @@ const buscarCliente = async () => {
   }
 }
 
+// Registrar cliente
 const registrarCliente = async () => {
   if (!registroValido.value) {
     alert('Complete todos los campos obligatorios')
@@ -440,7 +469,6 @@ const registrarCliente = async () => {
   }
   
   try {
-    // ✅ Usar api.post
     const data = await api.post('/clientes', {
       nombre: nuevoCliente.value.nombre,
       cedula: busquedaCedula.value,
@@ -457,10 +485,7 @@ const registrarCliente = async () => {
       return
     }
     
-    if (data.pin_generado) {
-      alert(`Cliente registrado. PIN para app: ${data.pin_generado}`)
-    }
-    
+    alert('✅ Cliente registrado exitosamente')
     await buscarCliente()
     
   } catch (e) {
@@ -469,34 +494,46 @@ const registrarCliente = async () => {
   }
 }
 
+// Calcular propuesta
 const calcularPropuesta = async () => {
-  if (!montoTotalBS.value || parseFloat(montoTotalBS.value) <= 0 || !clienteEncontrado.value) return
+  if (!montoTotalBS.value || parseFloat(montoTotalBS.value) <= 0 || !clienteEncontrado.value) {
+    propuesta.value = null
+    cuotasSeleccionadas.value = null
+    return
+  }
   
   try {
-    // ✅ Usar api.get
     const data = await api.get(
       `/clientes/${clienteEncontrado.value.id}/nivel-propuesta?monto_total_bs=${montoTotalBS.value}`
     )
+    
     propuesta.value = data
-    cuotasSeleccionadas.value = data.cuotas_sugeridas
-    requiereAprobacion.value = data.requiere_aprobacion
+    
+    // Seleccionar cuotas base por defecto
+    const cuotasBase = data.propuesta?.cuotas_base || data.configuracion_nivel?.cuotas_base || 4
+    cuotasSeleccionadas.value = cuotasBase
+    
+    requiereAprobacion.value = data.propuesta?.requiere_aprobacion_extra || data.requiere_aprobacion || false
+    
   } catch (e) {
     console.error('Error calculando propuesta:', e)
+    propuesta.value = null
   }
 }
 
+// Fecha de cuota
 const fechaCuota = (n) => {
   const hoy = new Date()
   const fecha = new Date(hoy.getTime() + (15 * n * 24 * 60 * 60 * 1000))
   return fecha.toLocaleDateString('es-VE')
 }
 
+// Crear financiamiento
 const crearFinanciamiento = async () => {
   try {
-    // ✅ Usar api.post
     const data = await api.post('/financiamientos', {
       cliente_id: clienteEncontrado.value.id,
-      descripcion: descripcion.value,
+      descripcion: descripcion.value || 'Compra',
       monto_total_bs: parseFloat(montoTotalBS.value),
       cuotas_solicitadas: cuotasSeleccionadas.value
     })
@@ -515,6 +552,7 @@ const crearFinanciamiento = async () => {
   }
 }
 
+// Resetear
 const resetear = () => {
   paso.value = 1
   busquedaCedula.value = ''
@@ -536,10 +574,5 @@ const resetear = () => {
   descripcion.value = ''
   resultado.value = {}
   requiereAprobacion.value = false
-}
-
-const mostrarDeudasVencidas = () => {
-  // TODO: Implementar diálogo para mostrar deudas vencidas
-  alert('Función en desarrollo: Mostrar deudas vencidas')
 }
 </script>
