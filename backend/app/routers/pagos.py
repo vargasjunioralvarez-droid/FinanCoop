@@ -13,12 +13,30 @@ router = APIRouter(prefix="/pagos", tags=["Pagos"])
 # ============================================================
 # ✅ REPORTAR PAGO
 # ============================================================
+# backend/app/routers/pagos.py - Sección reportar pago
+
 @router.post("/reportar")
 def reportar_pago(pago: PagoReporte, db: Session = Depends(get_db)):
     try:
+        print("=" * 50)
+        print("📝 REPORTAR PAGO - INICIO")
+        print(f"📋 Datos recibidos: {pago.dict()}")
+        
         cuota = db.query(Cuota).filter(Cuota.id == pago.cuota_id).first()
         if not cuota:
             return {"error": "Cuota no encontrada"}
+        
+        # Verificar si ya hay un pago pendiente para esta cuota
+        pago_existente = db.query(Pago).filter(
+            Pago.cuota_id == pago.cuota_id,
+            Pago.estado == "pendiente"
+        ).first()
+        
+        if pago_existente:
+            return {
+                "error": "Ya existe un pago pendiente para esta cuota",
+                "pago_id": pago_existente.id
+            }
         
         nuevo_pago = Pago(
             cuota_id=pago.cuota_id,
@@ -38,6 +56,10 @@ def reportar_pago(pago: PagoReporte, db: Session = Depends(get_db)):
         db.add(nuevo_pago)
         cuota.estado = "conciliando"
         db.commit()
+        
+        print(f"✅ Pago reportado ID: {nuevo_pago.id}")
+        print(f"✅ Comprobante: {nuevo_pago.comprobante[:50] if nuevo_pago.comprobante else 'Sin foto'}")
+        print("=" * 50)
         
         return {
             "pago_id": nuevo_pago.id,

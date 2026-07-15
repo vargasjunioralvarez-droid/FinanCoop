@@ -23,8 +23,9 @@ const notificaciones = ref([])
 const cargando = ref(false)
 const error = ref(null)
 const cargandoPago = ref(false)
+const cargandoUpload = ref(false)
 
-// ============ CONFIGURACIÓN DE NIVELES (DINÁMICO DESDE BACKEND) ============
+// ============ CONFIGURACIÓN DE NIVELES ============
 const nivelesConfig = ref({})
 const nivelesCargados = ref(false)
 
@@ -122,13 +123,12 @@ function limpiarListenersInactividad() {
   window.__inactivityListeners = null
 }
 
-// ============ ✅ NUEVO: CARGAR NIVELES DESDE BACKEND ============
+// ============ CARGAR NIVELES ============
 async function cargarNiveles() {
   try {
     console.log('🔄 Cargando niveles desde backend...')
     const data = await apiCall('/config/niveles')
     
-    // ✅ FIX: Manejar ambos formatos (con o sin wrapper "niveles")
     const niveles = data.niveles || data
     
     if (niveles && typeof niveles === 'object' && !niveles.error) {
@@ -152,7 +152,6 @@ async function cargarNiveles() {
 const nivelActual = computed(() => {
   const nivel = usuario.value.nivel
   if (!nivel || !nivelesConfig.value[nivel]) {
-    console.warn('⚠️ Nivel no encontrado:', nivel, 'Disponibles:', Object.keys(nivelesConfig.value))
     return {}
   }
   return nivelesConfig.value[nivel]
@@ -252,7 +251,7 @@ function copiarAlPortapapeles(texto) {
   }
 }
 
-// ============ API CALLS CON fetch ============
+// ============ API CALLS CON fetch (CORREGIDO) ============
 async function apiCall(endpoint, options = {}) {
   const url = `${API_URL}${endpoint}`
 
@@ -267,9 +266,17 @@ async function apiCall(endpoint, options = {}) {
     headers['Content-Type'] = 'application/json'
   }
 
-  // ✅ FIX: Enviar token para /app/ y /config/
-  if (currentToken && (endpoint.includes('/app/') || endpoint.includes('/config/'))) {
+  // ✅ CORREGIDO: Enviar token para TODOS los endpoints que lo requieran
+  const endpointsQueNecesitanToken = [
+    '/app/', '/config/', '/upload/', '/clientes/', 
+    '/financiamientos/', '/pagos/', '/admin/'
+  ]
+  
+  const necesitaToken = endpointsQueNecesitanToken.some(path => endpoint.includes(path))
+  
+  if (currentToken && necesitaToken) {
     headers['Authorization'] = `Bearer ${currentToken}`
+    console.log(`🔑 Token enviado a: ${endpoint}`)
   }
 
   try {
@@ -286,8 +293,6 @@ async function apiCall(endpoint, options = {}) {
         : JSON.stringify(options.body)
     }
 
-    console.log('📤 Headers:', JSON.stringify(headers))
-
     const response = await fetch(url, fetchOptions)
 
     let data = {}
@@ -300,8 +305,7 @@ async function apiCall(endpoint, options = {}) {
       data = { error: text || `HTTP ${response.status}` }
     }
 
-    console.log(`✅ Response status:`, response.status)
-    console.log(`📥 Response data:`, JSON.stringify(data).substring(0, 200))
+    console.log(`✅ Response status: ${response.status}`)
 
     if (!response.ok) {
       const errorMsg = data?.detail || data?.error || `HTTP ${response.status}`
@@ -317,6 +321,43 @@ async function apiCall(endpoint, options = {}) {
       cerrarSesion()
     }
     throw err
+  }
+}
+
+// ============ SUBIR COMPROBANTE ============
+async function subirComprobante(file) {
+  if (!file) return null
+  
+  console.log('📸 Subiendo comprobante a Cloudflare...')
+  console.log('📸 Archivo:', file.name, file.type, file.size)
+  
+  cargandoUpload.value = true
+  
+  try {
+    const formData = new FormData()
+    formData.append('file', file)
+    
+    console.log('📤 Enviando a /upload/comprobante')
+    
+    const data = await apiCall('/upload/comprobante', {
+      method: 'POST',
+      body: formData,
+    })
+    
+    console.log('📥 Respuesta upload:', data)
+    
+    if (data.success && data.url) {
+      console.log('✅ Comprobante subido a Cloudflare:', data.url)
+      return data.url
+    } else {
+      console.error('❌ Error en respuesta de Cloudflare:', data)
+      return null
+    }
+  } catch (e) {
+    console.error('❌ Error subiendo comprobante:', e)
+    return null
+  } finally {
+    cargandoUpload.value = false
   }
 }
 
@@ -353,7 +394,7 @@ async function iniciarSesion() {
     if (data.token) {
       token.value = data.token
       localStorage.setItem('financoop_token', data.token)
-      console.log('✅ Login exitoso, token guardado:', data.token.substring(0, 20) + '...')
+      console.log('✅ Login exitoso, token guardado')
 
       iniciarListenersInactividad()
       resetInactivityTimer()
@@ -455,7 +496,7 @@ async function miPerfil() {
   }
 }
 
-// ============ CARGAR DATOS (CORREGIDO CON NIVELES) ============
+// ============ CARGAR DATOS ============
 async function cargarDatos() {
   const currentToken = localStorage.getItem('financoop_token')
 
@@ -471,7 +512,6 @@ async function cargarDatos() {
   console.log('🔄 Cargando datos...')
 
   try {
-    // ✅ CARGAR NIVELES PRIMERO
     if (!nivelesCargados.value) {
       await cargarNiveles()
     }
@@ -546,8 +586,54 @@ function recalcularMontosConNuevaTasa(nuevaTasa) {
   })
 }
 
-// ============ PAGOS ============
-async function reportarPago() {
+// ============ PAGOS (CORREGIDO) ============
+async function reportarPago(payload = null) {
+  // Si se pasa payload, usar ese (desde PagarView)
+  if (payload) {
+    console.log('📤 Reportando pago con payload:', payload)
+    cargandoPago.value = true
+    error.value = null
+    
+    try {
+      const data = await apiCall('/pagos/reportar', {
+        method: 'POST',
+        body: payload
+      })
+      
+      console.log('📥 Respuesta reportar pago:', data)
+      
+      if (data.error) {
+        error.value = data.error
+        cargandoPago.value = false
+        return false
+      }
+      
+      // Limpiar formulario
+      pagoForm.value = {
+        metodo: 'pago_movil',
+        referencia: '',
+        banco_origen: '',
+        telefono_pago: '',
+        cedula_pago: '',
+        comprobante: null
+      }
+      
+      cuotaSeleccionada.value = null
+      await cargarDatos()
+      
+      cargandoPago.value = false
+      return true
+      
+    } catch (err) {
+      console.error('❌ Error reportando pago:', err)
+      const errorDetail = err.response?.data?.detail || err.message || 'Error desconocido'
+      error.value = typeof errorDetail === 'object' ? JSON.stringify(errorDetail) : errorDetail
+      cargandoPago.value = false
+      return false
+    }
+  }
+  
+  // Método antiguo (sin payload) - mantener para compatibilidad
   if (!cuotaSeleccionada.value) {
     error.value = 'No hay cuota seleccionada'
     return false
@@ -579,6 +665,18 @@ async function reportarPago() {
   error.value = null
 
   try {
+    let comprobanteUrl = null
+    if (pagoForm.value.comprobante && pagoForm.value.comprobante instanceof File) {
+      console.log('📸 Subiendo comprobante a Cloudflare...')
+      comprobanteUrl = await subirComprobante(pagoForm.value.comprobante)
+      if (!comprobanteUrl) {
+        error.value = 'No se pudo subir el comprobante'
+        cargandoPago.value = false
+        return false
+      }
+      console.log('✅ Comprobante subido URL:', comprobanteUrl)
+    }
+
     const pagoData = {
       cuota_id: cuotaId,
       monto_bs: monto,
@@ -586,8 +684,11 @@ async function reportarPago() {
       referencia: pagoForm.value.referencia,
       banco_origen: pagoForm.value.banco_origen || '',
       telefono_pago: pagoForm.value.telefono_pago || '',
-      cedula_pago: pagoForm.value.cedula_pago || ''
+      cedula_pago: pagoForm.value.cedula_pago || '',
+      comprobante: comprobanteUrl || ''
     }
+
+    console.log('📤 Enviando pago al backend:', pagoData)
 
     const data = await apiCall('/pagos/reportar', {
       method: 'POST',
@@ -664,6 +765,7 @@ export function useFinanCash() {
     cargando,
     error,
     cargandoPago,
+    cargandoUpload,
     nivelesConfig,
     nivelesCargados,
     loginForm,
@@ -701,6 +803,7 @@ export function useFinanCash() {
     recalcularMontosConNuevaTasa,
     resetInactivityTimer,
     cerrarSesionPorInactividad,
-    cargarNiveles
+    cargarNiveles,
+    subirComprobante
   }
 }

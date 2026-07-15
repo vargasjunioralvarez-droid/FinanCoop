@@ -135,15 +135,15 @@
             color="success"
             block
             size="x-large"
-            :loading="cargandoPago"
-            :disabled="!pagoForm.referencia || !pagoForm.metodo"
+            :loading="cargandoPago || cargandoUpload"
+            :disabled="!pagoForm.referencia || !pagoForm.metodo || cargandoUpload"
             @click="handlePago"
             elevation="0"
             rounded="pill"
             class="pagar-btn"
           >
             <v-icon start>mdi-send</v-icon>
-            Reportar Pago
+            {{ cargandoUpload ? 'Subiendo comprobante...' : 'Reportar Pago' }}
           </v-btn>
 
           <v-btn variant="text" block class="cancel-btn" @click="cancelarPago">
@@ -169,12 +169,14 @@ const {
   pagoForm, 
   metodosPago, 
   cargandoPago,
+  cargandoUpload,
   error,
   formatearBS, 
   formatearUSD,
   reportarPago,
   copiarAlPortapapeles,
-  setCuotaSeleccionada
+  setCuotaSeleccionada,
+  subirComprobante
 } = useFinanCash()
 
 onMounted(() => {
@@ -215,10 +217,55 @@ function metodoIcono(metodo) {
   return iconos[metodo] || 'mdi-cash'
 }
 
+// ============================================================
+// ✅ HANDLE PAGO - CORREGIDO
+// ============================================================
 const handlePago = async () => {
-  const success = await reportarPago()
-  if (success) {
-    router.push('/inicio')
+  try {
+    console.log('📝 Iniciando proceso de pago')
+    console.log('📋 Cuota seleccionada:', cuotaSeleccionada.value)
+    console.log('📋 Método:', pagoForm.value.metodo)
+    console.log('📋 Referencia:', pagoForm.value.referencia)
+    console.log('📸 Comprobante file:', pagoForm.value.comprobante)
+    
+    let comprobanteUrl = null
+    
+    // Si hay un archivo seleccionado, subirlo a Cloudflare
+    if (pagoForm.value.comprobante && pagoForm.value.comprobante instanceof File) {
+      console.log('📸 Subiendo comprobante a Cloudflare...')
+      comprobanteUrl = await subirComprobante(pagoForm.value.comprobante)
+      if (!comprobanteUrl) {
+        alert('No se pudo subir el comprobante. Intenta de nuevo.')
+        return
+      }
+      console.log('✅ Comprobante subido URL:', comprobanteUrl)
+    } else {
+      console.log('⚠️ No hay comprobante para subir')
+    }
+    
+    // ✅ PREPARAR PAYLOAD - USAR CAMPOS CORRECTOS SEGÚN PagoReporte
+    const payload = {
+      cuota_id: cuotaSeleccionada.value.id,
+      monto_bs: parseFloat(cuotaSeleccionada.value.monto_bs || cuotaSeleccionada.value.monto_total_bs || 0),
+      metodo: pagoForm.value.metodo,
+      referencia: pagoForm.value.referencia,
+      banco_origen: pagoForm.value.banco_origen || '',
+      telefono_pago: pagoForm.value.telefono_pago || '',
+      cedula_pago: pagoForm.value.cedula_pago || '',
+      comprobante: comprobanteUrl || ''
+    }
+    
+    console.log('📤 Enviando pago al backend:', payload)
+    
+    const success = await reportarPago(payload)
+    if (success) {
+      console.log('✅ Pago reportado exitosamente')
+      router.push('/inicio')
+    }
+  } catch (e) {
+    console.error('❌ Error en pago:', e)
+    const errorMsg = e.response?.data?.detail || e.message || 'Error al procesar el pago'
+    alert('Error al procesar el pago: ' + (typeof errorMsg === 'object' ? JSON.stringify(errorMsg) : errorMsg))
   }
 }
 
