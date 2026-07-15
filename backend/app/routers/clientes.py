@@ -1,5 +1,5 @@
 # backend/app/routers/clientes.py
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, status
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form, status
 from pydantic import BaseModel
 from typing import Optional
 from sqlalchemy.orm import Session
@@ -65,15 +65,97 @@ async def subir_imagen_cloudflare(archivo_bytes: bytes, nombre_archivo: str) -> 
         return None
 
 # ============================================================
-# CREAR CLIENTE - PÚBLICO (NO envía PIN, NO lo muestra)
+# ✅ CREAR CLIENTE - CON SOPORTE PARA FORM DATA Y FOTO
 # ============================================================
 @router.post("")
 async def crear_cliente(
+    nombre: str = Form(...),
+    cedula: str = Form(...),
+    telefono: str = Form(...),
+    email: Optional[str] = Form(""),
+    direccion: Optional[str] = Form(""),
+    referencia_nombre: Optional[str] = Form(""),
+    referencia_telefono: Optional[str] = Form(""),
+    referencia_parentesco: Optional[str] = Form(""),
+    cedula_foto: Optional[UploadFile] = File(None),
+    db: Session = Depends(get_db)
+):
+    try:
+        print(f"📝 Registrando cliente: {cedula}")
+        print(f"📸 Foto recibida: {cedula_foto.filename if cedula_foto else 'No'}")
+
+        # Verificar si ya existe
+        existe = db.query(Cliente).filter(Cliente.cedula == cedula).first()
+        if existe:
+            return {"error": f"Cliente con cédula {cedula} ya existe", "success": False}
+
+        # Procesar foto si existe
+        url_cedula = None
+        if cedula_foto and cedula_foto.size > 0:
+            try:
+                contenido = await cedula_foto.read()
+                url_cedula = await subir_imagen_cloudflare(contenido, f"cedula_{cedula}.jpg")
+                if url_cedula:
+                    print(f"✅ Foto subida: {url_cedula}")
+                else:
+                    print("⚠️ No se pudo subir la foto a Cloudflare")
+            except Exception as e:
+                print(f"⚠️ Error procesando foto: {e}")
+
+        # Crear cliente
+        db_cliente = Cliente(
+            nombre=nombre,
+            cedula=cedula,
+            telefono=telefono,
+            email=email or "",
+            direccion=direccion or "",
+            referencia_nombre=referencia_nombre or "",
+            referencia_telefono=referencia_telefono or "",
+            referencia_parentesco=referencia_parentesco or "",
+            url_cedula=url_cedula,
+            pin=generar_pin(),
+            token_app=generar_token(),
+            estado="pendiente",
+            nivel="nuevo",
+            score=0
+        )
+        
+        db.add(db_cliente)
+        db.commit()
+        db.refresh(db_cliente)
+
+        print(f"✅ Cliente registrado (PENDIENTE): ID {db_cliente.id} - {db_cliente.nombre}")
+
+        return {
+            "success": True,
+            "id": db_cliente.id,
+            "mensaje": "✅ Registro exitoso. Tu cuenta está en verificación. Recibirás un SMS cuando sea aprobada.",
+            "cliente": {
+                "id": db_cliente.id,
+                "nombre": db_cliente.nombre,
+                "cedula": db_cliente.cedula,
+                "telefono": db_cliente.telefono,
+                "email": db_cliente.email,
+                "estado": "pendiente",
+                "url_cedula": url_cedula
+            }
+        }
+
+    except Exception as e:
+        print(f"❌ Error en registro: {e}")
+        db.rollback()
+        return {"error": str(e), "success": False}
+
+# ============================================================
+# CREAR CLIENTE VIA JSON (BACKUP)
+# ============================================================
+@router.post("/json")
+async def crear_cliente_json(
     cliente_data: ClienteCreate,
     db: Session = Depends(get_db)
 ):
     try:
-        print(f"📝 Registrando cliente: {cliente_data.cedula}")
+        print(f"📝 Registrando cliente (JSON): {cliente_data.cedula}")
         
         existe = db.query(Cliente).filter(Cliente.cedula == cliente_data.cedula).first()
         if existe:
@@ -90,24 +172,25 @@ async def crear_cliente(
             referencia_parentesco=cliente_data.referencia_parentesco or "",
             pin=generar_pin(),
             token_app=generar_token(),
-            estado="pendiente"
+            estado="pendiente",
+            nivel="nuevo",
+            score=0
         )
         
         db.add(db_cliente)
         db.commit()
         db.refresh(db_cliente)
 
-        print(f"✅ Cliente registrado (PENDIENTE): {db_cliente.id} - {db_cliente.nombre}")
+        print(f"✅ Cliente registrado (PENDIENTE): {db_cliente.id}")
 
         return {
             "success": True,
             "id": db_cliente.id,
-            "mensaje": "Registro exitoso. Tu cuenta está en verificación. Recibirás un SMS cuando sea aprobada.",
+            "mensaje": "Registro exitoso. Tu cuenta está en verificación.",
             "cliente": {
                 "id": db_cliente.id,
                 "nombre": db_cliente.nombre,
                 "cedula": db_cliente.cedula,
-                "telefono": db_cliente.telefono,
                 "estado": "pendiente"
             }
         }
@@ -189,13 +272,14 @@ def listar_clientes(
             "nivel": c.nivel,
             "score": c.score,
             "estado": c.estado or "pendiente",
+            "url_cedula": c.url_cedula,
             "pin": c.pin if current_user.rol == "admin" else None
         }
         for c in clientes
     ]
 
 # ============================================================
-# ✅ OBTENER CLIENTE POR ID (FALTABA)
+# OBTENER CLIENTE POR ID
 # ============================================================
 @router.get("/{id}")
 def obtener_cliente(
@@ -226,7 +310,7 @@ def obtener_cliente(
     }
 
 # ============================================================
-# ✅ ACTUALIZAR CLIENTE (FALTABA)
+# ACTUALIZAR CLIENTE
 # ============================================================
 @router.put("/{id}")
 def actualizar_cliente(
@@ -265,7 +349,7 @@ def actualizar_cliente(
     }
 
 # ============================================================
-# ✅ ELIMINAR CLIENTE (FALTABA - ESTE ES EL QUE NECESITAS)
+# ELIMINAR CLIENTE
 # ============================================================
 @router.delete("/{id}")
 def eliminar_cliente(
@@ -279,7 +363,7 @@ def eliminar_cliente(
     
     nombre = cliente.nombre
     
-    # Eliminar financiamientos y cuotas asociadas (cascade)
+    # Eliminar financiamientos y cuotas asociadas
     financiamientos = db.query(Financiamiento).filter(Financiamiento.cliente_id == id).all()
     for fin in financiamientos:
         db.query(Cuota).filter(Cuota.financiamiento_id == fin.id).delete()
@@ -294,7 +378,7 @@ def eliminar_cliente(
     }
 
 # ============================================================
-# SUBIR FOTO
+# SUBIR FOTO (ENDOPOINT SEPARADO)
 # ============================================================
 @router.post("/{id}/foto")
 async def subir_foto_cedula(
@@ -308,7 +392,7 @@ async def subir_foto_cedula(
     
     try:
         contenido = await cedula_foto.read()
-        url_cedula = await subir_imagen_cloudflare(contenido, cedula_foto.filename)
+        url_cedula = await subir_imagen_cloudflare(contenido, f"cedula_{cliente.cedula}.jpg")
         
         if url_cedula:
             cliente.url_cedula = url_cedula
@@ -320,7 +404,7 @@ async def subir_foto_cedula(
         return {"success": False, "error": str(e)}
 
 # ============================================================
-# BUSCAR CLIENTE
+# BUSCAR CLIENTE POR CÉDULA
 # ============================================================
 @router.get("/buscar/{cedula}")
 def buscar_cliente_por_cedula(cedula: str, db: Session = Depends(get_db)):

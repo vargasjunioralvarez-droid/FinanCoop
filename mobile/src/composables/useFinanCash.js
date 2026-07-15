@@ -68,12 +68,12 @@ function resetInactivityTimer() {
   const now = Date.now()
   if (now - lastResetTime < 1000) return
   lastResetTime = now
-  
+
   if (inactivityTimer) {
     clearTimeout(inactivityTimer)
     inactivityTimer = null
   }
-  
+
   if (token.value) {
     console.log('⏰ Iniciando timer de inactividad (15 minutos)')
     inactivityTimer = setTimeout(() => {
@@ -96,12 +96,12 @@ function cerrarSesionPorInactividad() {
 function iniciarListenersInactividad() {
   if (listenersAdded) return
   listenersAdded = true
-  
+
   console.log('📡 Activando listeners de inactividad')
-  
+
   const eventos = ['click', 'touchstart', 'mousemove', 'scroll', 'keydown', 'focus', 'input', 'change']
   let throttleTimer = null
-  
+
   const reiniciar = () => {
     if (throttleTimer) return
     throttleTimer = setTimeout(() => {
@@ -109,11 +109,11 @@ function iniciarListenersInactividad() {
       resetInactivityTimer()
     }, 5000)
   }
-  
+
   eventos.forEach(evento => {
     document.addEventListener(evento, reiniciar, { passive: true })
   })
-  
+
   window.__inactivityListeners = { eventos, reiniciar }
 }
 
@@ -204,50 +204,68 @@ function copiarAlPortapapeles(texto) {
   }
 }
 
-// ============ API CALLS CON fetch ============
+// ============ API CALLS CON fetch (CORREGIDO) ============
 async function apiCall(endpoint, options = {}) {
   const url = `${API_URL}${endpoint}`
-  
+
+  // ✅ FIX: Siempre leer token de localStorage (fuente de verdad)
   const currentToken = localStorage.getItem('financoop_token') || token.value
-  
+
   const headers = {
-    'Content-Type': 'application/json',
     'Accept': 'application/json',
     ...options.headers
   }
-  
+
+  // ✅ FIX: Solo agregar Content-Type si NO es FormData
+  // Cuando se envía FormData, el navegador debe establecer el boundary automáticamente
+  if (!(options.body instanceof FormData)) {
+    headers['Content-Type'] = 'application/json'
+  }
+
+  // ✅ FIX: Token en header Authorization para TODOS los endpoints protegidos
   if (currentToken && endpoint.includes('/app/')) {
     headers['Authorization'] = `Bearer ${currentToken}`
-    console.log('🔑 Token enviado en header:', currentToken.substring(0, 20) + '...')
   }
-  
+
   try {
     console.log(`🌐 API Call: ${options.method || 'GET'} ${url}`)
-    
+
     const fetchOptions = {
       method: options.method || 'GET',
       headers: headers,
     }
-    
-    if (options.body && (options.method === 'POST' || options.method === 'PUT')) {
-      fetchOptions.body = JSON.stringify(options.body)
+
+    if (options.body && (options.method === 'POST' || options.method === 'PUT' || options.method === 'PATCH')) {
+      fetchOptions.body = options.body instanceof FormData 
+        ? options.body 
+        : JSON.stringify(options.body)
     }
-    
-    console.log('📤 Headers enviados:', JSON.stringify(headers))
-    
+
+    console.log('📤 Headers:', JSON.stringify(headers))
+
     const response = await fetch(url, fetchOptions)
-    const data = await response.json()
-    
+
+    // ✅ FIX: Manejar respuesta vacía o no-JSON
+    let data = {}
+    const contentType = response.headers.get('content-type')
+    if (contentType && contentType.includes('application/json')) {
+      data = await response.json()
+    } else {
+      const text = await response.text()
+      console.log('📥 Respuesta no-JSON:', text.substring(0, 200))
+      data = { error: text || `HTTP ${response.status}` }
+    }
+
     console.log(`✅ Response status:`, response.status)
     console.log(`📥 Response data:`, JSON.stringify(data).substring(0, 200))
-    
+
     if (!response.ok) {
       const errorMsg = data?.detail || data?.error || `HTTP ${response.status}`
       throw new Error(errorMsg)
     }
-    
+
     return data
-    
+
   } catch (err) {
     console.error('❌ API Error:', err)
     if (err.message?.includes('401') || err.message?.includes('Sesión no válida') || err.message?.includes('Token')) {
@@ -258,46 +276,43 @@ async function apiCall(endpoint, options = {}) {
   }
 }
 
-// ============ AUTH ============
+// ============ AUTH (CORREGIDO - usa apiCall) ============
 async function iniciarSesion() {
   cargando.value = true
   error.value = null
-  
+
   const cedula = loginForm.value.cedula?.trim()
   const pin = loginForm.value.pin?.trim()
-  
+
   if (!cedula || !pin) {
     error.value = 'Ingresa tu cédula y PIN'
     cargando.value = false
     return false
   }
-  
+
   try {
     console.log('🔑 Intentando login con:', { cedula, pin: '***' })
-    
-    const response = await fetch(`${API_URL}/app/login`, {
+
+    // ✅ FIX: Usar apiCall en lugar de fetch directo
+    const data = await apiCall('/app/login', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      },
-      body: JSON.stringify({ cedula, pin })
+      body: { cedula, pin }
     })
-    
-    const data = await response.json()
+
     console.log('📥 Respuesta login:', JSON.stringify(data).substring(0, 300))
-    
+
     if (data.error) {
       error.value = data.error
       cargando.value = false
       return false
     }
-    
+
     if (data.token) {
+      // ✅ FIX: Guardar en localStorage Y en la ref
       token.value = data.token
       localStorage.setItem('financoop_token', data.token)
       console.log('✅ Login exitoso, token guardado:', data.token.substring(0, 20) + '...')
-      
+
       iniciarListenersInactividad()
       resetInactivityTimer()
     } else {
@@ -305,18 +320,18 @@ async function iniciarSesion() {
       cargando.value = false
       return false
     }
-    
+
     usuario.value = data.cliente || {}
-    
+
     console.log('🔄 Cargando datos después del login...')
     await cargarDatos()
-    
+
     cargando.value = false
     return true
-    
+
   } catch (err) {
     console.error('❌ Error en login:', err)
-    error.value = 'Error de conexión: ' + (err.message || 'desconocido')
+    error.value = err.message || 'Error de conexión. Verifica tu internet.'
     cargando.value = false
     return false
   }
@@ -338,33 +353,42 @@ function cerrarSesion() {
   cuotaSeleccionada.value = null
 }
 
-// ============ REGISTRO ============
+// ============ REGISTRO (CORREGIDO) ============
 async function registrarCliente(formData) {
   cargando.value = true
   error.value = null
-  
+
   try {
-    const data = {}
-    formData.forEach((value, key) => data[key] = value)
-    
+    // ✅ FIX: Verificar que formData sea realmente FormData
+    if (!(formData instanceof FormData)) {
+      console.error('❌ registrarCliente: formData no es FormData')
+      error.value = 'Error interno: formato de datos incorrecto'
+      cargando.value = false
+      return { success: false, error: error.value }
+    }
+
+    console.log('📤 Enviando registro...')
+
+    // ✅ FIX: NO enviar Content-Type header - el navegador lo maneja automáticamente con FormData
     const response = await fetch(`${API_URL}/clientes`, {
       method: 'POST',
-      headers: { 'Content-Type': 'multipart/form-data' },
-      body: data
+      // ❌ NO poner headers: { 'Content-Type': 'multipart/form-data' }
+      body: formData
     })
-    
+
     const resData = await response.json()
-    
+    console.log('📥 Respuesta registro:', JSON.stringify(resData).substring(0, 300))
+
     if (resData.error || resData.success === false) {
       error.value = resData.error || 'Error al registrar'
       cargando.value = false
       return { success: false, error: error.value }
     }
-    
+
     if (resData.pin_generado) {
       localStorage.setItem('financoop_pin_temp', resData.pin_generado)
     }
-    
+
     cargando.value = false
     return { success: true, pin: resData.pin_generado, mensaje: resData.mensaje }
   } catch (err) {
@@ -390,27 +414,29 @@ async function miPerfil() {
   }
 }
 
-// ============ CARGAR DATOS ============
+// ============ CARGAR DATOS (CORREGIDO) ============
 async function cargarDatos() {
+  // ✅ FIX: Siempre leer de localStorage (fuente de verdad)
   const currentToken = localStorage.getItem('financoop_token')
-  
+
   if (!currentToken) {
     console.log('⚠️ No hay token en localStorage')
     return
   }
-  
+
+  // Sincronizar la ref con localStorage
   if (!token.value) {
     token.value = currentToken
   }
-  
+
   console.log('🔄 Cargando datos...')
   console.log('🔑 Token usado:', currentToken.substring(0, 20) + '...')
-  
+
   try {
     const data = await apiCall('/app/mis-datos')
-    
+
     console.log('📥 Datos del cliente recibidos:', JSON.stringify(data).substring(0, 300))
-    
+
     if (data.error) {
       console.error('❌ Error en mis-datos:', data.error)
       if (data.error.includes('Sesión') || data.error.includes('Token')) {
@@ -418,24 +444,24 @@ async function cargarDatos() {
       }
       return
     }
-    
+
     datosCliente.value = data
     if (data.cliente) {
       usuario.value = data.cliente
       console.log('✅ Usuario actualizado:', data.cliente.nombre)
     }
-    
+
     tasaActual.value = data.tasa_actual || 0
     financiamientos.value = data.financiamientos_activos || []
     datosPago.value = data.datos_pago || {}
-    
+
     console.log('✅ Datos principales cargados. Financiamientos:', financiamientos.value.length)
-    
+
     try {
       console.log('🔄 Cargando cuotas...')
       const cuotasData = await apiCall('/app/mis-cuotas')
       console.log('📥 Respuesta de cuotas:', JSON.stringify(cuotasData).substring(0, 200))
-      
+
       if (cuotasData && !cuotasData.error) {
         todasCuotas.value = cuotasData.cuotas || []
         console.log('✅ Cuotas cargadas:', todasCuotas.value.length)
@@ -447,10 +473,10 @@ async function cargarDatos() {
       console.error('❌ Error cargando cuotas:', err)
       todasCuotas.value = []
     }
-    
+
     console.log('✅ Todos los datos cargados exitosamente')
     resetInactivityTimer()
-    
+
   } catch (err) {
     console.error('❌ Error cargando datos:', err)
     error.value = 'Error cargando datos: ' + (err.message || 'desconocido')
@@ -477,38 +503,38 @@ function recalcularMontosConNuevaTasa(nuevaTasa) {
   })
 }
 
-// ============ PAGOS ============
+// ============ PAGOS (CORREGIDO) ============
 async function reportarPago() {
   if (!cuotaSeleccionada.value) {
     error.value = 'No hay cuota seleccionada'
     return false
   }
-  
+
   const cuotaId = cuotaSeleccionada.value.cuota_id || cuotaSeleccionada.value.id
   if (!cuotaId) {
     error.value = 'ID de cuota no válido'
     return false
   }
-  
+
   const monto = cuotaSeleccionada.value.monto_bs || cuotaSeleccionada.value.monto_total_bs
   if (!monto) {
     error.value = 'Monto de cuota no válido'
     return false
   }
-  
+
   if (!pagoForm.value.referencia) {
     error.value = 'Ingresa el número de referencia'
     return false
   }
-  
+
   if (!pagoForm.value.metodo) {
     error.value = 'Selecciona un método de pago'
     return false
   }
-  
+
   cargandoPago.value = true
   error.value = null
-  
+
   try {
     const pagoData = {
       cuota_id: cuotaId,
@@ -519,26 +545,19 @@ async function reportarPago() {
       telefono_pago: pagoForm.value.telefono_pago || '',
       cedula_pago: pagoForm.value.cedula_pago || ''
     }
-    
-    const currentToken = localStorage.getItem('financoop_token') || token.value
-    
-    const response = await fetch(`${API_URL}/pagos/reportar`, {
+
+    // ✅ FIX: Usar apiCall para consistencia
+    const data = await apiCall('/pagos/reportar', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': currentToken ? `Bearer ${currentToken}` : ''
-      },
-      body: JSON.stringify(pagoData)
+      body: pagoData
     })
-    
-    const data = await response.json()
-    
+
     if (data.error) {
       error.value = data.error
       cargandoPago.value = false
       return false
     }
-    
+
     pagoForm.value = {
       metodo: 'pago_movil',
       referencia: '',
@@ -547,16 +566,16 @@ async function reportarPago() {
       cedula_pago: '',
       comprobante: null
     }
-    
+
     cuotaSeleccionada.value = null
     await cargarDatos()
-    
+
     cargandoPago.value = false
     return true
-    
+
   } catch (err) {
     console.error('❌ Error reportando pago:', err)
-    error.value = 'Error al reportar el pago'
+    error.value = 'Error al reportar el pago: ' + (err.message || 'desconocido')
     cargandoPago.value = false
     return false
   }

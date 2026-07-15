@@ -217,6 +217,9 @@ const mostrarAyuda = ref(false)
 const tema = ref(localStorage.getItem('financoop_theme') || 'light')
 const scrolled = ref(false)
 
+// ✅ FIX: Flag para evitar redirección múltiple
+const redirigiendo = ref(false)
+
 // ============ MENSAJE DE INACTIVIDAD ============
 const mostrarMensajeInactividad = ref(false)
 const mensajeInactividad = ref('')
@@ -257,15 +260,13 @@ const onScroll = () => {
 // ============ INICIALIZAR APP ============
 const iniciarApp = async () => {
   console.log('📱 Iniciando app...')
-  
-  // ✅ Verificar si hay token en localStorage
+
   const tokenGuardado = localStorage.getItem('financoop_token')
-  
+
   if (tokenGuardado && !token.value) {
-    // Si hay token en localStorage pero no en el ref, sincronizar
     token.value = tokenGuardado
   }
-  
+
   if (token.value) {
     console.log('🔄 Token presente, cargando datos...')
     try {
@@ -278,29 +279,39 @@ const iniciarApp = async () => {
       console.error('❌ Error cargando datos:', error)
       localStorage.removeItem('financoop_token')
       token.value = null
-      if (route.path !== '/login' && route.path !== '/registro' && route.path !== '/registro-exitoso') {
-        router.push('/login')
+      // ✅ FIX: Solo redirigir si no estamos ya en una ruta pública
+      if (!['/login', '/registro', '/registro-exitoso'].includes(route.path) && !redirigiendo.value) {
+        redirigiendo.value = true
+        await router.push('/login')
+        redirigiendo.value = false
       }
     }
   } else {
     console.log('❌ No hay token')
-    if (route.path !== '/login' && route.path !== '/registro' && route.path !== '/registro-exitoso') {
-      router.push('/login')
+    if (!['/login', '/registro', '/registro-exitoso'].includes(route.path) && !redirigiendo.value) {
+      redirigiendo.value = true
+      await router.push('/login')
+      redirigiendo.value = false
     }
   }
 }
 
 // ============ WATCHERS ============
-watch(token, (newToken) => {
+// ✅ FIX: watch con flag de protección contra bucles
+watch(token, (newToken, oldToken) => {
   console.log('🔄 Token cambiado:', newToken ? 'Token presente' : 'Sin token')
-  
-  if (!newToken) {
-    // Si el token se vuelve null, redirigir a login (excepto en rutas públicas)
+
+  // Solo redirigir si el token pasó de tener valor a null (logout)
+  // NO redirigir en el inicial (oldToken es undefined al inicio)
+  if (!newToken && oldToken !== undefined && !redirigiendo.value) {
     if (!['/login', '/registro', '/registro-exitoso'].includes(route.path)) {
-      router.push('/login')
+      redirigiendo.value = true
+      router.push('/login').finally(() => {
+        redirigiendo.value = false
+      })
     }
   }
-}, { immediate: true })
+})
 
 // ============ CICLO DE VIDA ============
 onMounted(async () => {
