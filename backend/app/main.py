@@ -1,4 +1,3 @@
-# backend/app/main.py
 """
 🔒 FinanCash API - Configuración Principal con Seguridad Hardenizada
 """
@@ -15,9 +14,14 @@ from app.database import engine, Base, get_db
 from app.models import NivelConfig, TasaDolar, ConfiguracionPago
 from app.config import NIVELES_CONFIG_DEFAULT
 from app.routers import (
-    clientes_router, financiamientos_router, pagos_router, 
-    config_router,  # ← AGREGADO
-    app_mobile_router, admin_router, auth_router
+    clientes_router, 
+    financiamientos_router, 
+    pagos_router, 
+    config_router,
+    app_mobile_router, 
+    admin_router, 
+    auth_router,
+    upload_router  # ← AGREGADO PARA CLOUDFLARE
 )
 from datetime import datetime, timezone
 
@@ -83,7 +87,7 @@ if IS_PROD:
     logger.info(f"🔒 CORS en producción: {ALLOWED_ORIGINS}")
 
 # ─────────────────────────────────────────────────────────────
-# ✅ FIX: CORS NATIVO DE FASTAPI (MÁS CONFIABLE)
+# ✅ CORS NATIVO DE FASTAPI (MÁS CONFIABLE)
 # ─────────────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
@@ -106,7 +110,7 @@ app.add_middleware(
 )
 
 # ─────────────────────────────────────────────────────────────
-# 🛡️ SECURITY HEADERS (CORREGIDO PARA SWAGGER)
+# 🛡️ SECURITY HEADERS
 # ─────────────────────────────────────────────────────────────
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
@@ -135,7 +139,7 @@ async def security_headers(request: Request, call_next):
     return response
 
 # ─────────────────────────────────────────────────────────────
-# 📚 SWAGGER UI PERSONALIZADO (FUNCIONA CON CSP)
+# 📚 SWAGGER UI PERSONALIZADO
 # ─────────────────────────────────────────────────────────────
 @app.get("/docs", include_in_schema=False)
 async def custom_swagger_ui_html():
@@ -250,6 +254,15 @@ def init_db():
 
         db.commit()
         logger.info("🚀 Base de datos inicializada correctamente")
+        
+        # Verificar Cloudflare
+        cloudflare_account_id = os.getenv("CLOUDFLARE_ACCOUNT_ID")
+        cloudflare_api_token = os.getenv("CLOUDFLARE_API_TOKEN")
+        if cloudflare_account_id and cloudflare_api_token:
+            logger.info("✅ Cloudflare Images configurado correctamente")
+        else:
+            logger.warning("⚠️ Cloudflare Images NO configurado")
+            
     except Exception as e:
         db.rollback()
         logger.error(f"❌ Error inicializando BD: {e}")
@@ -263,10 +276,11 @@ def init_db():
 app.include_router(clientes_router)
 app.include_router(financiamientos_router)
 app.include_router(pagos_router)
-app.include_router(config_router)  # ← AGREGADO
+app.include_router(config_router)
 app.include_router(app_mobile_router)
 app.include_router(admin_router)
 app.include_router(auth_router)
+app.include_router(upload_router)  # ← AGREGADO PARA CLOUDFLARE
 
 # ─────────────────────────────────────────────────────────────
 # 🚀 STARTUP
