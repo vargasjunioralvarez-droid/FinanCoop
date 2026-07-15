@@ -1,296 +1,255 @@
-# backend/app/main.py
-"""
-🔒 FinanCash API - Configuración Principal con Seguridad Hardenizada
-"""
-
-import os
-import logging
-from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from fastapi.responses import JSONResponse, HTMLResponse
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
-from app.database import engine, Base, get_db
-from app.models import NivelConfig, TasaDolar, ConfiguracionPago
-from app.config import NIVELES_CONFIG_DEFAULT
-from app.routers import (
-    clientes_router, financiamientos_router, pagos_router, 
-    config_router, app_mobile_router, admin_router, auth_router
-)
+# backend/app/routers/app_mobile.py
+from fastapi import APIRouter, Depends, Response, Header, HTTPException
+from sqlalchemy.orm import Session
+from app.database import get_db
+from app.models import Cliente, Financiamiento, Cuota, ConfiguracionPago
+from app.schemas import LoginApp
+from app.utils import generar_token, obtener_tasa_actual, calcular_usado_disponible
 from datetime import datetime, timezone
 
-# ─────────────────────────────────────────────────────────────
-# 📝 LOGGING SEGURO
-# ─────────────────────────────────────────────────────────────
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s"
-)
-logger = logging.getLogger(__name__)
+router = APIRouter(prefix="/app", tags=["App Móvil"])
 
-# ─────────────────────────────────────────────────────────────
-# 🚀 FASTAPI
-# ─────────────────────────────────────────────────────────────
-ENV = os.getenv("ENVIRONMENT", "development")
-IS_PROD = ENV == "production"
+def obtener_token(token_query: str = None, authorization: str = Header(None)):
+    """Extraer token de query param O header Authorization"""
+    if authorization and isinstance(authorization, str) and authorization.startswith("Bearer "):
+        return authorization.replace("Bearer ", "").strip()
+    if authorization and isinstance(authorization, str) and len(authorization) > 10:
+        return authorization.strip()
+    if token_query and isinstance(token_query, str):
+        return token_query.strip()
+    return None
 
-app = FastAPI(
-    title="FinanCash API",
-    description="API segura para sistema de administración financiera",
-    version="4.0.0",
-    docs_url="/docs" if not IS_PROD else None,
-    redoc_url="/redoc" if not IS_PROD else None,
-    openapi_url="/openapi.json" if not IS_PROD else None,
-    debug=False
-)
+@router.options("/login")
+def options_login():
+    return Response(status_code=200)
 
-# ─────────────────────────────────────────────────────────────
-# 🌐 CORS: Orígenes permitidos
-# ─────────────────────────────────────────────────────────────
-ALLOWED_ORIGINS = [
-    "http://localhost:5173",
-    "http://localhost:5174",
-    "http://localhost:5175",
-    "http://localhost:5176",
-    "http://127.0.0.1:5173",
-    "http://127.0.0.1:5174",
-    "http://127.0.0.1:5175",
-    "http://127.0.0.1:5176",
-    "capacitor://localhost",
-    "ionic://localhost",
-    "http://localhost",
-    "https://localhost",
-    "https://financash-frontend.onrender.com",
-    "https://financash-backend.onrender.com",
-    "https://financoop.onrender.com",
-    "null",
-    "",
-]
+@router.post("/login")
+def login_app(login: LoginApp, db: Session = Depends(get_db)):
+    cliente = db.query(Cliente).filter(Cliente.cedula == login.cedula).first()
+    if not cliente:
+        return {"error": "Cliente no encontrado"}
 
-if IS_PROD:
-    https_origins = [o for o in ALLOWED_ORIGINS if o.startswith("https://")]
-    ALLOWED_ORIGINS = list(set(https_origins + [
-        "capacitor://localhost",
-        "ionic://localhost",
-        "http://localhost",
-        "https://localhost",
-        "null",
-        "",
-    ]))
-    logger.info(f"🔒 CORS en producción: {ALLOWED_ORIGINS}")
+    if cliente.pin != login.pin:
+        return {"error": "PIN incorrecto"}
 
-# ─────────────────────────────────────────────────────────────
-# ✅ FIX: CORS NATIVO DE FASTAPI (MÁS CONFIABLE)
-# ─────────────────────────────────────────────────────────────
-# Usar el CORS nativo de FastAPI que es más robusto
-# El middleware custom se eliminó porque causaba problemas con Capacitor
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allow_headers=[
-        "Authorization", 
-        "Content-Type", 
-        "X-Request-ID", 
-        "X-Requested-With",
-        "Accept", 
-        "Origin", 
-        "Cache-Control", 
-        "Pragma", 
-        "Expires"
-    ],
-    expose_headers=["X-Request-ID"],
-    max_age=86400
-)
+    if cliente.estado != "aprobado":
+        return {"error": "Tu cuenta está pendiente de aprobación. Contacta a la cooperativa."}
 
-# ─────────────────────────────────────────────────────────────
-# 🛡️ SECURITY HEADERS (CORREGIDO PARA SWAGGER)
-# ─────────────────────────────────────────────────────────────
-@app.middleware("http")
-async def security_headers(request: Request, call_next):
-    response = await call_next(request)
-    response.headers["X-Content-Type-Options"] = "nosniff"
-    response.headers["X-Frame-Options"] = "DENY"
-    response.headers["X-XSS-Protection"] = "1; mode=block"
-    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    cliente.token_app = generar_token()
+    cliente.ultimo_acceso = datetime.now(timezone.utc)
+    db.commit()
 
-    # ✅ CSP CORREGIDO - Permite recursos de CDN para Swagger
-    csp = (
-        "default-src 'self' https: http://localhost:*; "
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; "
-        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
-        "img-src 'self' data: https: blob:; "
-        "font-src 'self' data: https://cdn.jsdelivr.net; "
-        "connect-src 'self' https://*.onrender.com https: http://localhost:*; "
-        "frame-ancestors 'none'; "
-        "base-uri 'self'; "
-        "form-action 'self'"
-    )
-    response.headers["Content-Security-Policy"] = csp
-
-    if IS_PROD:
-        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-
-    return response
-
-# ─────────────────────────────────────────────────────────────
-# 📚 SWAGGER UI PERSONALIZADO (FUNCIONA CON CSP)
-# ─────────────────────────────────────────────────────────────
-@app.get("/docs", include_in_schema=False)
-async def custom_swagger_ui_html():
-    """
-    Swagger UI personalizado que funciona con CSP
-    """
-    html = """
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <title>FinanCoop API - Swagger UI</title>
-        <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css" />
-    </head>
-    <body>
-        <div id="swagger-ui"></div>
-        <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
-        <script>
-            window.onload = function() {
-                window.ui = SwaggerUIBundle({
-                    url: "/openapi.json",
-                    dom_id: "#swagger-ui",
-                    deepLinking: true,
-                    defaultModelsExpandDepth: -1,
-                    docExpansion: "none",
-                    persistAuthorization: true,
-                    validatorUrl: null,
-                });
-            };
-        </script>
-    </body>
-    </html>
-    """
-    return HTMLResponse(content=html)
-
-# ─────────────────────────────────────────────────────────────
-# 🏠 TRUSTED HOST
-# ─────────────────────────────────────────────────────────────
-if IS_PROD:
-    app.add_middleware(
-        TrustedHostMiddleware,
-        allowed_hosts=[
-            "financoop.onrender.com",
-            "financash-backend.onrender.com",
-            "financash-frontend.onrender.com",
-            "localhost",
-            "*"
-        ]
-    )
-
-# ─────────────────────────────────────────────────────────────
-# ❌ GLOBAL EXCEPTION HANDLER
-# ─────────────────────────────────────────────────────────────
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    request_id = request.headers.get("X-Request-ID", "unknown")
-    logger.error(
-        f"❌ [Error {request_id}] {type(exc).__name__}: {str(exc)}",
-        exc_info=True
-    )
-    return JSONResponse(
-        status_code=500,
-        content={
-            "detail": "Error interno del servidor",
-            "request_id": request_id
+    return {
+        "token": cliente.token_app,
+        "cliente": {
+            "id": cliente.id,
+            "nombre": cliente.nombre,
+            "nivel": cliente.nivel,
+            "score": cliente.score
         }
-    )
+    }
 
-# ─────────────────────────────────────────────────────────────
-# 🗄️ CREAR TABLAS
-# ─────────────────────────────────────────────────────────────
-Base.metadata.create_all(bind=engine)
+@router.get("/mi-perfil")
+def mi_perfil(
+    token: str = None,
+    authorization: str = Header(None),
+    db: Session = Depends(get_db)
+):
+    """Obtener perfil del cliente logueado (para app móvil)"""
+    token_final = obtener_token(token, authorization)
 
-# ─────────────────────────────────────────────────────────────
-# 📊 INICIALIZAR DATOS
-# ─────────────────────────────────────────────────────────────
-def init_db():
-    db = next(get_db())
-    try:
-        for nivel_key, config in NIVELES_CONFIG_DEFAULT.items():
-            existe = db.query(NivelConfig).filter(NivelConfig.nivel == nivel_key).first()
-            if not existe:
-                nc = NivelConfig(
-                    nivel=nivel_key,
-                    min_score=config["min_score"],
-                    max_score=config["max_score"],
-                    monto_max_usd=config["monto_max_usd"],
-                    entrada_pct=config["entrada_pct"],
-                    financia_pct=config["financia_pct"],
-                    cuotas_base=config["cuotas_base"],
-                    cuotas_max=config["cuotas_max"],
-                    mora_diaria=config["mora_diaria"],
-                    aprobacion_extra=config["aprobacion_extra"]
-                )
-                db.add(nc)
-                logger.info(f"✅ Nivel creado: {nivel_key}")
+    if not token_final:
+        return {"error": "Token no proporcionado"}
 
-        tasa = db.query(TasaDolar).order_by(TasaDolar.id.desc()).first()
-        if not tasa:
-            tasa = TasaDolar(tasa=40.0, fuente="manual")
-            db.add(tasa)
-            logger.info("✅ Tasa dólar inicial creada: 40.0")
+    cliente = db.query(Cliente).filter(Cliente.token_app == token_final).first()
+    if not cliente:
+        return {"error": "Sesión no válida"}
 
-        config_pago = db.query(ConfiguracionPago).first()
-        if not config_pago:
-            config_pago = ConfiguracionPago(
-                banco_pago_movil="Banco de Venezuela",
-                telefono_pago_movil="04121234567",
-                cedula_pago_movil="V12345678",
-                banco_transferencia="Banco Mercantil",
-                cuenta_transferencia="01051234567890123456"
-            )
-            db.add(config_pago)
-            logger.info("✅ Configuración de pagos inicial creada")
+    return {
+        "id": cliente.id,
+        "nombre": cliente.nombre,
+        "cedula": cliente.cedula,
+        "telefono": cliente.telefono,
+        "email": cliente.email,
+        "direccion": cliente.direccion,
+        "referencia_nombre": cliente.referencia_nombre,
+        "referencia_telefono": cliente.referencia_telefono,
+        "referencia_parentesco": cliente.referencia_parentesco,
+        "score": cliente.score,
+        "nivel": cliente.nivel,
+        "total_compras": cliente.total_compras,
+        "url_cedula": cliente.url_cedula,
+        "estado": cliente.estado or "pendiente",
+        "pin": cliente.pin
+    }
 
-        db.commit()
-        logger.info("🚀 Base de datos inicializada correctamente")
-    except Exception as e:
-        db.rollback()
-        logger.error(f"❌ Error inicializando BD: {e}")
-        raise
-    finally:
-        db.close()
+@router.get("/mis-datos")
+def mis_datos(
+    token: str = None,
+    authorization: str = Header(None),
+    db: Session = Depends(get_db)
+):
+    token_final = obtener_token(token, authorization)
 
-# ─────────────────────────────────────────────────────────────
-# 🔌 ROUTERS
-# ─────────────────────────────────────────────────────────────
-app.include_router(clientes_router)
-app.include_router(financiamientos_router)
-app.include_router(pagos_router)
-app.include_router(config_router)
-app.include_router(app_mobile_router)
-app.include_router(admin_router)
-app.include_router(auth_router)
+    if not token_final:
+        return {"error": "Token no proporcionado"}
 
-# ─────────────────────────────────────────────────────────────
-# 🚀 STARTUP
-# ─────────────────────────────────────────────────────────────
-@app.on_event("startup")
-def startup():
-    logger.info(f"🚀 FinanCash API iniciando | Entorno: {ENV}")
-    logger.info(f"🌐 CORS orígenes permitidos: {ALLOWED_ORIGINS}")
-    init_db()
+    cliente = db.query(Cliente).filter(Cliente.token_app == token_final).first()
+    if not cliente:
+        return {"error": "Sesión no válida"}
 
-# ─────────────────────────────────────────────────────────────
-# ▶️ EJECUCIÓN
-# ─────────────────────────────────────────────────────────────
-if __name__ == "__main__":
-    import uvicorn
-    port = int(os.getenv("PORT", 8000))
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=port,
-        reload=not IS_PROD,
-        workers=1 if not IS_PROD else None
-    )
+    tasa = obtener_tasa_actual(db)
+    disponible = calcular_usado_disponible(cliente.id, db)
+
+    activos = db.query(Financiamiento).filter(
+        Financiamiento.cliente_id == cliente.id,
+        Financiamiento.estado == "activo"
+    ).all()
+
+    hoy = datetime.now(timezone.utc)
+
+    financiamientos_data = []
+    for fin in activos:
+        cuotas = db.query(Cuota).filter(Cuota.financiamiento_id == fin.id).all()
+
+        cuotas_pendientes = [c for c in cuotas if c.estado in ["pendiente", "conciliando"]]
+        cuotas_atrasadas = [c for c in cuotas if c.estado == "pendiente" and hoy > c.fecha_vencimiento]
+
+        proxima_cuota = None
+        if cuotas_pendientes:
+            proxima = cuotas_pendientes[0]
+            dias_para_vencer = (proxima.fecha_vencimiento - hoy).days if proxima.fecha_vencimiento else 0
+
+            proxima_cuota = {
+                "id": proxima.id,
+                "numero": proxima.numero,
+                "monto_bs": round(proxima.monto_total_bs, 2),
+                "monto_usd_ref": round(proxima.monto_total_usd, 2),
+                "fecha_vencimiento": proxima.fecha_vencimiento.isoformat() if proxima.fecha_vencimiento else None,
+                "dias_para_vencer": max(0, dias_para_vencer),
+                "estado": proxima.estado
+            }
+
+        financiamientos_data.append({
+            "id": fin.id,
+            "codigo": fin.codigo,
+            "descripcion": fin.descripcion,
+            "monto_total_bs": round(fin.monto_total_bs, 2),
+            "monto_total_usd_ref": round(fin.monto_total_usd, 2),
+            "monto_entrada_bs": round(fin.monto_entrada_bs, 2),
+            "monto_entrada_usd_ref": round(fin.monto_entrada_usd, 2),
+            "cuotas_total": fin.cuotas_aprobadas,
+            "cuotas_pagadas": len([c for c in cuotas if c.estado == "pagada"]),
+            "cuotas_pendientes": len(cuotas_pendientes),
+            "cuotas_atrasadas": len(cuotas_atrasadas),
+            "proxima_cuota": proxima_cuota,
+            "saldo_pendiente_bs": round(sum(c.monto_total_bs for c in cuotas_pendientes), 2),
+            "saldo_pendiente_usd_ref": round(sum(c.monto_total_usd for c in cuotas_pendientes), 2)
+        })
+
+    config = db.query(ConfiguracionPago).first()
+
+    return {
+        "cliente": {
+            "id": cliente.id,
+            "nombre": cliente.nombre,
+            "cedula": cliente.cedula,
+            "nivel": cliente.nivel,
+            "score": cliente.score,
+            "telefono": cliente.telefono
+        },
+        "limite": disponible,
+        "tasa_actual": tasa,
+        "financiamientos_activos": financiamientos_data,
+        "total_deuda_bs": round(sum(f["saldo_pendiente_bs"] for f in financiamientos_data), 2),
+        "total_deuda_usd_ref": round(sum(f["saldo_pendiente_usd_ref"] for f in financiamientos_data), 2),
+        "datos_pago": {
+            "pago_movil": {
+                "banco": config.banco_pago_movil if config else "",
+                "telefono": config.telefono_pago_movil if config else "",
+                "cedula": config.cedula_pago_movil if config else ""
+            },
+            "transferencia": {
+                "banco": config.banco_transferencia if config else "",
+                "cuenta": config.cuenta_transferencia if config else ""
+            },
+            "zelle": getattr(config, 'correo_zelle', None) if config else None,
+            "binance": getattr(config, 'correo_binance', None) if config else None
+        }
+    }
+
+@router.get("/mis-cuotas")
+def mis_cuotas(
+    token: str = None,
+    authorization: str = Header(None),
+    db: Session = Depends(get_db)
+):
+    token_final = obtener_token(token, authorization)
+
+    if not token_final:
+        return {"error": "Token no proporcionado"}
+
+    cliente = db.query(Cliente).filter(Cliente.token_app == token_final).first()
+    if not cliente:
+        return {"error": "Sesión no válida"}
+
+    tasa = obtener_tasa_actual(db)
+
+    financiamientos = db.query(Financiamiento).filter(
+        Financiamiento.cliente_id == cliente.id
+    ).all()
+
+    hoy = datetime.now(timezone.utc)
+
+    todas_cuotas = []
+    for fin in financiamientos:
+        cuotas = db.query(Cuota).filter(Cuota.financiamiento_id == fin.id).order_by(Cuota.numero).all()
+
+        for c in cuotas:
+            dias_atraso = 0
+            if c.estado == "pendiente" and hoy > c.fecha_vencimiento:
+                dias_atraso = (hoy - c.fecha_vencimiento).days
+
+            todas_cuotas.append({
+                "financiamiento_id": fin.id,
+                "financiamiento_codigo": fin.codigo,
+                "financiamiento_descripcion": fin.descripcion,
+                "cuota_id": c.id,
+                "cuota_numero": c.numero,
+                "monto_base_bs": round(c.monto_base_bs, 2),
+                "monto_interes_bs": round(c.monto_interes_mora_bs, 2),
+                "monto_total_bs": round(c.monto_total_bs, 2),
+                "monto_base_usd_ref": round(c.monto_base_usd, 2),
+                "monto_interes_usd_ref": round(c.monto_interes_mora_usd, 2),
+                "monto_total_usd_ref": round(c.monto_total_usd, 2),
+                "fecha_vencimiento": c.fecha_vencimiento.isoformat() if c.fecha_vencimiento else None,
+                "estado": c.estado,
+                "dias_atraso": dias_atraso,
+                "puede_pagar": c.estado == "pendiente"
+            })
+
+    return {
+        "cliente": cliente.nombre,
+        "tasa_actual": tasa,
+        "cuotas": todas_cuotas
+    }
+
+@router.get("/configuracion-pagos")
+def configuracion_pagos_publica(db: Session = Depends(get_db)):
+    config = db.query(ConfiguracionPago).first()
+    if not config:
+        return {"error": "Configuración no encontrada"}
+
+    return {
+        "pago_movil": {
+            "banco": config.banco_pago_movil,
+            "telefono": config.telefono_pago_movil,
+            "cedula": config.cedula_pago_movil
+        },
+        "transferencia": {
+            "banco": config.banco_transferencia,
+            "cuenta": config.cuenta_transferencia
+        },
+        "zelle": getattr(config, 'correo_zelle', None),
+        "binance": getattr(config, 'correo_binance', None)
+    }
