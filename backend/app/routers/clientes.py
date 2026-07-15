@@ -11,7 +11,7 @@ from app.utils import (
     enviar_pin_cliente
 )
 from app.auth import get_current_admin, get_current_user
-from datetime import datetime
+from datetime import datetime, timezone
 import httpx
 import os
 
@@ -454,7 +454,7 @@ def buscar_cliente_por_cedula(cedula: str, db: Session = Depends(get_db)):
     }
 
 # ============================================================
-# ✅ NUEVO ENDPOINT: OBTENER ESTADO DE CUENTA DEL CLIENTE
+# ✅ OBTENER ESTADO DE CUENTA DEL CLIENTE
 # ============================================================
 @router.get("/{id}/estado-cuenta")
 def obtener_estado_cuenta(
@@ -475,7 +475,7 @@ def obtener_estado_cuenta(
         # Obtener todos los financiamientos del cliente
         financiamientos = db.query(Financiamiento).filter(
             Financiamiento.cliente_id == id
-        ).order_by(Financiamiento.fecha_creacion.desc()).all()
+        ).order_by(Financiamiento.id.desc()).all()
         
         # Variables para resumen financiero
         total_financiado = 0
@@ -498,12 +498,12 @@ def obtener_estado_cuenta(
             # Contar cuotas por estado
             pagadas = [c for c in cuotas if c.estado == "pagada"]
             pendientes = [c for c in cuotas if c.estado != "pagada"]
-            atrasadas = [c for c in cuotas if c.estado == "vencida" or c.estado == "atrasada"]
+            atrasadas = [c for c in cuotas if c.estado == "vencida" or c.estado == "atrasada" or (c.estado == "pendiente" and c.fecha_vencimiento and c.fecha_vencimiento < datetime.now(timezone.utc))]
             
             # Sumar montos
-            monto_financiado = fin.monto_total or 0
-            monto_pagado = sum(c.monto_pagado or c.monto_cuota or 0 for c in pagadas)
-            monto_deuda = sum(c.monto_cuota or 0 for c in pendientes)
+            monto_financiado = fin.monto_total_bs or 0
+            monto_pagado = sum(c.monto_pagado or c.monto_total_bs or 0 for c in pagadas)
+            monto_deuda = sum(c.monto_total_bs or 0 for c in pendientes)
             
             total_financiado += monto_financiado
             total_pagado += monto_pagado
@@ -523,17 +523,22 @@ def obtener_estado_cuenta(
             # Crear detalle del financiamiento
             financiamientos_detalle.append({
                 "id": fin.id,
-                "monto_total": round(fin.monto_total or 0, 2),
-                "monto_pagado": round(monto_pagado, 2),
-                "deuda_restante": round(monto_deuda, 2),
-                "fecha_creacion": fin.fecha_creacion.isoformat() if fin.fecha_creacion else None,
+                "codigo": fin.codigo,
+                "monto_total_bs": round(fin.monto_total_bs or 0, 2),
+                "monto_total_usd": round(fin.monto_total_usd or 0, 2),
+                "monto_pagado_bs": round(monto_pagado, 2),
+                "monto_pagado_usd": round(monto_pagado / (fin.tasa_aplicada or 1), 2),
+                "deuda_restante_bs": round(monto_deuda, 2),
+                "deuda_restante_usd": round(monto_deuda / (fin.tasa_aplicada or 1), 2),
+                "fecha_creacion": fin.fecha_primera_cuota.isoformat() if fin.fecha_primera_cuota else None,
                 "estado": fin.estado,
                 "cuotas_totales": len(cuotas),
                 "cuotas_pagadas": len(pagadas),
                 "cuotas_pendientes": len(pendientes),
                 "cuotas_atrasadas": len(atrasadas),
                 "descripcion": fin.descripcion or "",
-                "tasa_interes": fin.tasa_interes or 0
+                "tasa_interes": fin.tasa_aplicada or 0,
+                "nivel_aplicado": fin.nivel_aplicado
             })
         
         # Calcular nivel y tasa
@@ -558,7 +563,7 @@ def obtener_estado_cuenta(
                 "nivel": cliente.nivel,
                 "score": cliente.score,
                 "estado": cliente.estado,
-                "fecha_registro": cliente.fecha_creacion.isoformat() if cliente.fecha_creacion else None
+                "fecha_registro": cliente.fecha_creacion.isoformat() if hasattr(cliente, 'fecha_creacion') and cliente.fecha_creacion else None
             },
             "resumen_financiero": {
                 "total_financiado_bs": round(total_financiado, 2),
@@ -567,8 +572,8 @@ def obtener_estado_cuenta(
                 "total_pagado_usd": round(total_pagado / tasa, 2) if tasa > 0 else 0,
                 "deuda_pendiente_bs": round(total_deuda, 2),
                 "deuda_pendiente_usd": round(total_deuda / tasa, 2) if tasa > 0 else 0,
-                "limite_disponible_bs": disponible,
-                "limite_disponible_usd": round(disponible / tasa, 2) if tasa > 0 else 0,
+                "limite_disponible_bs": disponible.get("disponible_bs", 0) if isinstance(disponible, dict) else disponible,
+                "limite_disponible_usd": disponible.get("disponible_usd", 0) if isinstance(disponible, dict) else round(disponible / tasa, 2) if tasa > 0 else 0,
                 "total_cuotas": total_cuotas,
                 "cuotas_pagadas": cuotas_pagadas,
                 "cuotas_pendientes": cuotas_pendientes,
@@ -578,9 +583,9 @@ def obtener_estado_cuenta(
                 "financiamientos_atrasados": financiamientos_atrasados,
                 "total_financiamientos": len(financiamientos)
             },
-            "financiamientos": financiamientos_detalle[:10],  # Últimos 10 financiamientos
+            "financiamientos": financiamientos_detalle[:10],
             "tasa_dolar_actual": tasa,
-            "fecha_consulta": datetime.now().isoformat(),
+            "fecha_consulta": datetime.now(timezone.utc).isoformat(),
             "nivel_config": {
                 "monto_max_usd": config["monto_max_usd"],
                 "monto_max_bs": round(config["monto_max_usd"] * tasa, 2),
@@ -597,4 +602,6 @@ def obtener_estado_cuenta(
         raise
     except Exception as e:
         print(f"❌ Error obteniendo estado de cuenta: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error al obtener estado de cuenta: {str(e)}")

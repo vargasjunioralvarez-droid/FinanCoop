@@ -276,7 +276,7 @@
 
 <script setup>
 import { ref, computed, onMounted, nextTick } from 'vue'
-import { api } from '@/config/api'  // ✅ Usar 'api'
+import { api } from '@/config/api'
 import Chart from 'chart.js/auto'
 
 const financiamientos = ref([])
@@ -306,7 +306,7 @@ const stats = ref({
 const headers = [
   { title: 'Código', key: 'codigo', width: '100px' },
   { title: 'Cliente', key: 'cliente', width: '200px' },
-  { title: 'Fecha', key: 'fecha_creacion', width: '120px' },
+  { title: 'Fecha', key: 'fecha_primera_cuota', width: '120px' },
   { title: 'Montos', key: 'montos', align: 'end', width: '150px' },
   { title: 'Entrada', key: 'entrada', align: 'end', width: '120px' },
   { title: 'Pendiente', key: 'pendiente', align: 'end', width: '150px' },
@@ -339,7 +339,7 @@ const formatearFecha = (fechaStr) => {
 
 const calcularMorosidad = (fin) => {
   if (fin.estado === 'completado') {
-    return { nombre: 'Al Día', color: 'success', textColor: 'white', icono: 'mdi-check-circle', descripcion: 'Financiamento completado' }
+    return { nombre: 'Al Día', color: 'success', textColor: 'white', icono: 'mdi-check-circle', descripcion: 'Financiamiento completado' }
   }
   
   const cuotasAtrasadas = fin.cuotas?.filter(c => c.estado === 'pendiente' && new Date(c.fecha_vencimiento) < new Date()).length || 0
@@ -359,12 +359,16 @@ const calcularMorosidad = (fin) => {
 
 const cargarDatos = async () => {
   try {
-    const financiamientosData = await api.get('/financiamientos')
-    const clientesData = await api.get('/clientes')
+    const response = await api.get('/financiamientos')
+    const financiamientosData = Array.isArray(response) ? response : response.data || []
+    
+    const clientesResponse = await api.get('/clientes')
+    const clientesData = Array.isArray(clientesResponse) ? clientesResponse : clientesResponse.data || []
     
     const datos = await Promise.all(financiamientosData.map(async (fin) => {
       const cliente = clientesData.find(c => c.id === fin.cliente_id)
-      const cuotas = await api.get(`/financiamientos/${fin.id}/cuotas`)
+      const cuotasResponse = await api.get(`/financiamientos/${fin.id}/cuotas`)
+      const cuotas = Array.isArray(cuotasResponse) ? cuotasResponse : cuotasResponse.data || []
       
       const pagadas = cuotas.filter(c => c.estado === 'pagada').length
       const pendientes = cuotas.filter(c => c.estado === 'pendiente')
@@ -373,7 +377,7 @@ const cargarDatos = async () => {
       const saldoPendienteBS = pendientes.reduce((sum, c) => sum + (c.monto_total_bs || 0), 0)
       const saldoPendienteUSD = pendientes.reduce((sum, c) => sum + (c.monto_total_usd || 0), 0)
       
-      const porcentajePagado = fin.cantidad_cuotas > 0 ? Math.round((pagadas / fin.cantidad_cuotas) * 100) : 0
+      const porcentajePagado = fin.cuotas_solicitadas > 0 ? Math.round((pagadas / fin.cuotas_solicitadas) * 100) : 0
       
       const morosidad = calcularMorosidad({ ...fin, cuotas })
       
@@ -387,7 +391,8 @@ const cargarDatos = async () => {
         saldo_pendiente_usd: saldoPendienteUSD,
         porcentaje_pagado: porcentajePagado,
         morosidad: morosidad,
-        cuotas_atrasadas: atrasadas.length
+        cuotas_atrasadas: atrasadas.length,
+        fecha_primera_cuota: fin.fecha_primera_cuota
       }
     }))
     
@@ -396,12 +401,12 @@ const cargarDatos = async () => {
     calcularStats()
     calcularNivelesMorosidad()
     
-    nextTick(() => {
-      crearGrafica()
-    })
+    await nextTick()
+    crearGrafica()
     
   } catch (e) {
     console.error('Error cargando datos:', e)
+    alert('Error al cargar los datos')
   }
 }
 
@@ -512,7 +517,8 @@ const abrirPagoEfectivo = async (fin) => {
   cuotaInfo.value = null
   
   try {
-    const cuotas = await api.get(`/financiamientos/${fin.id}/cuotas`)
+    const cuotasResponse = await api.get(`/financiamientos/${fin.id}/cuotas`)
+    const cuotas = Array.isArray(cuotasResponse) ? cuotasResponse : cuotasResponse.data || []
     const pendientes = cuotas.filter(c => c.estado === 'pendiente')
     
     cuotasPendientes.value = pendientes.map(c => ({
@@ -544,7 +550,7 @@ const exportarExcel = () => {
     Codigo: f.codigo,
     Cliente: f.cliente_nombre,
     Cedula: f.cliente_cedula,
-    Fecha: formatearFecha(f.fecha_creacion),
+    Fecha: formatearFecha(f.fecha_primera_cuota),
     Total_BS: f.monto_total_bs,
     Entrada_BS: f.monto_entrada_bs,
     Pendiente_BS: f.saldo_pendiente_bs,
