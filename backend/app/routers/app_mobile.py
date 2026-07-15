@@ -28,7 +28,7 @@ def options_login():
     return Response(status_code=200)
 
 # ============================================================
-# ✅ LOGIN - AHORA CON JWT
+# ✅ LOGIN - GENERA JWT
 # ============================================================
 @router.post("/login")
 def login_app(login: LoginApp, db: Session = Depends(get_db)):
@@ -53,7 +53,7 @@ def login_app(login: LoginApp, db: Session = Depends(get_db)):
         db.refresh(cliente)
         print(f"🔄 [login] Cliente {cliente.nombre} - Nivel: {cliente.nivel}")
 
-        # ✅ GENERAR JWT EN LUGAR DE TOKEN_APP
+        # ✅ GENERAR JWT (NO UUID)
         token_data = {
             "sub": str(cliente.id),  # ID del cliente como subject
             "rol": "cliente",
@@ -61,8 +61,10 @@ def login_app(login: LoginApp, db: Session = Depends(get_db)):
             "cedula": cliente.cedula
         }
         
+        # Usar create_access_token de auth.py
         token = create_access_token(token_data)
         print(f"✅ [login] JWT generado para {cliente.nombre} (ID: {cliente.id})")
+        print(f"✅ [login] Token: {token[:50]}...")
 
         # Actualizar último acceso
         cliente.ultimo_acceso = datetime.now(timezone.utc)
