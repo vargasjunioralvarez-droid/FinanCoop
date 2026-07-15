@@ -81,54 +81,29 @@ if IS_PROD:
     logger.info(f"🔒 CORS en producción: {ALLOWED_ORIGINS}")
 
 # ─────────────────────────────────────────────────────────────
-# 🔥 MIDDLEWARE CORS CUSTOM - CRÍTICO PARA CAPACITOR
+# ✅ FIX: CORS NATIVO DE FASTAPI (MÁS CONFIABLE)
 # ─────────────────────────────────────────────────────────────
-class CustomCORSMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request, call_next):
-        origin = request.headers.get("origin", "")
-        
-        # Capacitor en Android/iOS envía origin vacío o "null"
-        is_allowed = (
-            origin in ALLOWED_ORIGINS or
-            not origin or
-            origin == "null" or
-            (IS_PROD and origin.startswith("https://")) or
-            (not IS_PROD and "localhost" in origin)
-        )
-        
-        # 🔥 FIX: Headers permitidos incluyendo cache-control
-        allowed_headers = (
-            "Authorization, Content-Type, X-Request-ID, X-Requested-With, "
-            "Accept, Origin, Cache-Control, Pragma, Expires"
-        )
-        allowed_methods = "GET, POST, PUT, DELETE, PATCH, OPTIONS"
-        
-        # Responder a OPTIONS inmediatamente (preflight)
-        if request.method == "OPTIONS":
-            response = Response(status_code=200)
-            response.headers["Access-Control-Allow-Origin"] = origin or "*"
-            response.headers["Access-Control-Allow-Methods"] = allowed_methods
-            response.headers["Access-Control-Allow-Headers"] = allowed_headers
-            response.headers["Access-Control-Allow-Credentials"] = "true"
-            response.headers["Access-Control-Max-Age"] = "86400"
-            response.headers["Vary"] = "Origin"
-            return response
-        
-        # Procesar request normal
-        response = await call_next(request)
-        
-        if is_allowed:
-            response.headers["Access-Control-Allow-Origin"] = origin or "*"
-            response.headers["Access-Control-Allow-Credentials"] = "true"
-            response.headers["Access-Control-Allow-Headers"] = allowed_headers
-            response.headers["Access-Control-Allow-Methods"] = allowed_methods
-            response.headers["Access-Control-Expose-Headers"] = "X-Request-ID"
-            response.headers["Vary"] = "Origin"
-        
-        return response
-
-# Aplicar el middleware custom PRIMERO
-app.add_middleware(CustomCORSMiddleware)
+# Usar el CORS nativo de FastAPI que es más robusto
+# El middleware custom se eliminó porque causaba problemas con Capacitor
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allow_headers=[
+        "Authorization", 
+        "Content-Type", 
+        "X-Request-ID", 
+        "X-Requested-With",
+        "Accept", 
+        "Origin", 
+        "Cache-Control", 
+        "Pragma", 
+        "Expires"
+    ],
+    expose_headers=["X-Request-ID"],
+    max_age=86400
+)
 
 # ─────────────────────────────────────────────────────────────
 # 🛡️ SECURITY HEADERS (CORREGIDO PARA SWAGGER)
@@ -140,7 +115,7 @@ async def security_headers(request: Request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-    
+
     # ✅ CSP CORREGIDO - Permite recursos de CDN para Swagger
     csp = (
         "default-src 'self' https: http://localhost:*; "
@@ -154,10 +129,10 @@ async def security_headers(request: Request, call_next):
         "form-action 'self'"
     )
     response.headers["Content-Security-Policy"] = csp
-    
+
     if IS_PROD:
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-    
+
     return response
 
 # ─────────────────────────────────────────────────────────────
