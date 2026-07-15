@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from typing import Optional
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models import Cliente, Financiamiento, Cuota
+from app.models import Cliente, Financiamiento, Cuota, Pago
 from app.utils import (
     calcular_nivel, actualizar_score_cliente, generar_pin, 
     calcular_usado_disponible, obtener_tasa_actual, generar_token,
@@ -181,7 +181,7 @@ async def crear_cliente_json(
         db.commit()
         db.refresh(db_cliente)
 
-        print(f"✅ Cliente registrado (PENDIENTE): {db_cliente.id}")
+        print(f"✅ Cliente registrado (PENDIENTE): ID {db_cliente.id}")
 
         return {
             "success": True,
@@ -202,8 +202,6 @@ async def crear_cliente_json(
 # ============================================================
 # APROBAR CLIENTE Y ENVIAR PIN (SOLO ADMIN)
 # ============================================================
-# backend/app/routers/clientes.py (solo la parte modificada del endpoint aprobar)
-
 @router.post("/aprobar")
 async def aprobar_cliente(
     data: ClienteAprobar,
@@ -251,6 +249,7 @@ async def aprobar_cliente(
     except Exception as e:
         print(f"❌ Error aprobando cliente: {e}")
         return {"error": str(e), "success": False}
+
 # ============================================================
 # LISTAR CLIENTES
 # ============================================================
@@ -348,7 +347,7 @@ def actualizar_cliente(
     }
 
 # ============================================================
-# ELIMINAR CLIENTE
+# ✅ ELIMINAR CLIENTE - CORREGIDO (BORRA PAGOS → CUOTAS → FINANCIAMIENTOS → CLIENTE)
 # ============================================================
 @router.delete("/{id}")
 def eliminar_cliente(
@@ -362,12 +361,19 @@ def eliminar_cliente(
     
     nombre = cliente.nombre
     
-    # Eliminar financiamientos y cuotas asociadas
+    # ✅ CORREGIDO: Eliminar en orden correcto (hijos primero, padres después)
     financiamientos = db.query(Financiamiento).filter(Financiamiento.cliente_id == id).all()
     for fin in financiamientos:
-        db.query(Cuota).filter(Cuota.financiamiento_id == fin.id).delete()
+        # 1. Primero eliminar PAGOS asociados a este financiamiento
+        db.query(Pago).filter(Pago.financiamiento_id == fin.id).delete(synchronize_session=False)
+        
+        # 2. Luego eliminar CUOTAS
+        db.query(Cuota).filter(Cuota.financiamiento_id == fin.id).delete(synchronize_session=False)
+        
+        # 3. Eliminar el FINANCIAMIENTO
         db.delete(fin)
     
+    # 4. Finalmente eliminar el CLIENTE
     db.delete(cliente)
     db.commit()
     

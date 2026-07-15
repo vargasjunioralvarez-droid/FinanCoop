@@ -233,10 +233,10 @@
                 >
                   {{ fotoCedula ? 'mdi-check-circle' : 'mdi-camera' }}
                 </v-icon>
-                <div v-if="!fotoCedula" class="text-caption text-medium-emphasis mb-2">
+                <div v-if="!fotoCedula" class="text-caption text-white mb-2" style="opacity: 0.7;">
                   Sube o toma foto de tu cédula
                 </div>
-                <div v-else class="text-caption text-success mb-2">✅ Foto cargada</div>
+                <div v-else class="text-caption text-white mb-2" style="color: #4caf50 !important;">✅ Foto cargada</div>
                 
                 <div class="d-flex gap-2 justify-center mb-2 flex-wrap">
                   <v-btn 
@@ -286,29 +286,29 @@
               <v-alert type="success" class="mb-2" density="compact">✅ Revisa tus datos</v-alert>
               <v-list density="compact" class="bg-transparent">
                 <v-list-item>
-                  <v-list-item-title class="text-caption text-medium-emphasis">Nombre</v-list-item-title>
-                  <v-list-item-subtitle class="text-body-2">{{ registro.nombre }}</v-list-item-subtitle>
+                  <v-list-item-title class="text-caption text-white" style="opacity: 0.6;">Nombre</v-list-item-title>
+                  <v-list-item-subtitle class="text-body-2 text-white">{{ registro.nombre }}</v-list-item-subtitle>
                 </v-list-item>
                 <v-list-item>
-                  <v-list-item-title class="text-caption text-medium-emphasis">Cédula</v-list-item-title>
-                  <v-list-item-subtitle class="text-body-2">{{ registro.cedula }}</v-list-item-subtitle>
+                  <v-list-item-title class="text-caption text-white" style="opacity: 0.6;">Cédula</v-list-item-title>
+                  <v-list-item-subtitle class="text-body-2 text-white">{{ registro.cedula }}</v-list-item-subtitle>
                 </v-list-item>
                 <v-list-item>
-                  <v-list-item-title class="text-caption text-medium-emphasis">Teléfono</v-list-item-title>
-                  <v-list-item-subtitle class="text-body-2">{{ telefonoCompleto }}</v-list-item-subtitle>
+                  <v-list-item-title class="text-caption text-white" style="opacity: 0.6;">Teléfono</v-list-item-title>
+                  <v-list-item-subtitle class="text-body-2 text-white">{{ telefonoCompleto }}</v-list-item-subtitle>
                 </v-list-item>
                 <v-list-item>
-                  <v-list-item-title class="text-caption text-medium-emphasis">Dirección</v-list-item-title>
-                  <v-list-item-subtitle class="text-body-2">{{ registro.direccion }}</v-list-item-subtitle>
+                  <v-list-item-title class="text-caption text-white" style="opacity: 0.6;">Dirección</v-list-item-title>
+                  <v-list-item-subtitle class="text-body-2 text-white">{{ registro.direccion }}</v-list-item-subtitle>
                 </v-list-item>
                 <v-list-item>
-                  <v-list-item-title class="text-caption text-medium-emphasis">Referencia</v-list-item-title>
-                  <v-list-item-subtitle class="text-body-2">
+                  <v-list-item-title class="text-caption text-white" style="opacity: 0.6;">Referencia</v-list-item-title>
+                  <v-list-item-subtitle class="text-body-2 text-white">
                     {{ registro.referencia_nombre }} ({{ registro.referencia_parentesco }})
                   </v-list-item-subtitle>
                 </v-list-item>
                 <v-list-item v-if="fotoCedula">
-                  <v-list-item-title class="text-caption text-medium-emphasis">Cédula</v-list-item-title>
+                  <v-list-item-title class="text-caption text-white" style="opacity: 0.6;">Cédula</v-list-item-title>
                   <v-list-item-subtitle class="text-success">
                     <v-icon size="16" color="success">mdi-check-circle</v-icon>
                     Foto cargada
@@ -343,7 +343,7 @@
             </div>
           </div>
 
-          <!-- ✅ PANTALLA DE ÉXITO (SOLICITUD ENVIADA) -->
+          <!-- ✅ PANTALLA DE ÉXITO (SOLICITUD ENVIADA) - CON COLORES CORREGIDOS -->
           <div v-else class="text-center py-4">
             <div class="success-animation">
               <v-icon size="80" color="#4caf50" class="mb-3 success-icon">
@@ -360,30 +360,30 @@
             <div class="info-messages text-left">
               <div class="info-item mb-3">
                 <v-icon size="20" color="#4facfe" class="mr-2">mdi-account-check</v-icon>
-                <span class="text-body-1 text-white">
-                  <strong>Solicitud registrada correctamente</strong>
+                <span class="text-body-1 text-white font-weight-medium">
+                  Solicitud registrada correctamente
                 </span>
-                <p class="text-body-2 text-medium-emphasis mt-1 ml-7">
+                <p class="text-body-2 text-white mt-1 ml-7" style="opacity: 0.8;">
                   Tu solicitud ha sido guardada y está pendiente de revisión.
                 </p>
               </div>
               
               <div class="info-item mb-3">
                 <v-icon size="20" color="#ffc107" class="mr-2">mdi-clock</v-icon>
-                <span class="text-body-1 text-white">
-                  <strong>En espera de aprobación</strong>
+                <span class="text-body-1 text-white font-weight-medium">
+                  En espera de aprobación
                 </span>
-                <p class="text-body-2 text-medium-emphasis mt-1 ml-7">
+                <p class="text-body-2 text-white mt-1 ml-7" style="opacity: 0.8;">
                   Un administrador revisará tus datos y te aprobará en la plataforma.
                 </p>
               </div>
               
               <div class="info-item">
                 <v-icon size="20" color="#4caf50" class="mr-2">mdi-phone-message</v-icon>
-                <span class="text-body-1 text-white">
-                  <strong>Notificación por SMS</strong>
+                <span class="text-body-1 text-white font-weight-medium">
+                  Notificación por SMS
                 </span>
-                <p class="text-body-2 text-medium-emphasis mt-1 ml-7">
+                <p class="text-body-2 text-white mt-1 ml-7" style="opacity: 0.8;">
                   Cuando seas aprobado, recibirás un SMS al número 
                   <strong class="text-white">{{ telefonoCompleto }}</strong> con tu PIN de acceso.
                 </p>
@@ -406,7 +406,7 @@
               Volver al Login
             </v-btn>
             
-            <p class="text-caption text-medium-emphasis mt-3">
+            <p class="text-caption text-white mt-3" style="opacity: 0.6;">
               ¿Ya tienes cuenta? Inicia sesión con tu PIN
             </p>
           </div>
@@ -723,7 +723,7 @@ onBeforeUnmount(() => {
 
 .register-sub {
   font-size: 13px;
-  color: rgba(255,255,255,0.4);
+  color: rgba(255,255,255,0.6);
 }
 
 /* Stepper */
@@ -912,6 +912,25 @@ onBeforeUnmount(() => {
 .info-item p {
   margin-bottom: 0;
   line-height: 1.4;
+}
+
+/* ============ CORRECCIÓN DE COLORES ============ */
+.info-messages .text-body-1,
+.info-messages .text-body-2,
+.info-messages .text-caption {
+  color: #ffffff !important;
+}
+
+.info-messages .text-medium-emphasis {
+  color: rgba(255, 255, 255, 0.8) !important;
+}
+
+.info-messages .text-white {
+  color: #ffffff !important;
+}
+
+.info-messages strong {
+  color: #ffffff !important;
 }
 
 /* 🔥 Botón de login */

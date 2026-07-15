@@ -9,10 +9,8 @@ console.log('🌐 Modo:', import.meta.env.MODE)
 console.log('🔗 API_URL:', API_URL)
 
 const api = axios.create({
-  baseURL: API_URL,
-  headers: {
-    'Content-Type': 'application/json'
-  }
+  baseURL: API_URL
+  // ❌ ELIMINADO: No setear Content-Type global aquí
 })
 
 // Interceptor para agregar token
@@ -27,8 +25,13 @@ api.interceptors.request.use(
       console.log('⚠️ [API] Sin token para:', config.url)
     }
     
-    // 🔥 IMPORTANTE: Mostrar la URL completa
+    // ✅ CORREGIDO: Solo setear Content-Type si no fue definido manualmente
+    if (!config.headers['Content-Type']) {
+      config.headers['Content-Type'] = 'application/json'
+    }
+    
     console.log('📡 [API] URL completa:', config.baseURL + config.url)
+    console.log('📡 [API] Content-Type:', config.headers['Content-Type'])
     
     return config
   },

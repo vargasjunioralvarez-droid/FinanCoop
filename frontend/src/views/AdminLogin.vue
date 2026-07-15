@@ -71,12 +71,12 @@ const login = async () => {
   try {
     console.log('📡 Enviando login con:', username.value)
 
-    // 🔥 USAR api.js (axios) para login también
+    // ✅ CORREGIDO: No usar .toString(), enviar URLSearchParams directamente
     const formData = new URLSearchParams()
     formData.append('username', username.value)
     formData.append('password', password.value)
 
-    const data = await api.post('/auth/login', formData.toString(), {
+    const data = await api.post('/auth/login', formData, {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded'
       }

@@ -114,7 +114,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { api } from '@/config/api'  // ✅ Usar 'api'
+import { api } from '@/config/api'
 
 const pagosPendientes = ref([])
 const dialogConfirmar = ref(false)
@@ -169,11 +169,12 @@ const abrirConciliar = (pago, aprobar) => {
   dialogConfirmar.value = true
 }
 
+// ✅ CORREGIDO: monto_confirmado → monto_confirmado_bs
 const confirmarAccion = async () => {
   try {
     const data = await api.post('/pagos/conciliar', {
       pago_id: pagoSeleccionado.value.pago_id,
-      monto_confirmado: accionAprobar.value ? parseFloat(montoConfirmado.value) : 0,
+      monto_confirmado_bs: accionAprobar.value ? parseFloat(montoConfirmado.value) : 0,
       estado: accionAprobar.value ? 'conciliado' : 'rechazado',
       conciliado_por: 'admin'
     })

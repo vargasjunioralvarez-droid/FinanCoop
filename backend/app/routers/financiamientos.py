@@ -1,11 +1,12 @@
 # backend/app/routers/financiamientos.py
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models import Cliente, Financiamiento, Cuota
+from app.models import Cliente, Financiamiento, Cuota, Pago
 from app.schemas import FinanciamientoCreate, AprobacionExtra
 from app.utils import calcular_nivel, actualizar_score_cliente, calcular_usado_disponible, obtener_tasa_actual
-from datetime import datetime, timedelta, timezone  # 👈 AGREGAR timezone
+from app.auth import get_current_admin
+from datetime import datetime, timedelta, timezone
 import random
 
 router = APIRouter(prefix="/financiamientos", tags=["Financiamientos"])
@@ -16,7 +17,7 @@ def crear_financiamiento(f: FinanciamientoCreate, db: Session = Depends(get_db))
     if not cliente:
         return {"error": "Cliente no encontrado"}
     
-    hoy = datetime.now(timezone.utc)  # 👈 CORREGIDO
+    hoy = datetime.now(timezone.utc)
     deudas_vencidas = db.query(Cuota).join(Financiamiento).filter(
         Financiamiento.cliente_id == f.cliente_id,
         Cuota.estado == "pendiente",
@@ -77,7 +78,7 @@ def crear_financiamiento(f: FinanciamientoCreate, db: Session = Depends(get_db))
     monto_cuota_usd_ref = monto_cuota_bs / tasa
     
     codigo = f"F-{random.randint(100000, 999999)}"
-    fecha_primera = datetime.now(timezone.utc) + timedelta(days=15)  # 👈 CORREGIDO
+    fecha_primera = datetime.now(timezone.utc) + timedelta(days=15)
     
     fin = Financiamiento(
         cliente_id=f.cliente_id,
@@ -180,7 +181,7 @@ def obtener_financiamiento(id: int, db: Session = Depends(get_db)):
 def ver_cuotas(id: int, db: Session = Depends(get_db)):
     cuotas = db.query(Cuota).filter(Cuota.financiamiento_id == id).all()
     
-    hoy = datetime.now(timezone.utc)  # 👈 CORREGIDO
+    hoy = datetime.now(timezone.utc)
     
     resultado = []
     
@@ -206,3 +207,28 @@ def ver_cuotas(id: int, db: Session = Depends(get_db)):
         resultado.append(data)
     
     return resultado
+
+# ============================================================
+# ✅ ELIMINAR FINANCIAMIENTO - NUEVO ENDPOINT
+# ============================================================
+@router.delete("/{id}")
+def eliminar_financiamiento(
+    id: int,
+    db: Session = Depends(get_db),
+    current_admin = Depends(get_current_admin)
+):
+    financiamiento = db.query(Financiamiento).filter(Financiamiento.id == id).first()
+    if not financiamiento:
+        raise HTTPException(status_code=404, detail="Financiamiento no encontrado")
+    
+    # Eliminar en orden: pagos → cuotas → financiamiento
+    db.query(Pago).filter(Pago.financiamiento_id == id).delete(synchronize_session=False)
+    db.query(Cuota).filter(Cuota.financiamiento_id == id).delete(synchronize_session=False)
+    
+    db.delete(financiamiento)
+    db.commit()
+    
+    return {
+        "success": True,
+        "mensaje": f"Financiamiento #{id} eliminado correctamente"
+    }
