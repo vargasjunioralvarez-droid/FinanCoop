@@ -2,9 +2,9 @@
 from fastapi import APIRouter, Depends, Response, Header, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models import Cliente, Financiamiento, Cuota, ConfiguracionPago
+from app.models import Cliente, Financiamiento, Cuota, ConfiguracionPago, NivelConfig
 from app.schemas import LoginApp
-from app.utils import generar_token, obtener_tasa_actual, calcular_usado_disponible
+from app.utils import generar_token, obtener_tasa_actual, calcular_usado_disponible, actualizar_score_cliente, calcular_nivel
 from datetime import datetime, timezone
 
 router = APIRouter(prefix="/app", tags=["App Móvil"])
@@ -35,6 +35,11 @@ def login_app(login: LoginApp, db: Session = Depends(get_db)):
     if cliente.estado != "aprobado":
         return {"error": "Tu cuenta está pendiente de aprobación. Contacta a la cooperativa."}
 
+    # ✅ RECALCULAR NIVEL Y SCORE AUTOMÁTICAMENTE AL INICIAR SESIÓN
+    actualizar_score_cliente(cliente, db)
+    db.refresh(cliente)
+    print(f"🔄 Cliente {cliente.nombre} - Nivel recalculado: {cliente.nivel}")
+
     cliente.token_app = generar_token()
     cliente.ultimo_acceso = datetime.now(timezone.utc)
     db.commit()
@@ -64,6 +69,10 @@ def mi_perfil(
     cliente = db.query(Cliente).filter(Cliente.token_app == token_final).first()
     if not cliente:
         return {"error": "Sesión no válida"}
+
+    # ✅ RECALCULAR AL OBTENER PERFIL
+    actualizar_score_cliente(cliente, db)
+    db.refresh(cliente)
 
     return {
         "id": cliente.id,
@@ -97,6 +106,10 @@ def mis_datos(
     cliente = db.query(Cliente).filter(Cliente.token_app == token_final).first()
     if not cliente:
         return {"error": "Sesión no válida"}
+
+    # ✅ RECALCULAR NIVEL Y SCORE ANTES DE CALCULAR LÍMITE
+    actualizar_score_cliente(cliente, db)
+    db.refresh(cliente)
 
     tasa = obtener_tasa_actual(db)
     disponible = calcular_usado_disponible(cliente.id, db)
