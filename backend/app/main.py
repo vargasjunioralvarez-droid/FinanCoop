@@ -57,6 +57,7 @@ ALLOWED_ORIGINS = [
     "http://127.0.0.1:5174",
     "http://127.0.0.1:5175",
     "http://127.0.0.1:5176",
+    "http://192.168.10.122:5175", 
     "capacitor://localhost",
     "ionic://localhost",
     "http://localhost",
