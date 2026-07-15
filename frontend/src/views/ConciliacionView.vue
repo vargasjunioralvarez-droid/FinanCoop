@@ -59,12 +59,12 @@
               </v-chip>
             </template>
             
-            <template v-slot:item.comprobante_url="{ item }">
+            <template v-slot:item.comprobante="{ item }">
               <v-btn 
-                v-if="item.comprobante_url" 
+                v-if="item.comprobante || item.comprobante_url" 
                 size="small" 
                 color="info"
-                @click="verComprobante(item.comprobante_url)"
+                @click="verComprobante(item.comprobante || item.comprobante_url)"
                 variant="tonal"
               >
                 <v-icon start size="16">mdi-image</v-icon>
@@ -117,6 +117,24 @@
           <p><strong>Método:</strong> {{ formatoMetodo(pagoSeleccionado?.metodo) }}</p>
           <p><strong>Banco Origen:</strong> {{ pagoSeleccionado?.banco_origen || 'N/A' }}</p>
           <p><strong>Teléfono:</strong> {{ pagoSeleccionado?.telefono_pago || 'N/A' }}</p>
+          
+          <!-- Mostrar comprobante en el diálogo -->
+          <div v-if="pagoSeleccionado?.comprobante || pagoSeleccionado?.comprobante_url" class="mt-3">
+            <div class="text-subtitle-2 font-weight-bold">Comprobante:</div>
+            <v-img
+              :src="pagoSeleccionado.comprobante || pagoSeleccionado.comprobante_url"
+              max-height="200"
+              contain
+              class="mt-2 rounded"
+              @click="verComprobante(pagoSeleccionado.comprobante || pagoSeleccionado.comprobante_url)"
+            >
+              <template v-slot:placeholder>
+                <v-row class="fill-height ma-0" align="center" justify="center">
+                  <v-progress-circular indeterminate color="grey-lighten-5"></v-progress-circular>
+                </v-row>
+              </template>
+            </v-img>
+          </div>
         </div>
         
         <v-text-field
@@ -171,7 +189,7 @@ const headers = [
   { title: 'Monto', key: 'monto_reportado_bs', align: 'end', width: '150px' },
   { title: 'Método', key: 'metodo', width: '120px' },
   { title: 'Referencia', key: 'referencia', width: '120px' },
-  { title: 'Comprobante', key: 'comprobante_url', width: '100px' },
+  { title: 'Comprobante', key: 'comprobante', width: '120px' },
   { title: 'Acciones', key: 'acciones', width: '180px' }
 ]
 
@@ -223,6 +241,11 @@ const cargarPagos = async () => {
     const data = await api.get('/pagos/pendientes')
     pagosPendientes.value = Array.isArray(data) ? data : []
     console.log('📋 Pagos cargados:', pagosPendientes.value.length)
+    
+    // Debug: mostrar los comprobantes
+    pagosPendientes.value.forEach((p, i) => {
+      console.log(`Pago ${i+1} - comprobante:`, p.comprobante || p.comprobante_url || 'SIN FOTO')
+    })
   } catch (e) {
     console.error('Error cargando pagos:', e)
     pagosPendientes.value = []
@@ -244,7 +267,6 @@ const confirmarAccion = async () => {
   cargando.value = true
   
   try {
-    // Asegurar que el payload tenga exactamente los campos que espera el backend
     const payload = {
       pago_id: Number(pagoSeleccionado.value.id || pagoSeleccionado.value.pago_id),
       monto_confirmado_bs: accionAprobar.value ? Number(montoConfirmado.value) : 0,
@@ -270,7 +292,12 @@ const confirmarAccion = async () => {
 }
 
 const verComprobante = (comprobante) => {
-  if (!comprobante) return
+  if (!comprobante) {
+    alert('No hay comprobante disponible')
+    return
+  }
+  
+  console.log('📷 Abriendo comprobante:', comprobante)
   
   // Si es URL de Cloudflare o imagen
   if (comprobante.startsWith('http') || comprobante.startsWith('data:image')) {
@@ -308,22 +335,34 @@ const verComprobante = (comprobante) => {
                 margin-top: 12px;
                 font-size: 14px;
               }
+              .error {
+                color: #ef4444;
+                margin-top: 20px;
+                display: none;
+              }
             </style>
           </head>
           <body>
             <div class="container">
-              <img src="${comprobante}" alt="Comprobante de pago" onerror="this.style.display='none'; document.querySelector('.error').style.display='block'" />
-              <div class="info">Comprobante de pago</div>
-              <div class="error" style="display:none;color:#ef4444;margin-top:20px;">
-                ⚠️ No se pudo cargar la imagen
+              <img src="${comprobante}" alt="Comprobante de pago" 
+                   onerror="this.style.display='none'; document.querySelector('.error').style.display='block'" 
+                   onload="document.querySelector('.loading').style.display='none'"/>
+              <div class="loading" style="color:rgba(255,255,255,0.4);margin-top:20px;">
+                ⏳ Cargando imagen...
               </div>
+              <div class="info">Comprobante de pago</div>
+              <div class="error">⚠️ No se pudo cargar la imagen</div>
             </div>
           </body>
         </html>
       `)
     }
   } else {
-    window.open(comprobante, '_blank')
+    // Si es un path relativo
+    const fullUrl = comprobante.startsWith('/') 
+      ? `https://financoop.onrender.com${comprobante}`
+      : comprobante
+    window.open(fullUrl, '_blank')
   }
 }
 
