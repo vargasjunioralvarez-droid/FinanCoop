@@ -1,5 +1,5 @@
 # backend/app/routers/pagos.py
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 from app.database import get_db
@@ -7,48 +7,92 @@ from app.models import Cuota, Pago, Financiamiento, Cliente
 from app.schemas import PagoReporte, ConciliacionPago
 from app.utils import actualizar_score_cliente, calcular_nivel, obtener_tasa_actual
 from app.auth import get_current_admin
+import json
 
 router = APIRouter(prefix="/pagos", tags=["Pagos"])
 
 # ============================================================
-# ✅ REPORTAR PAGO
+# ✅ REPORTAR PAGO (CON DEBUG DETALLADO)
 # ============================================================
-# backend/app/routers/pagos.py - Sección reportar pago
-
 @router.post("/reportar")
-def reportar_pago(pago: PagoReporte, db: Session = Depends(get_db)):
+async def reportar_pago(request: Request, db: Session = Depends(get_db)):
+    """
+    Recibe el reporte de pago desde la app móvil
+    """
     try:
-        print("=" * 50)
+        print("=" * 60)
         print("📝 REPORTAR PAGO - INICIO")
-        print(f"📋 Datos recibidos: {pago.dict()}")
         
-        cuota = db.query(Cuota).filter(Cuota.id == pago.cuota_id).first()
+        # ✅ 1. LEER BODY RAW
+        body = await request.body()
+        print(f"📥 Body raw (bytes): {len(body)} bytes")
+        print(f"📥 Body raw (texto): {body.decode('utf-8')[:500]}")
+        
+        # ✅ 2. PARSEAR JSON
+        try:
+            data = json.loads(body)
+            print(f"📥 JSON parseado: {json.dumps(data, indent=2, ensure_ascii=False)}")
+        except json.JSONDecodeError as e:
+            print(f"❌ Error parseando JSON: {e}")
+            raise HTTPException(status_code=400, detail=f"JSON inválido: {str(e)}")
+        
+        # ✅ 3. VALIDAR CAMPOS OBLIGATORIOS
+        campos_requeridos = ['cuota_id', 'monto_bs', 'metodo', 'referencia']
+        for campo in campos_requeridos:
+            if campo not in data:
+                print(f"❌ Campo faltante: {campo}")
+                raise HTTPException(status_code=422, detail=f"Campo requerido faltante: {campo}")
+        
+        # ✅ 4. CONVERTIR TIPOS
+        try:
+            pago_data = PagoReporte(
+                cuota_id=int(data['cuota_id']),
+                monto_bs=float(data['monto_bs']),
+                metodo=str(data['metodo']),
+                referencia=str(data['referencia']),
+                banco_origen=str(data.get('banco_origen', '')),
+                telefono_pago=str(data.get('telefono_pago', '')),
+                cedula_pago=str(data.get('cedula_pago', '')),
+                comprobante=str(data.get('comprobante', ''))
+            )
+            print(f"✅ PagoReporte validado: {pago_data.dict()}")
+        except (ValueError, TypeError) as e:
+            print(f"❌ Error de tipo en campos: {e}")
+            raise HTTPException(status_code=422, detail=f"Error de tipo en campos: {str(e)}")
+        
+        # ✅ 5. VERIFICAR CUOTA
+        cuota = db.query(Cuota).filter(Cuota.id == pago_data.cuota_id).first()
         if not cuota:
+            print(f"❌ Cuota no encontrada: {pago_data.cuota_id}")
             return {"error": "Cuota no encontrada"}
         
-        # Verificar si ya hay un pago pendiente para esta cuota
+        print(f"✅ Cuota encontrada: ID {cuota.id}, Número {cuota.numero}")
+        
+        # ✅ 6. VERIFICAR PAGO DUPLICADO
         pago_existente = db.query(Pago).filter(
-            Pago.cuota_id == pago.cuota_id,
+            Pago.cuota_id == pago_data.cuota_id,
             Pago.estado == "pendiente"
         ).first()
         
         if pago_existente:
+            print(f"⚠️ Pago pendiente existente: {pago_existente.id}")
             return {
                 "error": "Ya existe un pago pendiente para esta cuota",
                 "pago_id": pago_existente.id
             }
         
+        # ✅ 7. CREAR PAGO
         nuevo_pago = Pago(
-            cuota_id=pago.cuota_id,
+            cuota_id=pago_data.cuota_id,
             financiamiento_id=cuota.financiamiento_id,
-            referencia=pago.referencia,
-            metodo=pago.metodo,
-            monto_reportado_bs=pago.monto_bs,
-            monto=pago.monto_bs,
-            banco_origen=pago.banco_origen,
-            telefono_pago=pago.telefono_pago,
-            cedula_pago=pago.cedula_pago,
-            comprobante=pago.comprobante,
+            referencia=pago_data.referencia,
+            metodo=pago_data.metodo,
+            monto_reportado_bs=pago_data.monto_bs,
+            monto=pago_data.monto_bs,
+            banco_origen=pago_data.banco_origen,
+            telefono_pago=pago_data.telefono_pago,
+            cedula_pago=pago_data.cedula_pago,
+            comprobante=pago_data.comprobante,
             estado="pendiente",
             fecha_reporte=datetime.now(timezone.utc)
         )
@@ -56,18 +100,24 @@ def reportar_pago(pago: PagoReporte, db: Session = Depends(get_db)):
         db.add(nuevo_pago)
         cuota.estado = "conciliando"
         db.commit()
+        db.refresh(nuevo_pago)
         
         print(f"✅ Pago reportado ID: {nuevo_pago.id}")
         print(f"✅ Comprobante: {nuevo_pago.comprobante[:50] if nuevo_pago.comprobante else 'Sin foto'}")
-        print("=" * 50)
+        print("=" * 60)
         
         return {
             "pago_id": nuevo_pago.id,
             "estado": "pendiente",
             "mensaje": "Pago reportado. Esperando conciliación."
         }
+        
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"❌ Error reportando pago: {e}")
+        import traceback
+        traceback.print_exc()
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -114,6 +164,7 @@ def pagos_pendientes_conciliacion(
                 "referencia": p.referencia,
                 "banco_origen": p.banco_origen,
                 "telefono_pago": p.telefono_pago,
+                "comprobante": p.comprobante,
                 "comprobante_url": p.comprobante,
                 "estado": p.estado
             })
@@ -136,6 +187,8 @@ def conciliar_pago(
     current_admin = Depends(get_current_admin)
 ):
     try:
+        print(f"📝 Conciliando pago: {conciliacion.dict()}")
+        
         pago = db.query(Pago).filter(Pago.id == conciliacion.pago_id).first()
         if not pago:
             raise HTTPException(status_code=404, detail="Pago no encontrado")
@@ -291,28 +344,3 @@ def pagar_cuota_efectivo(
         print(f"❌ Error pagando cuota: {e}")
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
-
-# ============================================================
-# ✅ OBTENER PAGOS DE UN FINANCIAMIENTO
-# ============================================================
-@router.get("/financiamiento/{financiamiento_id}")
-def obtener_pagos_financiamiento(
-    financiamiento_id: int,
-    db: Session = Depends(get_db),
-    current_admin = Depends(get_current_admin)
-):
-    pagos = db.query(Pago).filter(Pago.financiamiento_id == financiamiento_id).all()
-    
-    return [
-        {
-            "id": p.id,
-            "cuota_id": p.cuota_id,
-            "metodo": p.metodo,
-            "monto_bs": p.monto_confirmado_bs or p.monto_reportado_bs or p.monto,
-            "referencia": p.referencia,
-            "estado": p.estado,
-            "fecha_reporte": p.fecha_reporte.isoformat() if p.fecha_reporte else None,
-            "fecha_confirmacion": p.fecha_confirmacion.isoformat() if p.fecha_confirmacion else None
-        }
-        for p in pagos
-    ]
