@@ -54,7 +54,6 @@
         class="cuota-item glass-card"
         :class="{ 'cuota-selectable': c.estado === 'pendiente' || c.estado === 'conciliando' }"
         elevation="0"
-        @click="seleccionarCuota(c)"
       >
         <v-card-text class="pa-3">
           <div class="d-flex align-center">
@@ -75,9 +74,75 @@
               <div class="cuota-monto">BS {{ formatearBS(c.monto_total_bs || c.monto_bs) }}</div>
               <div class="cuota-usd">${{ formatearUSD(c.monto_total_usd_ref || c.monto_usd_ref) }}</div>
               <div v-if="c.monto_interes_bs > 0" class="cuota-interes">+{{ formatearBS(c.monto_interes_bs) }} mora</div>
-              <v-chip v-if="c.puede_pagar !== false && c.estado !== 'pagada'" color="success" size="x-small" class="mt-1" variant="flat">
-                Pagar
-              </v-chip>
+
+              <!-- ⚡ MENÚ DE OPCIONES DE PAGO -->
+              <v-menu v-if="c.puede_pagar !== false && c.estado !== 'pagada'" location="bottom end">
+                <template v-slot:activator="{ props }">
+                  <v-btn
+                    color="success"
+                    size="small"
+                    variant="flat"
+                    v-bind="props"
+                    @click.stop
+                    class="mt-1"
+                  >
+                    <v-icon start size="16">mdi-cash-fast</v-icon>
+                    Pagar
+                    <v-icon end size="16">mdi-chevron-down</v-icon>
+                  </v-btn>
+                </template>
+                <v-list density="compact" class="bg-surface" style="min-width: 240px;">
+                  <!-- Pagar solo esta cuota -->
+                  <v-list-item @click="seleccionarCuota(c, 'cuota')">
+                    <template v-slot:prepend>
+                      <v-icon color="primary" size="18">mdi-credit-card-outline</v-icon>
+                    </template>
+                    <v-list-item-title style="font-size: 13px;">Pagar cuota completa</v-list-item-title>
+                    <v-list-item-subtitle style="font-size: 11px;">
+                      BS {{ formatearBS(c.monto_total_bs || c.monto_bs) }}
+                    </v-list-item-subtitle>
+                  </v-list-item>
+
+                  <v-divider class="my-1"></v-divider>
+
+                  <!-- 💰 ABONAR - NUEVA OPCIÓN -->
+                  <v-list-item @click="abrirDialogoAbono(c)">
+                    <template v-slot:prepend>
+                      <v-icon color="info" size="18">mdi-cash-plus</v-icon>
+                    </template>
+                    <v-list-item-title style="font-size: 13px;">Abonar</v-list-item-title>
+                    <v-list-item-subtitle style="font-size: 11px;">
+                      Paga una parte del monto
+                    </v-list-item-subtitle>
+                  </v-list-item>
+
+                  <v-divider class="my-1"></v-divider>
+
+                  <!-- Adelantar pagos -->
+                  <v-list-item @click="seleccionarCuota(c, 'adelantar')">
+                    <template v-slot:prepend>
+                      <v-icon color="warning" size="18">mdi-fast-forward</v-icon>
+                    </template>
+                    <v-list-item-title style="font-size: 13px;">Adelantar pagos</v-list-item-title>
+                    <v-list-item-subtitle style="font-size: 11px;">
+                      Desde cuota #{{ c.cuota_numero || c.numero }} en adelante
+                    </v-list-item-subtitle>
+                  </v-list-item>
+
+                  <v-divider class="my-1"></v-divider>
+
+                  <!-- Liquidar deuda -->
+                  <v-list-item @click="seleccionarCuota(c, 'liquidar')">
+                    <template v-slot:prepend>
+                      <v-icon color="success" size="18">mdi-rocket-launch</v-icon>
+                    </template>
+                    <v-list-item-title style="font-size: 13px;">Liquidar deuda</v-list-item-title>
+                    <v-list-item-subtitle style="font-size: 11px;">
+                      <span class="text-success">⭐ Ahorra 5% de intereses</span>
+                    </v-list-item-subtitle>
+                  </v-list-item>
+                </v-list>
+              </v-menu>
             </div>
           </div>
         </v-card-text>
@@ -89,11 +154,73 @@
           <v-icon size="18" color="info" class="mr-2">mdi-information-outline</v-icon>
           <div class="info-text">
             ✅ Los montos en Bs se actualizan automáticamente con el tipo de cambio.<br>
-            💵 Tu deuda se mantiene en DÓLARES (USD) para protegerte de la devaluación.
+            💵 Tu deuda se mantiene en DÓLARES (USD) para protegerte de la devaluación.<br>
+            💰 Puedes <strong>abonar</strong> cualquier monto y el resto se mantiene pendiente.
           </div>
         </v-card-text>
       </v-card>
     </div>
+
+    <!-- 💰 DIÁLOGO DE ABONO -->
+    <v-dialog v-model="dialogoAbono" max-width="400" persistent>
+      <v-card class="glass-card" style="background: #1a1f3a !important;">
+        <v-card-title class="pa-4 pb-2">
+          <div class="d-flex align-center">
+            <v-icon color="info" class="mr-2">mdi-cash-plus</v-icon>
+            <span style="font-size: 16px; font-weight: 600;">Realizar Abono</span>
+          </div>
+        </v-card-title>
+
+        <v-card-text class="pa-4 pt-2">
+          <div v-if="cuotaAbono" class="mb-4">
+            <div style="font-size: 12px; color: rgba(255,255,255,0.5); margin-bottom: 4px;">
+              Cuota #{{ cuotaAbono.cuota_numero || cuotaAbono.numero }}
+            </div>
+            <div style="font-size: 14px; color: #fff; margin-bottom: 8px;">
+              {{ cuotaAbono.financiamiento_descripcion || 'Sin descripción' }}
+            </div>
+            <div class="d-flex justify-space-between" style="font-size: 13px;">
+              <span style="color: rgba(255,255,255,0.5);">Monto total:</span>
+              <span style="color: #4facfe; font-weight: 600;">
+                BS {{ formatearBS(cuotaAbono.monto_total_bs || cuotaAbono.monto_bs) }}
+              </span>
+            </div>
+            <div class="d-flex justify-space-between" style="font-size: 13px;">
+              <span style="color: rgba(255,255,255,0.5);">Mínimo a abonar:</span>
+              <span style="color: #ffd54f; font-weight: 600;">
+                BS {{ formatearBS((cuotaAbono.monto_total_bs || cuotaAbono.monto_bs || 0) * 0.1) }}
+              </span>
+            </div>
+          </div>
+
+          <v-text-field
+            v-model="montoAbono"
+            label="Monto a abonar (Bs) *"
+            placeholder="Ej: 100000"
+            prepend-inner-icon="mdi-cash"
+            variant="outlined"
+            type="number"
+            class="input-field"
+            hide-details
+            autofocus
+          />
+
+          <v-alert v-if="errorAbono" type="error" variant="tonal" density="compact" class="mt-3" style="border-radius: 10px;">
+            {{ errorAbono }}
+          </v-alert>
+
+          <div class="d-flex gap-2 mt-4">
+            <v-btn variant="text" color="rgba(255,255,255,0.5)" @click="cerrarDialogoAbono" class="flex-grow-1">
+              Cancelar
+            </v-btn>
+            <v-btn color="info" @click="confirmarAbono" class="flex-grow-1" :disabled="!montoAbono">
+              <v-icon start>mdi-check</v-icon>
+              Abonar
+            </v-btn>
+          </div>
+        </v-card-text>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
@@ -113,7 +240,6 @@ const {
   totalDeudaUsd,
   formatearBS,
   formatearUSD,
-  formatearNumero,
   formatearFecha,
   setCuotaSeleccionada
 } = useFinanCash()
@@ -121,13 +247,19 @@ const {
 const filtro = ref('todas')
 const financiamientoId = route.query.financiamiento_id
 
+// 💰 ESTADO DEL DIÁLOGO DE ABONO
+const dialogoAbono = ref(false)
+const cuotaAbono = ref(null)
+const montoAbono = ref('')
+const errorAbono = ref('')
+
 const cuotasFiltradas = computed(() => {
   let lista = [...todasCuotas.value]
-  
+
   if (financiamientoId) {
     lista = lista.filter(c => c.financiamiento_id === Number(financiamientoId))
   }
-  
+
   lista = lista.sort((a, b) => {
     const orden = { vencida: 0, conciliando: 1, pendiente: 2, pagada: 3 }
     const ea = estadoCuota(a)
@@ -202,9 +334,96 @@ function chipLabel(c) {
   }[est]
 }
 
-function seleccionarCuota(c) {
+// 💰 ABRIR DIÁLOGO DE ABONO
+function abrirDialogoAbono(c) {
   if (c.estado === 'pagada') return
-  setCuotaSeleccionada(c)
+  cuotaAbono.value = c
+  montoAbono.value = ''
+  errorAbono.value = ''
+  dialogoAbono.value = true
+}
+
+// 💰 CERRAR DIÁLOGO DE ABONO
+function cerrarDialogoAbono() {
+  dialogoAbono.value = false
+  cuotaAbono.value = null
+  montoAbono.value = ''
+  errorAbono.value = ''
+}
+
+// 💰 CONFIRMAR ABONO
+function confirmarAbono() {
+  if (!cuotaAbono.value || !montoAbono.value) return
+
+  const monto = parseFloat(montoAbono.value)
+  const montoTotal = cuotaAbono.value.monto_total_bs || cuotaAbono.value.monto_bs || 0
+  const montoMinimo = montoTotal * 0.1 // 10% mínimo
+
+  // Validaciones
+  if (isNaN(monto) || monto <= 0) {
+    errorAbono.value = 'Ingresa un monto válido'
+    return
+  }
+
+  if (monto < montoMinimo) {
+    errorAbono.value = `El abono mínimo es BS ${formatearBS(montoMinimo)} (10% del total)`
+    return
+  }
+
+  if (monto >= montoTotal) {
+    errorAbono.value = 'El monto es igual o mayor al total. Usa "Pagar cuota completa"'
+    return
+  }
+
+  // Ir a pagar con modo abono
+  setCuotaSeleccionada({
+    ...cuotaAbono.value,
+    modo_pago: 'abono',
+    monto_bs: Math.round(monto * 100) / 100,
+    monto_original: montoTotal,
+    cuotas_incluidas: [cuotaAbono.value.cuota_id || cuotaAbono.value.id]
+  })
+
+  dialogoAbono.value = false
+  router.push('/pagar')
+}
+
+// ⚡ SELECCIONAR CUOTA CON MODO DE PAGO
+function seleccionarCuota(c, modo = 'cuota') {
+  if (c.estado === 'pagada') return
+
+  let montoPago = c.monto_total_bs || c.monto_bs || 0
+  let cuotasIncluidas = [c.cuota_id || c.id]
+  let montoOriginal = montoPago
+
+  if (modo === 'adelantar') {
+    const cuotasFuturas = todasCuotas.value.filter(
+      x => x.financiamiento_id === c.financiamiento_id 
+        && x.estado === 'pendiente'
+        && (x.cuota_numero || x.numero) >= (c.cuota_numero || c.numero)
+    )
+    montoPago = cuotasFuturas.reduce((sum, x) => sum + (x.monto_total_bs || x.monto_bs || 0), 0)
+    cuotasIncluidas = cuotasFuturas.map(x => x.cuota_id || x.id)
+  }
+
+  if (modo === 'liquidar') {
+    const todasPendientes = todasCuotas.value.filter(
+      x => x.financiamiento_id === c.financiamiento_id 
+        && x.estado === 'pendiente'
+    )
+    montoOriginal = todasPendientes.reduce((sum, x) => sum + (x.monto_total_bs || x.monto_bs || 0), 0)
+    montoPago = montoOriginal * 0.95
+    cuotasIncluidas = todasPendientes.map(x => x.cuota_id || x.id)
+  }
+
+  setCuotaSeleccionada({
+    ...c,
+    modo_pago: modo,
+    monto_bs: Math.round(montoPago * 100) / 100,
+    monto_original: modo === 'liquidar' ? montoOriginal : null,
+    cuotas_incluidas: cuotasIncluidas
+  })
+
   router.push('/pagar')
 }
 </script>
@@ -384,5 +603,22 @@ function seleccionarCuota(c) {
   font-size: 11px;
   color: rgba(255,255,255,0.3);
   line-height: 1.5;
+}
+
+.input-field :deep(.v-field) {
+  background: rgba(255,255,255,0.04) !important;
+  border-radius: 12px !important;
+}
+
+.input-field :deep(.v-field__input) {
+  color: #ffffff !important;
+}
+
+.input-field :deep(.v-field__input::placeholder) {
+  color: rgba(255,255,255,0.2) !important;
+}
+
+.input-field :deep(.v-icon) {
+  color: rgba(255,255,255,0.3) !important;
 }
 </style>

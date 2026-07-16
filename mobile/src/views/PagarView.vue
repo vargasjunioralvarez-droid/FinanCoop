@@ -27,19 +27,74 @@
       <!-- Pago -->
       <v-card v-else class="pago-card glass-card" elevation="0">
         <v-card-text class="pa-4">
+          <!-- Badge de modo de pago -->
+          <v-chip
+            v-if="cuotaSeleccionada.modo_pago"
+            :color="modoPagoColor"
+            size="small"
+            class="mb-3"
+            variant="flat"
+          >
+            <v-icon start size="14">{{ modoPagoIcono }}</v-icon>
+            {{ modoPagoTexto }}
+          </v-chip>
+
           <div class="d-flex align-center mb-2">
             <v-icon color="#4caf50" size="32" class="mr-3">mdi-credit-card-check</v-icon>
             <div>
-              <div class="pago-title">Pagar Cuota #{{ cuotaSeleccionada.cuota_numero || cuotaSeleccionada.numero }}</div>
+              <div class="pago-title">
+                {{ tituloPago }}
+              </div>
               <div class="pago-subtitle">{{ cuotaSeleccionada.financiamiento_descripcion || 'Cuota pendiente' }}</div>
             </div>
           </div>
+
+          <!-- Cuotas incluidas -->
+          <v-alert
+            v-if="cuotaSeleccionada.cuotas_incluidas && cuotaSeleccionada.cuotas_incluidas.length > 1"
+            type="info"
+            variant="tonal"
+            density="compact"
+            class="mb-3"
+            style="border-radius: 10px;"
+          >
+            <div style="font-size: 12px;">
+              📋 Este pago incluye <strong>{{ cuotaSeleccionada.cuotas_incluidas.length }} cuotas</strong>
+            </div>
+          </v-alert>
+
+          <!-- Info de abono -->
+          <v-alert
+            v-if="cuotaSeleccionada.modo_pago === 'abono'"
+            type="warning"
+            variant="tonal"
+            density="compact"
+            class="mb-3"
+            style="border-radius: 10px;"
+          >
+            <div style="font-size: 12px;">
+              💰 <strong>Abono parcial</strong> — El saldo restante quedará pendiente
+            </div>
+          </v-alert>
 
           <v-divider class="my-4" style="border-color: rgba(255,255,255,0.06);" />
 
           <div class="text-center mb-4">
             <div class="monto-label">Monto a Pagar</div>
             <div class="monto-value">BS {{ formatearBS(cuotaSeleccionada.monto_bs || cuotaSeleccionada.monto_total_bs) }}</div>
+
+            <!-- Mostrar monto original si hay descuento o abono -->
+            <div v-if="cuotaSeleccionada.monto_original && cuotaSeleccionada.monto_original !== (cuotaSeleccionada.monto_bs || cuotaSeleccionada.monto_total_bs)" class="monto-original">
+              <span v-if="cuotaSeleccionada.modo_pago === 'liquidar'" style="text-decoration: line-through; opacity: 0.5;">
+                BS {{ formatearBS(cuotaSeleccionada.monto_original) }}
+              </span>
+              <v-chip v-if="cuotaSeleccionada.modo_pago === 'liquidar'" color="success" size="x-small" class="ml-2">-5% pronto pago</v-chip>
+              <div v-if="cuotaSeleccionada.modo_pago === 'abono'" style="color: #ffd54f; font-size: 13px; margin-top: 4px;">
+                Abono: BS {{ formatearBS(cuotaSeleccionada.monto_bs) }} / 
+                <span style="opacity: 0.6;">Total: BS {{ formatearBS(cuotaSeleccionada.monto_original) }}</span>
+              </div>
+            </div>
+
             <div class="monto-ref">Ref: ${{ formatearUSD(cuotaSeleccionada.monto_usd_ref || cuotaSeleccionada.monto_total_usd_ref) }}</div>
             <div class="monto-tasa">Tasa: {{ tasaActual }} Bs/$</div>
             <div v-if="(cuotaSeleccionada.monto_interes_bs || 0) > 0" class="monto-interes">+{{ formatearBS(cuotaSeleccionada.monto_interes_bs) }} Bs de mora</div>
@@ -88,27 +143,42 @@
           <v-text-field
             v-model="pagoForm.referencia"
             label="Número de Referencia *"
-            placeholder="Últimos 4 dígitos del comprobante"
             prepend-inner-icon="mdi-numeric"
             variant="outlined"
             class="input-field"
             hide-details
           />
 
-          <v-text-field
+          <!-- 🏦 SELECT DE BANCOS VENEZUELA - SIN DUPLICADOS -->
+          <v-select
             v-model="pagoForm.banco_origen"
-            label="Banco de Origen"
-            placeholder="Ej: Banco de Venezuela"
+            :items="bancosVenezuela"
+            item-title="nombre"
+            item-value="codigo"
+            label="Banco de Origen *"
             prepend-inner-icon="mdi-bank"
             variant="outlined"
             class="input-field"
-            hide-details
-          />
+            required
+            return-object
+          >
+            <template v-slot:selection="{ item }">
+              <span style="color: #fff;">{{ item.raw.nombre }}</span>
+            </template>
+            <template v-slot:item="{ props, item }">
+              <v-list-item v-bind="props">
+                <template v-slot:prepend>
+                  <v-icon size="18" color="primary">mdi-bank</v-icon>
+                </template>
+                <v-list-item-title style="color: #fff;">{{ item.raw.nombre }}</v-list-item-title>
+                <v-list-item-subtitle style="font-size: 11px;">Código: {{ item.raw.codigo }}</v-list-item-subtitle>
+              </v-list-item>
+            </template>
+          </v-select>
 
           <v-text-field
             v-model="pagoForm.telefono_pago"
             label="Teléfono desde donde pagaste"
-            placeholder="Ej: 04121234567"
             prepend-inner-icon="mdi-phone"
             variant="outlined"
             class="input-field"
@@ -136,14 +206,14 @@
             block
             size="x-large"
             :loading="cargandoPago || cargandoUpload"
-            :disabled="!pagoForm.referencia || !pagoForm.metodo || cargandoUpload"
+            :disabled="!pagoForm.referencia || !pagoForm.metodo || !pagoForm.banco_origen || cargandoUpload"
             @click="handlePago"
             elevation="0"
             rounded="pill"
             class="pagar-btn"
           >
             <v-icon start>mdi-send</v-icon>
-            {{ cargandoUpload ? 'Subiendo comprobante...' : 'Reportar Pago' }}
+            {{ textoBotonPago }}
           </v-btn>
 
           <v-btn variant="text" block class="cancel-btn" @click="cancelarPago">
@@ -179,9 +249,90 @@ const {
   subirComprobante
 } = useFinanCash()
 
+// 🏦 LISTA COMPLETA DE BANCOS DE VENEZUELA (solo una vez, sin duplicados)
+const bancosVenezuela = [
+  { codigo: '0102', nombre: 'Banco de Venezuela' },
+  { codigo: '0104', nombre: 'Banco Venezolano de Crédito' },
+  { codigo: '0105', nombre: 'Mercantil' },
+  { codigo: '0108', nombre: 'BBVA Provincial' },
+  { codigo: '0114', nombre: 'Bancaribe' },
+  { codigo: '0115', nombre: 'Exterior' },
+  { codigo: '0116', nombre: 'Occidental de Descuento' },
+  { codigo: '0128', nombre: 'Banco Caroní' },
+  { codigo: '0134', nombre: 'Banesco' },
+  { codigo: '0137', nombre: 'Sofitasa' },
+  { codigo: '0138', nombre: 'Banco Plaza' },
+  { codigo: '0146', nombre: 'Banco de la Gente Emprendedora' },
+  { codigo: '0151', nombre: 'BFC Banco Fondo Común' },
+  { codigo: '0156', nombre: '100% Banco' },
+  { codigo: '0157', nombre: 'DelSur' },
+  { codigo: '0163', nombre: 'Banco del Tesoro' },
+  { codigo: '0166', nombre: 'Banco Agrícola de Venezuela' },
+  { codigo: '0168', nombre: 'Bancrecer' },
+  { codigo: '0169', nombre: 'Mi Banco' },
+  { codigo: '0171', nombre: 'Banco Activo' },
+  { codigo: '0172', nombre: 'Bancamiga' },
+  { codigo: '0173', nombre: 'Banco Internacional de Desarrollo' },
+  { codigo: '0174', nombre: 'Banplus' },
+  { codigo: '0175', nombre: 'Bicentenario del Pueblo' },
+  { codigo: '0177', nombre: 'Banco de la Fuerza Armada' },
+  { codigo: '0191', nombre: 'Banco Nacional de Crédito' }
+]
+
 onMounted(() => {
   console.log('📋 PagarView montado')
   console.log('📋 cuotaSeleccionada:', cuotaSeleccionada.value)
+})
+
+// Título dinámico según modo de pago
+const tituloPago = computed(() => {
+  const modo = cuotaSeleccionada.value?.modo_pago
+  const num = cuotaSeleccionada.value?.cuota_numero || cuotaSeleccionada.value?.numero
+
+  switch (modo) {
+    case 'liquidar': return 'Liquidar Deuda Total'
+    case 'adelantar': return `Adelantar Cuotas (desde #${num})`
+    case 'abono': return `Abonar a Cuota #${num}`
+    default: return `Pagar Cuota #${num}`
+  }
+})
+
+// Texto del botón según modo
+const textoBotonPago = computed(() => {
+  if (cargandoUpload.value) return 'Subiendo comprobante...'
+  const modo = cuotaSeleccionada.value?.modo_pago
+  switch (modo) {
+    case 'abono': return 'Reportar Abono'
+    case 'liquidar': return 'Liquidar Deuda'
+    case 'adelantar': return 'Adelantar Pagos'
+    default: return 'Reportar Pago'
+  }
+})
+
+// Computed para modo de pago
+const modoPagoColor = computed(() => {
+  const modos = { cuota: 'primary', adelantar: 'warning', liquidar: 'success', abono: 'info' }
+  return modos[cuotaSeleccionada.value?.modo_pago] || 'primary'
+})
+
+const modoPagoIcono = computed(() => {
+  const modos = { 
+    cuota: 'mdi-credit-card-outline', 
+    adelantar: 'mdi-fast-forward', 
+    liquidar: 'mdi-rocket-launch',
+    abono: 'mdi-cash-plus'
+  }
+  return modos[cuotaSeleccionada.value?.modo_pago] || 'mdi-cash'
+})
+
+const modoPagoTexto = computed(() => {
+  const modos = { 
+    cuota: 'Pago de cuota', 
+    adelantar: 'Adelanto de cuotas', 
+    liquidar: 'Liquidación total',
+    abono: 'Abono parcial'
+  }
+  return modos[cuotaSeleccionada.value?.modo_pago] || 'Pago'
 })
 
 const datosBancariosMetodo = computed(() => {
@@ -221,59 +372,59 @@ function metodoIcono(metodo) {
 const handlePago = async () => {
   try {
     console.log('📝 Iniciando proceso de pago')
-    console.log('📋 Cuota seleccionada (completa):', JSON.stringify(cuotaSeleccionada.value, null, 2))
-    
-    // ✅ OBTENER EL ID DE LA CUOTA CORRECTAMENTE
+
     const cuotaId = cuotaSeleccionada.value?.cuota_id || cuotaSeleccionada.value?.id
-    
+    const modo = cuotaSeleccionada.value?.modo_pago || 'cuota'
+    const cuotasIncluidas = cuotaSeleccionada.value?.cuotas_incluidas || [cuotaId]
+
     if (!cuotaId) {
-      console.error('❌ No se encontró cuota_id en:', cuotaSeleccionada.value)
-      alert('Error: No se pudo identificar la cuota. Intenta de nuevo.')
+      console.error('❌ No se encontró cuota_id')
+      alert('Error: No se pudo identificar la cuota.')
       return
     }
-    
-    console.log(`✅ Cuota ID: ${cuotaId}`)
-    console.log('📋 Método:', pagoForm.value.metodo)
-    console.log('📋 Referencia:', pagoForm.value.referencia)
-    console.log('📸 Comprobante file:', pagoForm.value.comprobante)
-    
+
     let comprobanteUrl = null
-    
+
     if (pagoForm.value.comprobante && pagoForm.value.comprobante instanceof File) {
-      console.log('📸 Subiendo comprobante a Cloudflare...')
+      console.log('📸 Subiendo comprobante...')
       comprobanteUrl = await subirComprobante(pagoForm.value.comprobante)
       if (!comprobanteUrl) {
-        alert('No se pudo subir el comprobante. Intenta de nuevo.')
+        alert('No se pudo subir el comprobante.')
         return
       }
-      console.log('✅ Comprobante subido URL:', comprobanteUrl)
-    } else {
-      console.log('⚠️ No hay comprobante para subir')
     }
-    
-    // ✅ PAYLOAD CON CUOTA_ID INCLUIDO
+
+    // Extraer código del banco si es objeto
+    let bancoCodigo = pagoForm.value.banco_origen
+    if (typeof bancoCodigo === 'object' && bancoCodigo !== null) {
+      bancoCodigo = bancoCodigo.codigo || bancoCodigo
+    }
+
+    // ✅ PAYLOAD CON SOPORTE PARA MÚLTIPLES CUOTAS Y ABONO
     const payload = {
       cuota_id: Number(cuotaId),
+      cuotas_incluidas: cuotasIncluidas,
+      modo_pago: modo,
       monto_bs: Number(cuotaSeleccionada.value?.monto_bs || cuotaSeleccionada.value?.monto_total_bs || 0),
+      monto_original: cuotaSeleccionada.value?.monto_original || null,
       metodo: String(pagoForm.value.metodo),
       referencia: String(pagoForm.value.referencia).trim(),
-      banco_origen: String(pagoForm.value.banco_origen || '').trim(),
+      banco_origen: String(bancoCodigo || '').trim(),
       telefono_pago: String(pagoForm.value.telefono_pago || '').trim(),
       cedula_pago: String(pagoForm.value.cedula_pago || '').trim(),
       comprobante: String(comprobanteUrl || '')
     }
-    
-    console.log('📤 Enviando pago al backend:', JSON.stringify(payload, null, 2))
-    
+
+    console.log('📤 Enviando pago:', payload)
+
     const success = await reportarPago(payload)
     if (success) {
-      console.log('✅ Pago reportado exitosamente')
       router.push('/inicio')
     }
   } catch (e) {
     console.error('❌ Error en pago:', e)
     const errorMsg = e.response?.data?.detail || e.message || 'Error al procesar el pago'
-    alert('Error al procesar el pago: ' + (typeof errorMsg === 'object' ? JSON.stringify(errorMsg) : errorMsg))
+    alert('Error: ' + (typeof errorMsg === 'object' ? JSON.stringify(errorMsg) : errorMsg))
   }
 }
 
@@ -368,6 +519,12 @@ const cancelarPago = () => {
   color: #4facfe;
 }
 
+.monto-original {
+  font-size: 14px;
+  color: rgba(255,255,255,0.5);
+  margin-top: 4px;
+}
+
 .monto-ref {
   font-size: 12px;
   color: rgba(255,255,255,0.3);
@@ -459,8 +616,43 @@ const cancelarPago = () => {
   color: #ffffff !important;
 }
 
-.input-field :deep(.v-field__input::placeholder) {
-  color: rgba(255,255,255,0.2) !important;
+/* Label flotante más visible */
+.input-field :deep(.v-label) {
+  color: rgba(255,255,255,0.85) !important;
+  font-weight: 500 !important;
+}
+
+/* Label cuando el campo está enfocado o tiene valor */
+.input-field :deep(.v-field--active .v-label),
+.input-field :deep(.v-field--focused .v-label) {
+  color: #4facfe !important;
+  font-weight: 600 !important;
+}
+
+/* Borde del campo */
+.input-field :deep(.v-field__outline) {
+  --v-field-border-opacity: 0.25 !important;
+}
+
+.input-field :deep(.v-field--focused .v-field__outline) {
+  --v-field-border-opacity: 0.6 !important;
+}
+
+/* Texto seleccionado en v-select */
+.input-field :deep(.v-select__selection-text) {
+  color: #ffffff !important;
+}
+
+/* Iconos de los campos */
+.input-field :deep(.v-field__append-inner) .v-icon,
+.input-field :deep(.v-field__prepend-inner) .v-icon {
+  color: rgba(255,255,255,0.6) !important;
+}
+
+/* Texto del input */
+.input-field :deep(.v-field__input) {
+  color: #ffffff !important;
+  font-weight: 500 !important;
 }
 
 .input-field :deep(.v-icon) {
