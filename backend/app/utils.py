@@ -25,37 +25,26 @@ if TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN:
 # ============ FUNCIONES AUXILIARES ============
 
 def normalizar_telefono(telefono: str) -> str:
-    """Normaliza un número de teléfono venezolano al formato internacional."""
     if not telefono:
         return ""
-    
     limpio = ''.join(c for c in telefono if c.isdigit() or c == '+')
-    
     if limpio.startswith('+58') and len(limpio) == 13:
         return limpio
-    
     if limpio.startswith('+580') and len(limpio) == 14:
         return '+58' + limpio[4:]
-    
     if limpio.startswith('0') and len(limpio) == 11:
         return '+58' + limpio[1:]
-    
     if limpio.startswith('4') and len(limpio) == 10:
         return '+58' + limpio
-    
     if limpio.startswith('+'):
         return limpio
-    
     if len(limpio) == 10 and limpio.startswith('4'):
         return '+58' + limpio
-    
     if len(limpio) == 11 and limpio.startswith('4'):
         return '+58' + limpio
-    
     return limpio
 
 def es_numero_valido(telefono: str) -> bool:
-    """Verifica si el número tiene formato válido para Venezuela."""
     if not telefono:
         return False
     if telefono.startswith('+58') and len(telefono) == 13:
@@ -66,20 +55,13 @@ def es_numero_valido(telefono: str) -> bool:
 # ============ FUNCIONES DE ENVÍO DE MENSAJES ============
 
 def enviar_whatsapp(telefono: str, mensaje: str):
-    """
-    Envía mensaje por WhatsApp usando Twilio.
-    ⚠️ REQUIERE que el usuario haya escrito "join" primero (sandbox)
-    """
     if not twilio_client:
         print("❌ Twilio no disponible")
         return False, "Twilio no disponible"
-    
     telefono = normalizar_telefono(telefono)
-    
     if not es_numero_valido(telefono):
         print(f"❌ Número inválido: {telefono}")
         return False, f"Número inválido: {telefono}"
-    
     try:
         message = twilio_client.messages.create(
             body=mensaje,
@@ -103,33 +85,13 @@ def enviar_whatsapp(telefono: str, mensaje: str):
         return False, str(e)
 
 def enviar_pin_sms(telefono: str, nombre: str, cedula: str, pin: str):
-    """
-    Envía el PIN al cliente por SMS.
-    ✅ NO requiere que el usuario escriba "join"
-    ✅ Es la opción más confiable para mensajes transaccionales
-    """
     telefono = normalizar_telefono(telefono)
-    
     if not es_numero_valido(telefono):
-        return {
-            "success": False,
-            "error": f"Número inválido: {telefono}",
-            "sms_enviado": False
-        }
-    
+        return {"success": False, "error": f"Número inválido: {telefono}", "sms_enviado": False}
     if not twilio_client:
-        return {
-            "success": False,
-            "error": "Twilio no disponible",
-            "sms_enviado": False
-        }
-    
+        return {"success": False, "error": "Twilio no disponible", "sms_enviado": False}
     if not TWILIO_SMS_FROM:
-        return {
-            "success": False,
-            "error": "TWILIO_SMS_FROM no configurado en variables de entorno",
-            "sms_enviado": False
-        }
+        return {"success": False, "error": "TWILIO_SMS_FROM no configurado", "sms_enviado": False}
     
     mensaje_sms = f"""FinanCoop
 
@@ -145,21 +107,9 @@ def enviar_pin_sms(telefono: str, nombre: str, cedula: str, pin: str):
 ¡Gracias por confiar en FinanCoop!"""
 
     try:
-        message = twilio_client.messages.create(
-            body=mensaje_sms,
-            from_=TWILIO_SMS_FROM,
-            to=telefono
-        )
-        
+        message = twilio_client.messages.create(body=mensaje_sms, from_=TWILIO_SMS_FROM, to=telefono)
         print(f"✅ SMS enviado a {telefono}. SID: {message.sid}")
-        
-        return {
-            "success": True,
-            "sid": message.sid,
-            "sms_enviado": True,
-            "mensaje": f"SMS enviado a {telefono}"
-        }
-        
+        return {"success": True, "sid": message.sid, "sms_enviado": True, "mensaje": f"SMS enviado a {telefono}"}
     except TwilioRestException as e:
         error_msg = str(e)
         if "21211" in error_msg:
@@ -170,29 +120,14 @@ def enviar_pin_sms(telefono: str, nombre: str, cedula: str, pin: str):
             error_msg = "Límite de mensajes diarios excedido"
         elif "20003" in error_msg:
             error_msg = "Credenciales de Twilio inválidas"
-        
         print(f"❌ Error SMS: {error_msg}")
-        return {
-            "success": False,
-            "error": error_msg,
-            "sms_enviado": False
-        }
-        
+        return {"success": False, "error": error_msg, "sms_enviado": False}
     except Exception as e:
         print(f"❌ Error SMS: {e}")
-        return {
-            "success": False,
-            "error": str(e),
-            "sms_enviado": False
-        }
+        return {"success": False, "error": str(e), "sms_enviado": False}
 
 def enviar_pin_cliente(telefono: str, nombre: str, cedula: str, pin: str):
-    """
-    Envía el PIN al cliente por WhatsApp (sandbox).
-    ⚠️ REQUIERE que el usuario haya escrito "join" primero
-    """
     telefono = normalizar_telefono(telefono)
-    
     mensaje_whatsapp = f"""🎉 *¡Bienvenido a FinanCoop, {nombre}!*
 
 🔑 *Tu PIN de acceso es:* {pin}
@@ -215,17 +150,9 @@ def enviar_pin_cliente(telefono: str, nombre: str, cedula: str, pin: str):
 
 ¡Gracias por confiar en FinanCoop! 🚀"""
     
-    resultado = {
-        "whatsapp_enviado": False,
-        "whatsapp_sid": None,
-        "pin": pin,
-        "mensaje": "",
-        "telefono_normalizado": telefono
-    }
-    
+    resultado = {"whatsapp_enviado": False, "whatsapp_sid": None, "pin": pin, "mensaje": "", "telefono_normalizado": telefono}
     print(f"📱 Intentando WhatsApp a {telefono}...")
     exito_wa, sid_wa = enviar_whatsapp(telefono, mensaje_whatsapp)
-    
     if exito_wa:
         resultado["whatsapp_enviado"] = True
         resultado["whatsapp_sid"] = sid_wa
@@ -234,149 +161,77 @@ def enviar_pin_cliente(telefono: str, nombre: str, cedula: str, pin: str):
     else:
         resultado["mensaje"] = f"⚠️ No se pudo enviar WhatsApp: {sid_wa}. PIN: {pin}"
         print(f"⚠️ WhatsApp falló: {sid_wa}")
-    
     return resultado
 
 def enviar_pin_cliente_completo(telefono: str, nombre: str, cedula: str, pin: str):
-    """
-    🚀 FUNCIÓN PRINCIPAL - Envía el PIN al cliente:
-    1. Primero intenta por SMS (NO requiere "join")
-    2. Si SMS falla, intenta por WhatsApp (requiere "join")
-    3. Retorna el resultado detallado
-    
-    Esta es la función que debe usarse desde el endpoint de aprobación.
-    """
     print(f"📱 Enviando PIN a {nombre} ({telefono})...")
-    
-    # Intentar primero por SMS (sin necesidad de "join")
     print("📤 Intentando SMS...")
     resultado_sms = enviar_pin_sms(telefono, nombre, cedula, pin)
-    
     if resultado_sms["success"]:
         print(f"✅ PIN enviado por SMS a {telefono}")
-        return {
-            "success": True,
-            "mensaje": "PIN enviado por SMS",
-            "canal": "sms",
-            "sid": resultado_sms.get("sid"),
-            "pin": pin
-        }
-    
-    # Si SMS falla, intentar por WhatsApp
+        return {"success": True, "mensaje": "PIN enviado por SMS", "canal": "sms", "sid": resultado_sms.get("sid"), "pin": pin}
     print(f"⚠️ SMS falló: {resultado_sms.get('error')}")
     print("📤 Intentando WhatsApp como fallback...")
-    
     resultado_whatsapp = enviar_pin_cliente(telefono, nombre, cedula, pin)
-    
     if resultado_whatsapp["whatsapp_enviado"]:
         print(f"✅ PIN enviado por WhatsApp a {telefono}")
-        return {
-            "success": True,
-            "mensaje": "PIN enviado por WhatsApp (fallback)",
-            "canal": "whatsapp",
-            "sid": resultado_whatsapp.get("whatsapp_sid"),
-            "pin": pin,
-            "sms_error": resultado_sms.get("error")
-        }
-    
-    # Si ambos fallan, devolver error detallado
+        return {"success": True, "mensaje": "PIN enviado por WhatsApp (fallback)", "canal": "whatsapp", "sid": resultado_whatsapp.get("whatsapp_sid"), "pin": pin, "sms_error": resultado_sms.get("error")}
     print(f"❌ No se pudo enviar PIN por ningún canal")
-    return {
-        "success": False,
-        "mensaje": "No se pudo enviar el PIN por ningún canal",
-        "error_sms": resultado_sms.get("error"),
-        "error_whatsapp": resultado_whatsapp.get("mensaje"),
-        "pin": pin,
-        "sms_info": resultado_sms
-    }
+    return {"success": False, "mensaje": "No se pudo enviar el PIN por ningún canal", "error_sms": resultado_sms.get("error"), "error_whatsapp": resultado_whatsapp.get("mensaje"), "pin": pin, "sms_info": resultado_sms}
 
 def enviar_notificacion_generica(telefono: str, mensaje: str):
-    """
-    Envía una notificación genérica por SMS o WhatsApp.
-    Primero intenta SMS, si falla usa WhatsApp.
-    """
     telefono = normalizar_telefono(telefono)
-    
-    # Intentar SMS
     if twilio_client and TWILIO_SMS_FROM:
         try:
-            message = twilio_client.messages.create(
-                body=mensaje[:160],  # SMS limitado a 160 caracteres
-                from_=TWILIO_SMS_FROM,
-                to=telefono
-            )
+            message = twilio_client.messages.create(body=mensaje[:160], from_=TWILIO_SMS_FROM, to=telefono)
             print(f"✅ SMS genérico enviado: {message.sid}")
             return {"success": True, "canal": "sms", "sid": message.sid}
         except Exception as e:
             print(f"⚠️ SMS genérico falló: {e}")
-    
-    # Intentar WhatsApp
     exito, sid = enviar_whatsapp(telefono, mensaje)
     if exito:
         return {"success": True, "canal": "whatsapp", "sid": sid}
-    
     return {"success": False, "error": "No se pudo enviar por ningún canal"}
 
 # ============ FUNCIONES DE NEGOCIO ============
 
 def calcular_nivel(score: int):
-    """
-    Calcula el nivel de un cliente según su score.
-    ⚠️ IMPORTANTE: Los niveles deben estar en orden ascendente.
-    "nuevo" SIEMPRE debe tener min_score = 0.
-    """
-    # 🔥 ORDENAR niveles por min_score para asegurar el orden correcto
-    niveles_ordenados = sorted(
-        NIVELES_CONFIG.items(),
-        key=lambda x: x[1]["min_score"]
-    )
-    
+    niveles_ordenados = sorted(NIVELES_CONFIG.items(), key=lambda x: x[1]["min_score"])
     for nivel, config in niveles_ordenados:
         if config["min_score"] <= score <= config["max_score"]:
             return nivel, config
-    
-    # Si no encuentra (por seguridad), devolver "nuevo"
     return "nuevo", NIVELES_CONFIG.get("nuevo", NIVELES_CONFIG_DEFAULT["nuevo"])
 
 def actualizar_score_cliente(cliente: Cliente, db):
     """
-    🎯 RECALCULA EL SCORE del cliente basado en múltiples factores:
+    🎯 SISTEMA DE PUNTOS POR NIVELES (tipo Cashea):
     
-    1. Puntos por compras realizadas (+20 pts por cada $1 financiado)
-    2. Bonus por financiamientos completados (+500 pts cada uno)
-    3. Puntos por pagos a tiempo (+150 pts por cuota pagada puntual)
-    4. Penalización por pagos atrasados (-100 pts por cuota atrasada)
-    5. Bonus por antigüedad (+25 pts por cada mes como cliente)
-    6. Bonus por diversidad de compras (+100 pts por tienda diferente)
-    7. Bonus por buen comportamiento de pago (+200 si no tiene deuda vencida)
+    Cada nivel requiere 3 compras completadas = 100 pts base
+    + puntos extra por pagos puntuales/adelantados para subir más rápido
+    
+    Nuevo → Bronce:  100 pts (3 compras pagadas)
+    Bronce → Plata:  200 pts (6 compras pagadas)
+    Plata → Oro:     300 pts (9 compras pagadas)
+    Oro → Platino:   400 pts (12 compras pagadas)
+    
+    Pago puntual:     +10 pts
+    Pago adelantado:  +15 pts
+    Pago con atraso:  -5 pts
     """
     puntos = 0
     
-    # === 1. PUNTOS POR COMPRAS (financiamientos) ===
-    # Todos los financiamientos (activos, completados, etc.) dan puntos
-    todos_financiamientos = db.query(Financiamiento).filter(
-        Financiamiento.cliente_id == cliente.id
-    ).all()
-    
-    tiendas_visitadas = set()
-    for fin in todos_financiamientos:
-        # +20 puntos por cada $1 del monto total del financiamiento
-        monto_usd = fin.monto_total_usd or 0
-        puntos += monto_usd * 20
-        
-        # Registrar tienda para bonus de diversidad
-        if hasattr(fin, 'tienda_id') and fin.tienda_id:
-            tiendas_visitadas.add(fin.tienda_id)
-    
-    # === 2. BONUS POR FINANCIAMIENTOS COMPLETADOS ===
-    completados = db.query(Financiamiento).filter(
+    # === 1. PUNTOS BASE POR COMPRAS COMPLETADAS ===
+    # Solo financiamientos COMPLETADOS (todas las cuotas pagadas) cuentan
+    financiamientos_completados = db.query(Financiamiento).filter(
         Financiamiento.cliente_id == cliente.id,
         Financiamiento.estado == "completado"
-    ).count()
-    puntos += completados * 500
+    ).all()
     
-    # === 3. PUNTOS/PENALIZACIÓN POR HISTORIAL DE PAGOS ===
-    # Obtener todas las cuotas pagadas del cliente
+    # Cada compra completada = ~33.33 pts (3 compras = 100 pts)
+    puntos += len(financiamientos_completados) * 33
+    
+    # === 2. PUNTOS EXTRA POR PAGOS PUNTUALES/ADELANTADOS ===
+    # Esto permite subir de nivel más rápido
     cuotas_pagadas = db.query(Cuota).join(Financiamiento).filter(
         Financiamiento.cliente_id == cliente.id,
         Cuota.estado == "pagada",
@@ -385,22 +240,19 @@ def actualizar_score_cliente(cliente: Cliente, db):
     
     for cuota in cuotas_pagadas:
         if cuota.fecha_pago and cuota.fecha_vencimiento:
-            # Pagó a tiempo (fecha de pago <= fecha de vencimiento)
-            if cuota.fecha_pago.date() <= cuota.fecha_vencimiento.date():
-                puntos += 150
+            dias_diferencia = (cuota.fecha_vencimiento.date() - cuota.fecha_pago.date()).days
+            
+            if dias_diferencia >= 3:
+                # Pagó con más de 3 días de anticipación
+                puntos += 15
+            elif dias_diferencia >= 0:
+                # Pagó puntual (mismo día o hasta 2 días antes)
+                puntos += 10
             else:
                 # Pagó con atraso
-                puntos -= 100
+                puntos -= 5
     
-    # === 4. BONUS POR ANTIGÜEDAD ===
-    if hasattr(cliente, 'fecha_registro') and cliente.fecha_registro:
-        meses = (datetime.now(timezone.utc) - cliente.fecha_registro).days / 30
-        puntos += int(meses) * 25
-    
-    # === 5. BONUS POR DIVERSIDAD DE COMPRAS ===
-    puntos += len(tiendas_visitadas) * 100
-    
-    # === 6. BONUS POR NO TENER DEUDA VENCIDA ===
+    # === 3. BONUS POR NO TENER DEUDA VENCIDA ===
     hoy = datetime.now(timezone.utc)
     cuotas_vencidas = db.query(Cuota).join(Financiamiento).filter(
         Financiamiento.cliente_id == cliente.id,
@@ -408,23 +260,22 @@ def actualizar_score_cliente(cliente: Cliente, db):
         Cuota.fecha_vencimiento < hoy
     ).count()
     
-    if cuotas_vencidas == 0:
-        # Bonus por buen comportamiento de pago
-        puntos += 200
+    if cuotas_vencidas == 0 and len(financiamientos_completados) > 0:
+        puntos += 5  # Pequeño bonus por buen comportamiento
     
     # Aplicar límites
     puntos = max(0, int(puntos))
     
     # Actualizar cliente
     cliente.score = puntos
-    cliente.total_compras = len(todos_financiamientos)
+    cliente.total_compras = len(financiamientos_completados)
     
     nuevo_nivel, config = calcular_nivel(cliente.score)
     cliente.nivel = nuevo_nivel
     
     db.commit()
     
-    print(f"🎯 Score recalculado para {cliente.nombre}: {cliente.score} pts | Nivel: {cliente.nivel}")
+    print(f"🎯 Score: {cliente.nombre} | {cliente.score} pts | Nivel: {cliente.nivel} | Compras: {cliente.total_compras}")
     return puntos
 
 def generar_pin():
@@ -442,55 +293,35 @@ def obtener_tasa_actual(db):
     return tasa.tasa
 
 def recalcular_cuotas_pendientes(db, nueva_tasa: float):
-    financiamientos = db.query(Financiamiento).filter(
-        Financiamiento.estado == "activo"
-    ).all()
-    
+    financiamientos = db.query(Financiamiento).filter(Financiamiento.estado == "activo").all()
     recalculados = 0
     for fin in financiamientos:
         fin.monto_total_bs = fin.monto_total_usd * nueva_tasa
         fin.monto_entrada_bs = fin.monto_entrada_usd * nueva_tasa
         fin.monto_financia_bs = fin.monto_financia_usd * nueva_tasa
         fin.monto_cuota_bs = fin.monto_cuota_usd * nueva_tasa
-        
-        cuotas = db.query(Cuota).filter(
-            Cuota.financiamiento_id == fin.id,
-            Cuota.estado.in_(["pendiente", "conciliando"])
-        ).all()
-        
+        cuotas = db.query(Cuota).filter(Cuota.financiamiento_id == fin.id, Cuota.estado.in_(["pendiente", "conciliando"])).all()
         for c in cuotas:
             c.monto_base_bs = c.monto_base_usd * nueva_tasa
             c.monto_interes_mora_bs = c.monto_interes_mora_usd * nueva_tasa
             c.monto_total_bs = c.monto_total_usd * nueva_tasa
-        
         recalculados += len(cuotas)
-    
     db.commit()
     return recalculados
 
 def calcular_usado_disponible(cliente_id: int, db):
     tasa = obtener_tasa_actual(db)
-    
     cliente = db.query(Cliente).filter(Cliente.id == cliente_id).first()
     if not cliente:
         return {}
-    
     nivel, config = calcular_nivel(cliente.score)
-    
     limite_usd = config["monto_max_usd"]
     limite_bs = limite_usd * tasa
-    
-    activos = db.query(Financiamiento).filter(
-        Financiamiento.cliente_id == cliente_id,
-        Financiamiento.estado == "activo"
-    ).all()
-    
+    activos = db.query(Financiamiento).filter(Financiamiento.cliente_id == cliente_id, Financiamiento.estado == "activo").all()
     usado_usd = sum(f.monto_total_usd for f in activos)
     usado_bs = sum(f.monto_total_bs for f in activos)
-    
     disponible_usd = max(0, limite_usd - usado_usd)
     disponible_bs = max(0, limite_bs - usado_bs)
-    
     return {
         "nivel": nivel,
         "limite_usd": round(limite_usd, 2),

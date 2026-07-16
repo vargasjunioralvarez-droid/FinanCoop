@@ -42,28 +42,16 @@ def crear_financiamiento(f: FinanciamientoCreate, db: Session = Depends(get_db))
     
     tasa = obtener_tasa_actual(db)
     nivel, config = calcular_nivel(cliente.score)
-    
     monto_total_usd = f.monto_total_bs / tasa
     
     if monto_total_usd > disponible["disponible_usd"]:
-        return {
-            "error": "Monto excede disponible",
-            "disponible_usd": disponible["disponible_usd"],
-            "disponible_bs": disponible["disponible_bs"]
-        }
+        return {"error": "Monto excede disponible", "disponible_usd": disponible["disponible_usd"], "disponible_bs": disponible["disponible_bs"]}
     
     if monto_total_usd > config["monto_max_usd"]:
-        return {
-            "error": "Monto excede límite",
-            "monto_maximo_usd": config["monto_max_usd"],
-            "monto_maximo_bs": round(config["monto_max_usd"] * tasa, 2)
-        }
+        return {"error": "Monto excede límite", "monto_maximo_usd": config["monto_max_usd"], "monto_maximo_bs": round(config["monto_max_usd"] * tasa, 2)}
     
     if f.cuotas_solicitadas > config["cuotas_max"]:
-        return {
-            "error": "Cuotas exceden límite",
-            "cuotas_maximas": config["cuotas_max"]
-        }
+        return {"error": "Cuotas exceden límite", "cuotas_maximas": config["cuotas_max"]}
     
     requiere_aprobacion = f.cuotas_solicitadas > config["cuotas_base"] and config["aprobacion_extra"]
     cuotas_aprobadas = f.cuotas_solicitadas
@@ -81,24 +69,15 @@ def crear_financiamiento(f: FinanciamientoCreate, db: Session = Depends(get_db))
     fecha_primera = datetime.now(timezone.utc) + timedelta(days=15)
     
     fin = Financiamiento(
-        cliente_id=f.cliente_id,
-        codigo=codigo,
-        descripcion=f.descripcion,
-        monto_total_bs=f.monto_total_bs,
-        monto_entrada_bs=entrada_bs,
-        monto_financia_bs=financia_bs,
-        monto_cuota_bs=monto_cuota_bs,
-        monto_total_usd=monto_total_usd_ref,
-        monto_entrada_usd=entrada_usd_ref,
-        monto_financia_usd=financia_usd_ref,
-        monto_cuota_usd=monto_cuota_usd_ref,
-        tasa_aplicada=tasa,
-        nivel_aplicado=nivel,
-        cuotas_solicitadas=f.cuotas_solicitadas,
-        cuotas_aprobadas=cuotas_aprobadas,
+        cliente_id=f.cliente_id, codigo=codigo, descripcion=f.descripcion,
+        monto_total_bs=f.monto_total_bs, monto_entrada_bs=entrada_bs,
+        monto_financia_bs=financia_bs, monto_cuota_bs=monto_cuota_bs,
+        monto_total_usd=monto_total_usd_ref, monto_entrada_usd=entrada_usd_ref,
+        monto_financia_usd=financia_usd_ref, monto_cuota_usd=monto_cuota_usd_ref,
+        tasa_aplicada=tasa, nivel_aplicado=nivel,
+        cuotas_solicitadas=f.cuotas_solicitadas, cuotas_aprobadas=cuotas_aprobadas,
         requiere_aprobacion=requiere_aprobacion,
-        entrada_pct=config["entrada_pct"],
-        financia_pct=config["financia_pct"],
+        entrada_pct=config["entrada_pct"], financia_pct=config["financia_pct"],
         fecha_primera_cuota=fecha_primera
     )
     db.add(fin)
@@ -107,12 +86,9 @@ def crear_financiamiento(f: FinanciamientoCreate, db: Session = Depends(get_db))
     
     for i in range(1, cuotas_aprobadas + 1):
         cuota = Cuota(
-            financiamiento_id=fin.id,
-            numero=i,
-            monto_base_bs=monto_cuota_bs,
-            monto_total_bs=monto_cuota_bs,
-            monto_base_usd=monto_cuota_usd_ref,
-            monto_total_usd=monto_cuota_usd_ref,
+            financiamiento_id=fin.id, numero=i,
+            monto_base_bs=monto_cuota_bs, monto_total_bs=monto_cuota_bs,
+            monto_base_usd=monto_cuota_usd_ref, monto_total_usd=monto_cuota_usd_ref,
             fecha_vencimiento=fecha_primera + timedelta(days=15 * (i - 1))
         )
         db.add(cuota)
@@ -122,13 +98,11 @@ def crear_financiamiento(f: FinanciamientoCreate, db: Session = Depends(get_db))
         cliente.total_monto_comprado_usd += monto_total_usd
         db.commit()
     
-    # 🎯 ACTUALIZAR SCORE DEL CLIENTE AL CREAR UNA COMPRA
     actualizar_score_cliente(cliente, db)
     
     return {
         "financiamiento": {
-            "id": fin.id,
-            "codigo": fin.codigo,
+            "id": fin.id, "codigo": fin.codigo,
             "monto_total_bs": round(fin.monto_total_bs, 2),
             "monto_total_usd": round(fin.monto_total_usd, 2),
             "monto_entrada_bs": round(fin.monto_entrada_bs, 2),
@@ -150,18 +124,12 @@ def aprobar_financiamiento(id: int, aprobacion: AprobacionExtra, db: Session = D
     fin = db.query(Financiamiento).filter(Financiamiento.id == id).first()
     if not fin:
         return {"error": "Financiamiento no encontrado"}
-    
     if not fin.requiere_aprobacion:
         return {"error": "Este financiamiento no requiere aprobación"}
-    
     fin.cuotas_aprobadas = aprobacion.cuotas_aprobadas
     fin.aprobado_por = aprobacion.aprobado_por
     db.commit()
-    
-    return {
-        "mensaje": f"Financiamiento aprobado con {aprobacion.cuotas_aprobadas} cuotas",
-        "aprobado_por": aprobacion.aprobado_por
-    }
+    return {"mensaje": f"Financiamiento aprobado con {aprobacion.cuotas_aprobadas} cuotas", "aprobado_por": aprobacion.aprobado_por}
 
 @router.get("")
 def listar_financiamientos(db: Session = Depends(get_db)):
@@ -172,29 +140,17 @@ def obtener_financiamiento(id: int, db: Session = Depends(get_db)):
     fin = db.query(Financiamiento).filter(Financiamiento.id == id).first()
     if not fin:
         return {"error": "No encontrado"}
-    
     cliente = db.query(Cliente).filter(Cliente.id == fin.cliente_id).first()
-    
-    return {
-        "financiamiento": fin,
-        "cliente": {
-            "nombre": cliente.nombre,
-            "telefono": cliente.telefono
-        }
-    }
+    return {"financiamiento": fin, "cliente": {"nombre": cliente.nombre, "telefono": cliente.telefono}}
 
 @router.get("/{id}/cuotas")
 def ver_cuotas(id: int, db: Session = Depends(get_db)):
     cuotas = db.query(Cuota).filter(Cuota.financiamiento_id == id).all()
-    
     hoy = datetime.now(timezone.utc)
-    
     resultado = []
-    
     for c in cuotas:
         data = {
-            "id": c.id,
-            "numero": c.numero,
+            "id": c.id, "numero": c.numero,
             "monto_base_bs": round(c.monto_base_bs, 2),
             "monto_interes_mora_bs": round(c.monto_interes_mora_bs, 2),
             "monto_total_bs": round(c.monto_total_bs, 2),
@@ -202,39 +158,20 @@ def ver_cuotas(id: int, db: Session = Depends(get_db)):
             "monto_interes_mora_usd": round(c.monto_interes_mora_usd, 2),
             "monto_total_usd": round(c.monto_total_usd, 2),
             "fecha_vencimiento": c.fecha_vencimiento.isoformat() if c.fecha_vencimiento else None,
-            "estado": c.estado,
-            "dias_atraso": 0
+            "estado": c.estado, "dias_atraso": 0
         }
-        
         if c.estado == "pendiente" and hoy > c.fecha_vencimiento:
-            dias_atraso = (hoy - c.fecha_vencimiento).days
-            data["dias_atraso"] = dias_atraso
-        
+            data["dias_atraso"] = (hoy - c.fecha_vencimiento).days
         resultado.append(data)
-    
     return resultado
 
-# ============================================================
-# ✅ ELIMINAR FINANCIAMIENTO
-# ============================================================
 @router.delete("/{id}")
-def eliminar_financiamiento(
-    id: int,
-    db: Session = Depends(get_db),
-    current_admin = Depends(get_current_admin)
-):
+def eliminar_financiamiento(id: int, db: Session = Depends(get_db), current_admin = Depends(get_current_admin)):
     financiamiento = db.query(Financiamiento).filter(Financiamiento.id == id).first()
     if not financiamiento:
         raise HTTPException(status_code=404, detail="Financiamiento no encontrado")
-    
-    # Eliminar en orden: pagos → cuotas → financiamiento
     db.query(Pago).filter(Pago.financiamiento_id == id).delete(synchronize_session=False)
     db.query(Cuota).filter(Cuota.financiamiento_id == id).delete(synchronize_session=False)
-    
     db.delete(financiamiento)
     db.commit()
-    
-    return {
-        "success": True,
-        "mensaje": f"Financiamiento #{id} eliminado correctamente"
-    }
+    return {"success": True, "mensaje": f"Financiamiento #{id} eliminado correctamente"}

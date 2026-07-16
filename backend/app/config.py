@@ -36,62 +36,64 @@ class Nivel(str, enum.Enum):
 # "nuevo" SIEMPRE debe ser el primer nivel (min_score = 0)
 # Los niveles deben estar en orden ascendente de score.
 
+# backend/app/config.py
+
 NIVELES_CONFIG_DEFAULT = {
     "nuevo": {
         "min_score": 0,
-        "max_score": 9,
-        "monto_max_usd": 160,
-        "entrada_pct": 60,
-        "financia_pct": 40,
+        "max_score": 99,
+        "monto_max_usd": 100,
+        "entrada_pct": 0.30,
+        "financia_pct": 0.70,
         "cuotas_base": 3,
-        "cuotas_max": 3,
-        "mora_diaria": 2.0,
+        "cuotas_max": 6,
+        "mora_diaria": 0.02,
         "aprobacion_extra": False
     },
     "bronce": {
-        "min_score": 10,
-        "max_score": 24,
+        "min_score": 100,
+        "max_score": 199,
         "monto_max_usd": 200,
-        "entrada_pct": 50,
-        "financia_pct": 50,
-        "cuotas_base": 3,
-        "cuotas_max": 5,
-        "mora_diaria": 1.5,
-        "aprobacion_extra": True
+        "entrada_pct": 0.25,
+        "financia_pct": 0.75,
+        "cuotas_base": 4,
+        "cuotas_max": 8,
+        "mora_diaria": 0.015,
+        "aprobacion_extra": False
     },
     "plata": {
-        "min_score": 25,
-        "max_score": 49,
-        "monto_max_usd": 250,
-        "entrada_pct": 40,
-        "financia_pct": 60,
-        "cuotas_base": 6,
-        "cuotas_max": 8,
-        "mora_diaria": 1.0,
-        "aprobacion_extra": True
+        "min_score": 200,
+        "max_score": 299,
+        "monto_max_usd": 400,
+        "entrada_pct": 0.20,
+        "financia_pct": 0.80,
+        "cuotas_base": 4,
+        "cuotas_max": 10,
+        "mora_diaria": 0.01,
+        "aprobacion_extra": False
     },
     "oro": {
-        "min_score": 50,
-        "max_score": 99,
-        "monto_max_usd": 350,
-        "entrada_pct": 30,
-        "financia_pct": 70,
-        "cuotas_base": 8,
+        "min_score": 300,
+        "max_score": 399,
+        "monto_max_usd": 800,
+        "entrada_pct": 0.15,
+        "financia_pct": 0.85,
+        "cuotas_base": 3,
         "cuotas_max": 12,
-        "mora_diaria": 0.5,
+        "mora_diaria": 0.01,
         "aprobacion_extra": True
     },
     "platino": {
-        "min_score": 100,
-        "max_score": 99999,
-        "monto_max_usd": 500,
-        "entrada_pct": 20,
-        "financia_pct": 80,
-        "cuotas_base": 12,
+        "min_score": 400,
+        "max_score": 9999,
+        "monto_max_usd": 1500,
+        "entrada_pct": 0.10,
+        "financia_pct": 0.90,
+        "cuotas_base": 3,
         "cuotas_max": 15,
-        "mora_diaria": 0.5,
+        "mora_diaria": 0.005,
         "aprobacion_extra": True
-    },
+    }
 }
 
 # Variable global que se modifica en runtime
