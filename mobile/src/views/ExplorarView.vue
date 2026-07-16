@@ -21,7 +21,38 @@
         </v-timeline-item>
       </v-timeline>
 
-      <!-- Beneficios -->
+      <!-- Sistema de Niveles -->
+      <h3 class="section-title">🎯 Sistema de Niveles</h3>
+      <v-card class="info-card glass-card mb-3" elevation="0">
+        <v-card-text class="pa-3">
+          <div class="d-flex align-center mb-2">
+            <v-icon color="#ffd54f" size="20" class="mr-2">mdi-trophy</v-icon>
+            <span class="text-white font-weight-bold">¿Cómo subo de nivel?</span>
+          </div>
+          <v-list density="compact" class="bg-transparent pa-0">
+            <v-list-item class="px-0">
+              <v-icon size="16" color="#4caf50" class="mr-2">mdi-check-circle</v-icon>
+              <span class="text-body-2 text-white" style="opacity: 0.85;">
+                Completa <strong class="text-white">3 compras</strong> para subir al siguiente nivel
+              </span>
+            </v-list-item>
+            <v-list-item class="px-0">
+              <v-icon size="16" color="#4facfe" class="mr-2">mdi-lightning-bolt</v-icon>
+              <span class="text-body-2 text-white" style="opacity: 0.85;">
+                <strong class="text-white">Paga puntual o adelantado</strong> para subir más rápido (+10 pts)
+              </span>
+            </v-list-item>
+            <v-list-item class="px-0">
+              <v-icon size="16" color="#f472b6" class="mr-2">mdi-arrow-up-bold</v-icon>
+              <span class="text-body-2 text-white" style="opacity: 0.85;">
+                Subes de nivel <strong class="text-white">uno a uno</strong>: Nuevo → Bronce → Plata → Oro → Platino
+              </span>
+            </v-list-item>
+          </v-list>
+        </v-card-text>
+      </v-card>
+
+      <!-- Beneficios por nivel -->
       <h3 class="section-title">Beneficios por nivel</h3>
       <v-expansion-panels variant="accordion" class="expansion">
         <v-expansion-panel v-for="(config, nivel) in nivelesConfig" :key="nivel">
@@ -34,10 +65,18 @@
           </v-expansion-panel-title>
           <v-expansion-panel-text>
             <v-list density="compact" class="bg-transparent">
-              <v-list-item><v-list-item-title>{{ config.entrada_pct }}% de entrada inicial</v-list-item-title></v-list-item>
-              <v-list-item><v-list-item-title>Hasta {{ config.cuotas_max }} cuotas quincenales</v-list-item-title></v-list-item>
-              <v-list-item><v-list-item-title>Límite de ${{ config.monto_max_usd }} por compra</v-list-item-title></v-list-item>
-              <v-list-item><v-list-item-title>Mora diaria: {{ config.mora_diaria }}%</v-list-item-title></v-list-item>
+              <v-list-item>
+                <v-list-item-title>{{ config.entrada_pct }}% de entrada inicial</v-list-item-title>
+              </v-list-item>
+              <v-list-item>
+                <v-list-item-title>Hasta {{ config.cuotas_max }} cuotas quincenales</v-list-item-title>
+              </v-list-item>
+              <v-list-item>
+                <v-list-item-title>Límite de ${{ config.monto_max_usd }} por compra</v-list-item-title>
+              </v-list-item>
+              <v-list-item>
+                <v-list-item-title>Mora diaria: {{ config.mora_diaria }}%</v-list-item-title>
+              </v-list-item>
             </v-list>
           </v-expansion-panel-text>
         </v-expansion-panel>
@@ -74,17 +113,17 @@ const { nivelesConfig, colorNivel, iconoNivel } = useFinanCash()
 
 const pasos = [
   { titulo: 'Compra en tu tienda', descripcion: 'Elige tus productos y solicita financiamiento en caja', color: '#4facfe' },
-  { titulo: 'Paga la entrada', descripcion: 'Según tu nivel, pagas del 20% al 60% de entrada', color: '#4caf50' },
+  { titulo: 'Paga la entrada', descripcion: 'Según tu nivel, pagas del 10% al 30% de entrada', color: '#4caf50' },
   { titulo: 'Recibe tu PIN', descripcion: 'Te damos acceso a la app para ver tus cuotas', color: '#4facfe' },
   { titulo: 'Paga quincenalmente', descripcion: 'Reporta tus pagos por Pago Móvil, Transferencia, Zelle o Binance', color: '#ffd54f' },
-  { titulo: 'Sube de nivel', descripcion: 'Cada compra completada mejora tus condiciones', color: '#f472b6' }
+  { titulo: 'Sube de nivel', descripcion: '3 compras pagadas = siguiente nivel. ¡Paga puntual para subir más rápido!', color: '#f472b6' }
 ]
 
 const faqs = [
   { pregunta: '¿En qué moneda está mi deuda?', respuesta: 'Tu deuda se mantiene en dólares (USD), pero pagas en bolívares (Bs) al tipo de cambio del día.' },
   { pregunta: '¿Qué pasa si me atrazo?', respuesta: 'Tienes 3 días de gracia. Después se aplica mora diaria según tu nivel.' },
-  { pregunta: '¿Puedo pagar antes?', respuesta: 'Sí, puedes pagar cuotas anticipadas sin penalización.' },
-  { pregunta: '¿Cómo subo de nivel?', respuesta: 'Completando financiamientos sin mora. Cada compra pagada completa suma 1 punto.' },
+  { pregunta: '¿Puedo pagar antes?', respuesta: 'Sí, puedes pagar cuotas anticipadas. Además, pagar adelantado te da puntos extra para subir de nivel más rápido.' },
+  { pregunta: '¿Cómo subo de nivel?', respuesta: 'Completa 3 compras pagadas para pasar al siguiente nivel. También ganas puntos extra (+10) por cada pago puntual o adelantado. Subes paso a paso: Nuevo → Bronce → Plata → Oro → Platino.' },
   { pregunta: '¿Puedo usar la app sin internet?', respuesta: 'La app funciona parcialmente offline. Puedes ver tus datos guardados.' }
 ]
 </script>
@@ -201,5 +240,14 @@ const faqs = [
 .contacto-sub {
   font-size: 13px;
   color: rgba(255,255,255,0.4);
+}
+
+/* Nuevo estilo para la card de info de niveles */
+.info-card {
+  border-left: 3px solid #ffd54f !important;
+}
+
+.info-card :deep(.v-list-item) {
+  min-height: 32px !important;
 }
 </style>
