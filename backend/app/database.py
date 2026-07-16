@@ -10,7 +10,7 @@ load_dotenv()
 # Usar variable de entorno o fallback para desarrollo local
 DATABASE_URL = os.getenv(
     "DATABASE_URL", 
-    "postgresql://postgres:postgres@localhost:5433/financash_db"
+    "postgresql://postgres:postgres@localhost:5432/financash_db"
 )
 
 # Configuración del engine

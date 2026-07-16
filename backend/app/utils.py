@@ -29,34 +29,26 @@ def normalizar_telefono(telefono: str) -> str:
     if not telefono:
         return ""
     
-    # Eliminar espacios y caracteres especiales
     limpio = ''.join(c for c in telefono if c.isdigit() or c == '+')
     
-    # Si ya tiene +58, verificar que tenga 13 dígitos totales
     if limpio.startswith('+58') and len(limpio) == 13:
         return limpio
     
-    # Si tiene +580, eliminar el 0 extra
     if limpio.startswith('+580') and len(limpio) == 14:
         return '+58' + limpio[4:]
     
-    # Si empieza con 0 (formato local venezolano)
     if limpio.startswith('0') and len(limpio) == 11:
         return '+58' + limpio[1:]
     
-    # Si empieza con 4 (solo el número sin código de país)
     if limpio.startswith('4') and len(limpio) == 10:
         return '+58' + limpio
     
-    # Si tiene + pero no es +58, devolver tal cual
     if limpio.startswith('+'):
         return limpio
     
-    # Si tiene 10 dígitos y empieza con 4
     if len(limpio) == 10 and limpio.startswith('4'):
         return '+58' + limpio
     
-    # Si tiene 11 dígitos y empieza con 4 (con 0 adicional)
     if len(limpio) == 11 and limpio.startswith('4'):
         return '+58' + limpio
     
@@ -347,20 +339,93 @@ def calcular_nivel(score: int):
     return "nuevo", NIVELES_CONFIG.get("nuevo", NIVELES_CONFIG_DEFAULT["nuevo"])
 
 def actualizar_score_cliente(cliente: Cliente, db):
-    financiamientos_completados = db.query(Financiamiento).filter(
+    """
+    🎯 RECALCULA EL SCORE del cliente basado en múltiples factores:
+    
+    1. Puntos por compras realizadas (+20 pts por cada $1 financiado)
+    2. Bonus por financiamientos completados (+500 pts cada uno)
+    3. Puntos por pagos a tiempo (+150 pts por cuota pagada puntual)
+    4. Penalización por pagos atrasados (-100 pts por cuota atrasada)
+    5. Bonus por antigüedad (+25 pts por cada mes como cliente)
+    6. Bonus por diversidad de compras (+100 pts por tienda diferente)
+    7. Bonus por buen comportamiento de pago (+200 si no tiene deuda vencida)
+    """
+    puntos = 0
+    
+    # === 1. PUNTOS POR COMPRAS (financiamientos) ===
+    # Todos los financiamientos (activos, completados, etc.) dan puntos
+    todos_financiamientos = db.query(Financiamiento).filter(
+        Financiamiento.cliente_id == cliente.id
+    ).all()
+    
+    tiendas_visitadas = set()
+    for fin in todos_financiamientos:
+        # +20 puntos por cada $1 del monto total del financiamiento
+        monto_usd = fin.monto_total_usd or 0
+        puntos += monto_usd * 20
+        
+        # Registrar tienda para bonus de diversidad
+        if hasattr(fin, 'tienda_id') and fin.tienda_id:
+            tiendas_visitadas.add(fin.tienda_id)
+    
+    # === 2. BONUS POR FINANCIAMIENTOS COMPLETADOS ===
+    completados = db.query(Financiamiento).filter(
         Financiamiento.cliente_id == cliente.id,
         Financiamiento.estado == "completado"
     ).count()
+    puntos += completados * 500
     
-    cliente.score = financiamientos_completados
-    cliente.total_compras = db.query(Financiamiento).filter(
-        Financiamiento.cliente_id == cliente.id
+    # === 3. PUNTOS/PENALIZACIÓN POR HISTORIAL DE PAGOS ===
+    # Obtener todas las cuotas pagadas del cliente
+    cuotas_pagadas = db.query(Cuota).join(Financiamiento).filter(
+        Financiamiento.cliente_id == cliente.id,
+        Cuota.estado == "pagada",
+        Cuota.fecha_pago != None
+    ).all()
+    
+    for cuota in cuotas_pagadas:
+        if cuota.fecha_pago and cuota.fecha_vencimiento:
+            # Pagó a tiempo (fecha de pago <= fecha de vencimiento)
+            if cuota.fecha_pago.date() <= cuota.fecha_vencimiento.date():
+                puntos += 150
+            else:
+                # Pagó con atraso
+                puntos -= 100
+    
+    # === 4. BONUS POR ANTIGÜEDAD ===
+    if hasattr(cliente, 'fecha_registro') and cliente.fecha_registro:
+        meses = (datetime.now(timezone.utc) - cliente.fecha_registro).days / 30
+        puntos += int(meses) * 25
+    
+    # === 5. BONUS POR DIVERSIDAD DE COMPRAS ===
+    puntos += len(tiendas_visitadas) * 100
+    
+    # === 6. BONUS POR NO TENER DEUDA VENCIDA ===
+    hoy = datetime.now(timezone.utc)
+    cuotas_vencidas = db.query(Cuota).join(Financiamiento).filter(
+        Financiamiento.cliente_id == cliente.id,
+        Cuota.estado == "pendiente",
+        Cuota.fecha_vencimiento < hoy
     ).count()
+    
+    if cuotas_vencidas == 0:
+        # Bonus por buen comportamiento de pago
+        puntos += 200
+    
+    # Aplicar límites
+    puntos = max(0, int(puntos))
+    
+    # Actualizar cliente
+    cliente.score = puntos
+    cliente.total_compras = len(todos_financiamientos)
     
     nuevo_nivel, config = calcular_nivel(cliente.score)
     cliente.nivel = nuevo_nivel
     
     db.commit()
+    
+    print(f"🎯 Score recalculado para {cliente.nombre}: {cliente.score} pts | Nivel: {cliente.nivel}")
+    return puntos
 
 def generar_pin():
     return str(random.randint(1000, 9999))

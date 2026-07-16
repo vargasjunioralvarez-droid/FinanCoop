@@ -118,8 +118,12 @@ def crear_financiamiento(f: FinanciamientoCreate, db: Session = Depends(get_db))
         db.add(cuota)
     db.commit()
     
-    cliente.total_monto_comprado_usd += monto_total_usd
-    db.commit()
+    if hasattr(cliente, 'total_monto_comprado_usd'):
+        cliente.total_monto_comprado_usd += monto_total_usd
+        db.commit()
+    
+    # 🎯 ACTUALIZAR SCORE DEL CLIENTE AL CREAR UNA COMPRA
+    actualizar_score_cliente(cliente, db)
     
     return {
         "financiamiento": {
@@ -135,6 +139,8 @@ def crear_financiamiento(f: FinanciamientoCreate, db: Session = Depends(get_db))
             "cuotas_aprobadas": fin.cuotas_aprobadas,
             "requiere_aprobacion": fin.requiere_aprobacion
         },
+        "score_actualizado": cliente.score,
+        "nivel_actual": cliente.nivel,
         "mensaje": f"Entrada de BS {entrada_bs:.2f} pagada. {cuotas_aprobadas} cuotas quincenales de BS {monto_cuota_bs:.2f}",
         "advertencia": "Requiere aprobación del establecimiento" if requiere_aprobacion else None
     }
@@ -209,7 +215,7 @@ def ver_cuotas(id: int, db: Session = Depends(get_db)):
     return resultado
 
 # ============================================================
-# ✅ ELIMINAR FINANCIAMIENTO - NUEVO ENDPOINT
+# ✅ ELIMINAR FINANCIAMIENTO
 # ============================================================
 @router.delete("/{id}")
 def eliminar_financiamiento(

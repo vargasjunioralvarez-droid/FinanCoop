@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from app.database import get_db
 from app.models import Cuota, Pago, Financiamiento, Cliente
 from app.schemas import PagoReporte, ConciliacionPago
-from app.utils import actualizar_score_cliente, calcular_nivel, obtener_tasa_actual
+from app.utils import actualizar_score_cliente, calcular_nivel, obtener_tasa_actual, enviar_notificacion_generica
 from app.auth import get_current_admin
 import json
 
@@ -178,7 +178,7 @@ def pagos_pendientes_conciliacion(
         return []
 
 # ============================================================
-# ✅ CONCILIAR PAGO
+# ✅ CONCILIAR PAGO (CORREGIDO - ACTUALIZA SCORE EN CADA PAGO)
 # ============================================================
 @router.post("/conciliar")
 def conciliar_pago(
@@ -205,34 +205,42 @@ def conciliar_pago(
         if not cuota:
             raise HTTPException(status_code=404, detail="Cuota no encontrada")
         
+        fin = db.query(Financiamiento).filter(Financiamiento.id == pago.financiamiento_id).first()
+        cliente = None
+        if fin:
+            cliente = db.query(Cliente).filter(Cliente.id == fin.cliente_id).first()
+        
         if conciliacion.estado == "conciliado":
             # Aprobar pago
             cuota.estado = "pagada"
             cuota.fecha_pago = datetime.now(timezone.utc)
             cuota.monto_pagado = conciliacion.monto_confirmado_bs
             
-            fin = db.query(Financiamiento).filter(Financiamiento.id == pago.financiamiento_id).first()
-            if fin:
-                cliente = db.query(Cliente).filter(Cliente.id == fin.cliente_id).first()
-                
-                cuotas_pendientes = db.query(Cuota).filter(
-                    Cuota.financiamiento_id == fin.id,
-                    Cuota.estado.in_(["pendiente", "conciliando"])
-                ).count()
-                
-                if cuotas_pendientes == 0:
-                    fin.estado = "completado"
-                    fin.fecha_completado = datetime.now(timezone.utc)
-                    db.commit()
-                    if cliente:
-                        actualizar_score_cliente(cliente, db)
+            # Verificar si el financiamiento se completó
+            cuotas_pendientes = db.query(Cuota).filter(
+                Cuota.financiamiento_id == fin.id,
+                Cuota.estado.in_(["pendiente", "conciliando"])
+            ).count()
+            
+            if cuotas_pendientes == 0:
+                fin.estado = "completado"
+                fin.fecha_completado = datetime.now(timezone.utc)
+                print(f"✅ Financiamiento {fin.codigo} completado")
             
             db.commit()
+            
+            # 🎯 ACTUALIZAR SCORE DEL CLIENTE EN CADA PAGO APROBADO
+            if cliente:
+                actualizar_score_cliente(cliente, db)
+                print(f"🎯 Score actualizado: {cliente.score} pts | Nivel: {cliente.nivel}")
+            
             return {
                 "success": True,
                 "estado": "conciliado",
                 "cuota_pagada": cuota.numero,
                 "monto_bs": conciliacion.monto_confirmado_bs,
+                "score_actualizado": cliente.score if cliente else None,
+                "nivel_actual": cliente.nivel if cliente else None,
                 "mensaje": "✅ Pago conciliado correctamente"
             }
         else:
@@ -255,7 +263,7 @@ def conciliar_pago(
         raise HTTPException(status_code=500, detail=str(e))
 
 # ============================================================
-# ✅ PAGAR CUOTA EN EFECTIVO
+# ✅ PAGAR CUOTA EN EFECTIVO (CORREGIDO - ACTUALIZA SCORE)
 # ============================================================
 @router.post("/cuotas/{id}/pagar-efectivo")
 def pagar_cuota_efectivo(
@@ -294,7 +302,8 @@ def pagar_cuota_efectivo(
                 cuota.monto_interes_mora_usd = round(interes_usd, 2)
                 cuota.monto_total_bs = round(cuota.monto_base_bs + interes_bs, 2)
                 cuota.monto_total_usd = round(cuota.monto_base_usd + interes_usd, 2)
-                cliente.cuotas_con_mora += 1
+                if hasattr(cliente, 'cuotas_con_mora'):
+                    cliente.cuotas_con_mora += 1
             else:
                 cuota.monto_total_bs = cuota.monto_base_bs
                 cuota.monto_total_usd = cuota.monto_base_usd
@@ -331,13 +340,17 @@ def pagar_cuota_efectivo(
             fin.estado = "completado"
             fin.fecha_completado = hoy
             db.commit()
-            actualizar_score_cliente(cliente, db)
+        
+        # 🎯 ACTUALIZAR SCORE DEL CLIENTE EN CADA PAGO EN EFECTIVO
+        actualizar_score_cliente(cliente, db)
         
         return {
             "cuota_pagada": cuota.numero,
             "monto_base_bs": cuota.monto_base_bs,
             "interes_mora_bs": cuota.monto_interes_mora_bs,
             "total_pagado_bs": cuota.monto_total_bs,
+            "score_actualizado": cliente.score,
+            "nivel_actual": cliente.nivel,
             "financiamiento_estado": fin.estado
         }
     except Exception as e:
