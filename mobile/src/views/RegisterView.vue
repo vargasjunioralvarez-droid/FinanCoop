@@ -548,9 +548,22 @@ const guardarRegistroLocal = async () => {
     formData.append('referencia_telefono', telefonoReferenciaCompleto.value)
     formData.append('referencia_parentesco', registro.referencia_parentesco.trim())
     
-    // ✅ 2. AGREGAR FOTO
-    if (fotoFile.value) {
+    // ✅ 2. AGREGAR FOTO - Intentar como File primero, si no como base64
+    let fotoEnviada = false
+    
+    if (fotoFile.value && fotoFile.value instanceof File) {
       formData.append('cedula_foto', fotoFile.value)
+      console.log('📸 Foto agregada como File:', fotoFile.value.name, fotoFile.value.size)
+      fotoEnviada = true
+    } else if (fotoCedula.value && fotoCedula.value.startsWith('data:')) {
+      // Si tenemos dataUrl pero no File, enviar como base64
+      formData.append('cedula_foto_base64', fotoCedula.value)
+      console.log('📸 Foto agregada como base64')
+      fotoEnviada = true
+    }
+    
+    if (!fotoEnviada) {
+      console.warn('⚠️ No se pudo preparar la foto para envío')
     }
 
     console.log('🌐 Enviando a Render:', 'https://financoop.onrender.com/clientes')
@@ -558,7 +571,7 @@ const guardarRegistroLocal = async () => {
       nombre: registro.nombre.trim(),
       cedula: registro.cedula.trim(),
       telefono: telefonoCompleto.value,
-      tiene_foto: !!fotoFile.value
+      tiene_foto: fotoEnviada
     })
 
     // ✅ 3. ENVIAR A RENDER
@@ -580,11 +593,12 @@ const guardarRegistroLocal = async () => {
       data = { error: text || `HTTP ${response.status}` }
     }
 
-    console.log('📥 Respuesta:', data)
+    console.log('📥 Respuesta completa:', JSON.stringify(data, null, 2))
 
     // ✅ 5. VERIFICAR ÉXITO
     if (response.ok && data.success !== false) {
       console.log('✅ Registro exitoso en Render')
+      console.log('✅ URL cédula:', data.cliente?.url_cedula || 'No disponible')
       
       // Guardar en localStorage como backup
       const solicitud = {
@@ -597,6 +611,7 @@ const guardarRegistroLocal = async () => {
         referencia_telefono: telefonoReferenciaCompleto.value,
         referencia_parentesco: registro.referencia_parentesco.trim(),
         tiene_foto: !!fotoCedula.value,
+        url_cedula: data.cliente?.url_cedula || null,
         fecha_solicitud: new Date().toISOString(),
         estado: 'PENDIENTE',
         enviado_a_render: true,
@@ -623,6 +638,7 @@ const guardarRegistroLocal = async () => {
         referencia_telefono: telefonoReferenciaCompleto.value,
         referencia_parentesco: registro.referencia_parentesco.trim(),
         tiene_foto: !!fotoCedula.value,
+        url_cedula: null,
         fecha_solicitud: new Date().toISOString(),
         estado: 'PENDIENTE',
         enviado_a_render: false,
@@ -651,6 +667,7 @@ const guardarRegistroLocal = async () => {
       referencia_telefono: telefonoReferenciaCompleto.value,
       referencia_parentesco: registro.referencia_parentesco.trim(),
       tiene_foto: !!fotoCedula.value,
+      url_cedula: null,
       fecha_solicitud: new Date().toISOString(),
       estado: 'PENDIENTE',
       enviado_a_render: false,

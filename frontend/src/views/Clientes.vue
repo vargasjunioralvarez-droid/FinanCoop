@@ -5,7 +5,7 @@
         <h1 class="text-h4 mb-4">👥 Gestión de Clientes</h1>
       </v-col>
 
-      <!-- Tabs para cambiar entre vistas -->
+      <!-- Tabs -->
       <v-col cols="12">
         <v-tabs v-model="tabActiva" color="primary" grow>
           <v-tab value="verificados">
@@ -46,22 +46,16 @@
                 :items-per-page="10"
               >
                 <template v-slot:item.estado="{ item }">
-                  <v-chip color="success" size="small">
-                    ✅ Aprobado
-                  </v-chip>
+                  <v-chip color="success" size="small">✅ Aprobado</v-chip>
                 </template>
 
                 <template v-slot:item.pin="{ item }">
-                  <v-chip color="primary" size="small" v-if="item.pin">
-                    {{ item.pin }}
-                  </v-chip>
+                  <v-chip color="primary" size="small" v-if="item.pin">{{ item.pin }}</v-chip>
                   <span v-else class="text-grey">Sin PIN</span>
                 </template>
 
                 <template v-slot:item.nivel="{ item }">
-                  <v-chip :color="colorNivel(item.nivel)" size="small">
-                    {{ item.nivel }}
-                  </v-chip>
+                  <v-chip :color="colorNivel(item.nivel)" size="small">{{ item.nivel }}</v-chip>
                 </template>
 
                 <template v-slot:item.acciones="{ item }">
@@ -101,23 +95,56 @@
                 :items-per-page="10"
               >
                 <template v-slot:item.estado="{ item }">
-                  <v-chip color="warning" size="small">
-                    ⏳ Pendiente
-                  </v-chip>
+                  <v-chip color="warning" size="small">⏳ Pendiente</v-chip>
                 </template>
 
+                <!-- ✅ COLUMNA FOTO CORREGIDA - CON MINIATURA Y BOTÓN VER -->
                 <template v-slot:item.foto="{ item }">
-                  <v-icon :color="item.url_cedula ? 'success' : 'grey'" size="small">
-                    {{ item.url_cedula ? 'mdi-check-circle' : 'mdi-image-off' }}
-                  </v-icon>
-                  {{ item.url_cedula ? 'Sí' : 'No' }}
+                  <div class="d-flex align-center">
+                    <!-- Miniatura si tiene URL real -->
+                    <v-avatar 
+                      v-if="tieneFotoReal(item)" 
+                      size="40" 
+                      class="mr-2 cursor-pointer"
+                      @click="verFotoAmpliada(item)"
+                    >
+                      <v-img :src="item.url_cedula" cover>
+                        <template v-slot:placeholder>
+                          <v-icon color="grey">mdi-image</v-icon>
+                        </template>
+                      </v-img>
+                    </v-avatar>
+                    
+                    <!-- Icono si no tiene foto real -->
+                    <v-icon 
+                      v-else 
+                      :color="item.url_cedula ? 'success' : 'grey'" 
+                      size="24"
+                      class="mr-2"
+                    >
+                      {{ item.url_cedula ? 'mdi-check-circle' : 'mdi-image-off' }}
+                    </v-icon>
+                    
+                    <!-- Botón ver foto -->
+                    <v-btn
+                      v-if="tieneFotoReal(item)"
+                      icon="mdi-magnify"
+                      size="x-small"
+                      color="primary"
+                      variant="text"
+                      @click="verFotoAmpliada(item)"
+                      title="Ver foto"
+                    ></v-btn>
+                    
+                    <span v-else class="text-caption text-grey">
+                      {{ item.url_cedula ? 'Sí (sin URL)' : 'No' }}
+                    </span>
+                  </div>
                 </template>
 
                 <template v-slot:item.acciones="{ item }">
                   <div class="d-flex gap-1">
                     <v-btn icon="mdi-eye" size="small" color="info" @click="verDetalle(item)"></v-btn>
-                    
-                    <!-- ✅ BOTÓN APROBAR -->
                     <v-btn 
                       icon="mdi-check-circle" 
                       size="small" 
@@ -126,7 +153,6 @@
                       :loading="aprobandoId === item.id"
                       title="Aprobar y enviar PIN"
                     ></v-btn>
-                    
                     <v-btn 
                       icon="mdi-delete" 
                       size="small" 
@@ -137,12 +163,7 @@
                 </template>
               </v-data-table>
 
-              <!-- Mensaje si no hay pendientes -->
-              <v-alert 
-                v-if="clientesPendientes.length === 0" 
-                type="info" 
-                class="ma-4"
-              >
+              <v-alert v-if="clientesPendientes.length === 0" type="info" class="ma-4">
                 🎉 No hay clientes pendientes por verificar.
               </v-alert>
             </v-card>
@@ -151,6 +172,52 @@
         </v-window>
       </v-col>
     </v-row>
+
+    <!-- ========================================== -->
+    <!-- DIALOG: Ver Foto Ampliada -->
+    <!-- ========================================== -->
+    <v-dialog v-model="dialogFoto" max-width="800">
+      <v-card v-if="fotoCliente">
+        <v-card-title class="d-flex align-center">
+          <v-icon class="mr-2">mdi-card-account-details</v-icon>
+          Foto de Cédula - {{ fotoCliente.nombre }}
+          <v-spacer></v-spacer>
+          <v-btn icon="mdi-close" variant="text" @click="dialogFoto = false"></v-btn>
+        </v-card-title>
+        <v-card-text class="text-center pa-4">
+          <v-img
+            :src="fotoCliente.url_cedula"
+            max-height="70vh"
+            contain
+            class="rounded-lg elevation-2 bg-grey-darken-3"
+          >
+            <template v-slot:placeholder>
+              <v-row align="center" justify="center" class="fill-height">
+                <v-progress-circular indeterminate color="primary"></v-progress-circular>
+              </v-row>
+            </template>
+          </v-img>
+          
+          <div class="mt-4 d-flex justify-center gap-2">
+            <v-btn
+              :href="fotoCliente.url_cedula"
+              target="_blank"
+              color="primary"
+              prepend-icon="mdi-open-in-new"
+            >
+              Abrir en nueva pestaña
+            </v-btn>
+            <v-btn
+              color="secondary"
+              prepend-icon="mdi-download"
+              @click="descargarFoto(fotoCliente)"
+            >
+              Descargar
+            </v-btn>
+          </div>
+        </v-card-text>
+      </v-card>
+    </v-dialog>
 
     <!-- ========================================== -->
     <!-- DIALOG: Aprobar Cliente -->
@@ -165,6 +232,19 @@
           <p class="text-body-1">
             ¿Aprobar a <strong>{{ clienteAprobar.nombre }}</strong>?
           </p>
+          
+          <!-- Mostrar foto en el dialog de aprobar -->
+          <div v-if="tieneFotoReal(clienteAprobar)" class="mt-3 text-center">
+            <p class="text-caption text-grey mb-2">Foto de cédula:</p>
+            <v-img
+              :src="clienteAprobar.url_cedula"
+              max-height="150"
+              contain
+              class="rounded"
+              @click="verFotoAmpliada(clienteAprobar)"
+            ></v-img>
+          </div>
+          
           <v-list density="compact" class="bg-grey-lighten-4 rounded mt-2">
             <v-list-item>
               <v-list-item-title>Cédula</v-list-item-title>
@@ -182,11 +262,7 @@
         <v-card-actions>
           <v-spacer></v-spacer>
           <v-btn @click="dialogAprobar = false">Cancelar</v-btn>
-          <v-btn 
-            color="success" 
-            @click="confirmarAprobar" 
-            :loading="aprobando"
-          >
+          <v-btn color="success" @click="confirmarAprobar" :loading="aprobando">
             <v-icon start>mdi-send</v-icon>
             Aprobar y Enviar PIN
           </v-btn>
@@ -197,7 +273,7 @@
     <!-- ========================================== -->
     <!-- DIALOG: Detalle del Cliente -->
     <!-- ========================================== -->
-    <v-dialog v-model="dialogDetalle" max-width="600">
+    <v-dialog v-model="dialogDetalle" max-width="700">
       <v-card v-if="clienteSeleccionado">
         <v-card-title class="text-h5">
           {{ clienteSeleccionado.nombre }}
@@ -211,14 +287,14 @@
         
         <v-card-text>
           <v-row>
-            <v-col cols="6">
+            <v-col cols="12" md="6">
               <p><strong>Cédula:</strong> {{ clienteSeleccionado.cedula }}</p>
               <p><strong>Teléfono:</strong> {{ clienteSeleccionado.telefono }}</p>
               <p><strong>Email:</strong> {{ clienteSeleccionado.email || 'N/A' }}</p>
               <p><strong>Dirección:</strong> {{ clienteSeleccionado.direccion || 'N/A' }}</p>
             </v-col>
-            <v-col cols="6">
-              <p><strong>Score:</strong> {{ clienteSeleccionado.score }} compras</p>
+            <v-col cols="12" md="6">
+              <p><strong>Score:</strong> {{ clienteSeleccionado.score }} pts</p>
               <p><strong>Total Compras:</strong> {{ clienteSeleccionado.total_compras }}</p>
               <p><strong>Nivel:</strong> 
                 <v-chip :color="colorNivel(clienteSeleccionado.nivel)" size="small">
@@ -241,22 +317,63 @@
           <p><strong>Teléfono:</strong> {{ clienteSeleccionado.referencia_telefono || 'N/A' }}</p>
           <p><strong>Parentesco:</strong> {{ clienteSeleccionado.referencia_parentesco || 'N/A' }}</p>
 
-          <!-- Foto de cédula -->
+          <!-- ✅ FOTO DE CÉDULA CORREGIDA -->
           <v-divider class="my-3"></v-divider>
           <h3 class="text-h6 mb-2">Foto de Cédula</h3>
-          <v-img 
-            v-if="clienteSeleccionado.url_cedula" 
-            :src="clienteSeleccionado.url_cedula" 
-            max-height="200"
-            contain
-            class="rounded"
-          ></v-img>
-          <v-alert v-else type="warning" density="compact">
-            No hay foto de cédula
+          
+          <!-- Tiene foto real -->
+          <div v-if="tieneFotoReal(clienteSeleccionado)" class="text-center">
+            <v-img
+              :src="clienteSeleccionado.url_cedula"
+              max-height="250"
+              contain
+              class="rounded-lg elevation-2 cursor-pointer bg-grey-darken-3"
+              @click="verFotoAmpliada(clienteSeleccionado)"
+            >
+              <template v-slot:placeholder>
+                <v-row align="center" justify="center" class="fill-height">
+                  <v-progress-circular indeterminate color="primary"></v-progress-circular>
+                </v-row>
+              </template>
+            </v-img>
+            <div class="mt-2">
+              <v-btn
+                color="primary"
+                size="small"
+                prepend-icon="mdi-magnify"
+                @click="verFotoAmpliada(clienteSeleccionado)"
+                class="mr-2"
+              >
+                Ver ampliada
+              </v-btn>
+              <v-btn
+                :href="clienteSeleccionado.url_cedula"
+                target="_blank"
+                color="secondary"
+                size="small"
+                prepend-icon="mdi-open-in-new"
+              >
+                Abrir original
+              </v-btn>
+            </div>
+          </div>
+          
+          <!-- Es cliente local sin foto real -->
+          <div v-else-if="esClienteLocal(clienteSeleccionado)" class="text-center py-4 bg-grey-lighten-4 rounded">
+            <v-icon size="48" color="grey">mdi-image-off</v-icon>
+            <p class="text-body-2 text-grey mt-2">Cliente registrado localmente</p>
+            <p class="text-caption text-grey">La foto no está disponible en el servidor</p>
+          </div>
+          
+          <!-- No tiene foto -->
+          <v-alert v-else type="warning" density="compact" class="mt-2">
+            <v-icon start>mdi-image-off</v-icon>
+            No hay foto de cédula registrada
           </v-alert>
           
           <v-divider class="my-3"></v-divider>
           
+          <!-- Financiamientos -->
           <h3 class="text-h6 mb-2">Financiamientos</h3>
           <v-alert v-if="!financiamientosCliente.length" type="info" density="compact">
             Sin financiamientos
@@ -291,7 +408,6 @@
         
         <v-card-actions>
           <v-btn @click="dialogDetalle = false">Cerrar</v-btn>
-          <!-- Botón aprobar si está pendiente -->
           <v-btn 
             v-if="clienteSeleccionado.estado !== 'aprobado'"
             color="success"
@@ -363,7 +479,7 @@
       </v-card>
     </v-dialog>
 
-    <!-- Snackbar para notificaciones -->
+    <!-- Snackbar -->
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="5000" multi-line>
       {{ snackbar.text }}
       <template v-slot:actions>
@@ -397,9 +513,11 @@ const dialogDetalle = ref(false)
 const dialogCuotas = ref(false)
 const dialogEditar = ref(false)
 const dialogAprobar = ref(false)
+const dialogFoto = ref(false)  // NUEVO: dialog para foto ampliada
 const clienteSeleccionado = ref(null)
 const clienteEditando = ref(null)
 const clienteAprobar = ref(null)
+const fotoCliente = ref(null)  // NUEVO: cliente cuya foto se está viendo
 const financiamientosCliente = ref([])
 const cuotas = ref([])
 
@@ -408,7 +526,7 @@ const snackbar = ref({ show: false, text: '', color: 'success' })
 
 const esAdmin = localStorage.getItem('admin_rol') === 'admin'
 
-// Headers para verificados
+// Headers
 const headersVerificados = [
   { title: 'Nombre', key: 'nombre', sortable: true },
   { title: 'Cédula', key: 'cedula', sortable: true },
@@ -419,32 +537,24 @@ const headersVerificados = [
   { title: 'Acciones', key: 'acciones', sortable: false }
 ]
 
-// Headers para pendientes
 const headersPendientes = [
   { title: 'Nombre', key: 'nombre', sortable: true },
   { title: 'Cédula', key: 'cedula', sortable: true },
   { title: 'Teléfono', key: 'telefono' },
-  { title: 'Foto', key: 'foto' },
+  { title: 'Foto', key: 'foto', sortable: false },
   { title: 'Registrado', key: 'creado_en' },
   { title: 'Acciones', key: 'acciones', sortable: false }
 ]
 
-// Computed: separar clientes
-const clientesVerificados = computed(() => 
-  clientes.value.filter(c => c.estado === 'aprobado')
-)
+// Computed
+const clientesVerificados = computed(() => clientes.value.filter(c => c.estado === 'aprobado'))
+const clientesPendientes = computed(() => clientes.value.filter(c => c.estado !== 'aprobado'))
 
-const clientesPendientes = computed(() => 
-  clientes.value.filter(c => c.estado !== 'aprobado')
-)
-
-// Filtrados por búsqueda
 const clientesVerificadosFiltrados = computed(() => {
   if (!busquedaVerificados.value) return clientesVerificados.value
   const q = busquedaVerificados.value.toLowerCase()
   return clientesVerificados.value.filter(c => 
-    c.nombre.toLowerCase().includes(q) || 
-    c.cedula.includes(q)
+    c.nombre.toLowerCase().includes(q) || c.cedula.includes(q)
   )
 })
 
@@ -452,10 +562,59 @@ const clientesPendientesFiltrados = computed(() => {
   if (!busquedaPendientes.value) return clientesPendientes.value
   const q = busquedaPendientes.value.toLowerCase()
   return clientesPendientes.value.filter(c => 
-    c.nombre.toLowerCase().includes(q) || 
-    c.cedula.includes(q)
+    c.nombre.toLowerCase().includes(q) || c.cedula.includes(q)
   )
 })
+
+// ============================================================
+// ✅ FUNCIONES AUXILIARES PARA FOTOS
+// ============================================================
+
+/**
+ * Verifica si el cliente tiene una URL real de foto (no es local ni placeholder)
+ */
+const tieneFotoReal = (cliente) => {
+  if (!cliente || !cliente.url_cedula) return false
+  // Excluir placeholders y URLs locales
+  if (cliente.url_cedula === '📷 Sí') return false
+  if (cliente.url_cedula.startsWith('local_')) return false
+  // Debe ser una URL HTTP válida
+  return cliente.url_cedula.startsWith('http')
+}
+
+/**
+ * Verifica si es un cliente local (registrado sin conexión)
+ */
+const esClienteLocal = (cliente) => {
+  if (!cliente) return false
+  return cliente._esLocal || (cliente.id && cliente.id.toString().startsWith('local_'))
+}
+
+/**
+ * Abre el dialog para ver la foto ampliada
+ */
+const verFotoAmpliada = (cliente) => {
+  if (!tieneFotoReal(cliente)) {
+    mostrarMensaje('Este cliente no tiene foto disponible', 'warning')
+    return
+  }
+  fotoCliente.value = cliente
+  dialogFoto.value = true
+}
+
+/**
+ * Descarga la foto de la cédula
+ */
+const descargarFoto = (cliente) => {
+  if (!tieneFotoReal(cliente)) return
+  const link = document.createElement('a')
+  link.href = cliente.url_cedula
+  link.download = `cedula_${cliente.cedula}.jpg`
+  link.target = '_blank'
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+}
 
 const colorNivel = (nivel) => {
   const colores = { 
@@ -491,7 +650,7 @@ const mostrarMensaje = (texto, color = 'success') => {
 }
 
 // ============================================================
-// ✅ CARGAR SOLICITUDES LOCALES (desde RegisterView)
+// CARGAR SOLICITUDES LOCALES
 // ============================================================
 const cargarSolicitudesLocales = () => {
   const solicitudesStr = localStorage.getItem('solicitudes_clientes')
@@ -503,7 +662,6 @@ const cargarSolicitudesLocales = () => {
     
     console.log(`📋 Cargando ${solicitudes.length} solicitudes locales...`)
     
-    // Convertir solicitudes a clientes pendientes
     const nuevosClientes = solicitudes.map((sol, index) => ({
       id: `local_${Date.now()}_${index}`,
       nombre: sol.nombre || 'Sin nombre',
@@ -515,7 +673,7 @@ const cargarSolicitudesLocales = () => {
       referencia_telefono: sol.referencia_telefono || '',
       referencia_parentesco: sol.referencia_parentesco || '',
       estado: 'pendiente',
-      url_cedula: sol.tiene_foto ? '📷 Sí' : null,
+      url_cedula: sol.url_cedula || (sol.tiene_foto ? '📷 Sí' : null),
       creado_en: sol.fecha_solicitud ? new Date(sol.fecha_solicitud).toLocaleDateString('es-VE') : 'Hoy',
       score: 0,
       total_compras: 0,
@@ -524,7 +682,6 @@ const cargarSolicitudesLocales = () => {
       _esLocal: true
     }))
     
-    // ✅ Agregar a la lista de clientes (evitar duplicados)
     const cedulasExistentes = new Set(clientes.value.map(c => c.cedula))
     const clientesFiltrados = nuevosClientes.filter(c => !cedulasExistentes.has(c.cedula))
     
@@ -543,10 +700,7 @@ const cargarTodos = async () => {
   try {
     const data = await api.get('/clientes')
     clientes.value = data
-    
-    // ✅ SIEMPRE cargar solicitudes locales
     cargarSolicitudesLocales()
-    
   } catch (e) {
     console.error('Error cargando clientes:', e)
     mostrarMensaje('Error al cargar clientes', 'error')
@@ -556,15 +710,13 @@ const cargarTodos = async () => {
 }
 
 const verDetalle = async (cliente) => {
-  // Si es local, no tiene ID real
-  if (cliente._esLocal) {
+  if (esClienteLocal(cliente)) {
     clienteSeleccionado.value = cliente
     dialogDetalle.value = true
     financiamientosCliente.value = []
     return
   }
   
-  // Obtener datos completos del cliente
   try {
     const data = await api.get(`/clientes/${cliente.id}`)
     clienteSeleccionado.value = data
@@ -592,7 +744,6 @@ const verCuotas = async (finId) => {
   }
 }
 
-// ✅ APROBAR CLIENTE
 const aprobarCliente = (cliente) => {
   clienteAprobar.value = cliente
   dialogAprobar.value = true
@@ -606,18 +757,14 @@ const confirmarAprobar = async () => {
   
   try {
     const token = localStorage.getItem('admin_token')
-    const esLocal = clienteAprobar.value._esLocal || 
-                    clienteAprobar.value.id?.toString().startsWith('local_')
+    const esLocal = esClienteLocal(clienteAprobar.value)
     
     if (esLocal) {
-      // 🔥 CLIENTE LOCAL: Crear en backend y luego aprobar
       mostrarMensaje('📝 Creando cliente en el sistema...', 'info')
       
       const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/clientes`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           nombre: clienteAprobar.value.nombre,
           cedula: clienteAprobar.value.cedula,
@@ -636,14 +783,12 @@ const confirmarAprobar = async () => {
         throw new Error(data.error || 'Error al crear cliente')
       }
       
-      // ✅ Eliminar de localStorage
       const solicitudes = JSON.parse(localStorage.getItem('solicitudes_clientes') || '[]')
       const nuevas = solicitudes.filter(s => s.cedula !== clienteAprobar.value.cedula)
       localStorage.setItem('solicitudes_clientes', JSON.stringify(nuevas))
       
       mostrarMensaje(`✅ ${clienteAprobar.value.nombre} creado exitosamente`, 'success')
       
-      // 🔥 Ahora aprobar el cliente recién creado (para enviar PIN)
       if (data.id) {
         mostrarMensaje('📱 Enviando PIN por WhatsApp...', 'info')
         
@@ -660,8 +805,8 @@ const confirmarAprobar = async () => {
         
         if (aprobarData.success) {
           mostrarMensaje(
-            `✅ ${clienteAprobar.value.nombre} aprobado. WhatsApp: ${aprobarData.sms_enviado ? '✅ Enviado' : '⚠️ Falló'}`,
-            aprobarData.sms_enviado ? 'success' : 'warning'
+            `✅ ${clienteAprobar.value.nombre} aprobado. PIN enviado.`,
+            'success'
           )
         } else {
           throw new Error(aprobarData.error || 'Error al aprobar')
@@ -669,7 +814,6 @@ const confirmarAprobar = async () => {
       }
       
     } else {
-      // 🔥 CLIENTE EXISTENTE: Aprobar directamente
       const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/clientes/aprobar`, {
         method: 'POST',
         headers: {
@@ -685,13 +829,9 @@ const confirmarAprobar = async () => {
         throw new Error(data.error || 'Error al aprobar')
       }
       
-      mostrarMensaje(
-        `✅ ${clienteAprobar.value.nombre} aprobado. WhatsApp: ${data.sms_enviado ? '✅ Enviado' : '⚠️ Falló'}`,
-        data.sms_enviado ? 'success' : 'warning'
-      )
+      mostrarMensaje(`✅ ${clienteAprobar.value.nombre} aprobado`, 'success')
     }
     
-    // Recargar y cambiar a pestaña de verificados
     await cargarTodos()
     tabActiva.value = 'verificados'
     
@@ -754,3 +894,15 @@ onMounted(() => {
   cargarTodos()
 })
 </script>
+
+<style scoped>
+.cursor-pointer {
+  cursor: pointer;
+}
+.gap-1 {
+  gap: 4px;
+}
+.gap-2 {
+  gap: 8px;
+}
+</style>

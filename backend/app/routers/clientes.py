@@ -14,6 +14,8 @@ from app.auth import get_current_admin, get_current_user
 from datetime import datetime, timezone
 import httpx
 import os
+import base64
+import uuid
 
 router = APIRouter(prefix="/clientes", tags=["Clientes"])
 
@@ -40,28 +42,83 @@ class ClienteUpdate(BaseModel):
     direccion: Optional[str] = None
 
 # ============================================================
-# CLOUDFLARE
+# CLOUDFLARE - CORREGIDO CON MEJOR MANEJO DE ERRORES
 # ============================================================
 CLOUDFLARE_ACCOUNT_ID = os.getenv("CLOUDFLARE_ACCOUNT_ID", "")
 CLOUDFLARE_API_TOKEN = os.getenv("CLOUDFLARE_API_TOKEN", "")
 
 async def subir_imagen_cloudflare(archivo_bytes: bytes, nombre_archivo: str) -> str | None:
+    """
+    Sube una imagen a Cloudflare Images y retorna la URL pública.
+    """
+    if not CLOUDFLARE_ACCOUNT_ID or not CLOUDFLARE_API_TOKEN:
+        print("❌ Cloudflare no configurado. Verifica CLOUDFLARE_ACCOUNT_ID y CLOUDFLARE_API_TOKEN")
+        return None
+    
     try:
         url = f"https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/images/v1"
+        
+        # Crear el archivo para multipart
         files = {'file': (nombre_archivo, archivo_bytes, 'image/jpeg')}
         headers = {'Authorization': f'Bearer {CLOUDFLARE_API_TOKEN}'}
         
+        print(f"📤 Subiendo imagen a Cloudflare: {nombre_archivo} ({len(archivo_bytes)} bytes)")
+        
         async with httpx.AsyncClient() as client:
-            response = await client.post(url, headers=headers, files=files, timeout=30.0)
+            response = await client.post(url, headers=headers, files=files, timeout=60.0)
+            
+            print(f"📡 Cloudflare status: {response.status_code}")
+            print(f"📡 Cloudflare response: {response.text[:500]}")
+            
             if response.status_code == 200:
                 result = response.json()
                 if result.get('success'):
-                    image_url = result['result']['variants'][0]
-                    print(f"✅ Imagen subida a Cloudflare: {image_url}")
-                    return image_url
-            return None
+                    # La URL de la imagen puede estar en diferentes lugares
+                    variants = result.get('result', {}).get('variants', [])
+                    if variants:
+                        image_url = variants[0]
+                        print(f"✅ Imagen subida a Cloudflare: {image_url}")
+                        return image_url
+                    else:
+                        # Intentar obtener la URL del ID de la imagen
+                        image_id = result.get('result', {}).get('id')
+                        if image_id:
+                            # Construir URL pública
+                            image_url = f"https://imagedelivery.net/{CLOUDFLARE_ACCOUNT_ID}/{image_id}/public"
+                            print(f"✅ Imagen subida (URL construida): {image_url}")
+                            return image_url
+                else:
+                    errors = result.get('errors', [])
+                    print(f"❌ Cloudflare error: {errors}")
+                    return None
+            else:
+                print(f"❌ Cloudflare HTTP error: {response.status_code} - {response.text[:200]}")
+                return None
+                
+    except httpx.TimeoutException:
+        print("❌ Timeout subiendo a Cloudflare")
+        return None
     except Exception as e:
         print(f"❌ Error subiendo a Cloudflare: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+
+async def subir_imagen_cloudflare_base64(base64_string: str, nombre_archivo: str) -> str | None:
+    """
+    Sube una imagen en base64 a Cloudflare Images.
+    """
+    try:
+        # Limpiar el prefijo data:image/jpeg;base64, si existe
+        if ',' in base64_string:
+            base64_string = base64_string.split(',')[1]
+        
+        # Decodificar base64 a bytes
+        archivo_bytes = base64.b64decode(base64_string)
+        return await subir_imagen_cloudflare(archivo_bytes, nombre_archivo)
+    except Exception as e:
+        print(f"❌ Error decodificando base64: {e}")
         return None
 
 # ============================================================
@@ -78,27 +135,46 @@ async def crear_cliente(
     referencia_telefono: Optional[str] = Form(""),
     referencia_parentesco: Optional[str] = Form(""),
     cedula_foto: Optional[UploadFile] = File(None),
+    cedula_foto_base64: Optional[str] = Form(None),  # NUEVO: soporte para base64
     db: Session = Depends(get_db)
 ):
     try:
         print(f"📝 Registrando cliente: {cedula}")
-        print(f"📸 Foto recibida: {cedula_foto.filename if cedula_foto else 'No'}")
+        print(f"📸 Foto recibida (UploadFile): {cedula_foto.filename if cedula_foto else 'No'}")
+        print(f"📸 Foto recibida (base64): {'Sí' if cedula_foto_base64 else 'No'}")
+        print(f"📸 Foto recibida (base64 length): {len(cedula_foto_base64) if cedula_foto_base64 else 0}")
 
         existe = db.query(Cliente).filter(Cliente.cedula == cedula).first()
         if existe:
             return {"error": f"Cliente con cédula {cedula} ya existe", "success": False}
 
         url_cedula = None
+        
+        # Intentar subir foto desde UploadFile (multipart)
         if cedula_foto and cedula_foto.size > 0:
             try:
                 contenido = await cedula_foto.read()
-                url_cedula = await subir_imagen_cloudflare(contenido, f"cedula_{cedula}.jpg")
-                if url_cedula:
-                    print(f"✅ Foto subida: {url_cedula}")
-                else:
-                    print("⚠️ No se pudo subir la foto a Cloudflare")
+                print(f"📸 Foto UploadFile: {len(contenido)} bytes, tipo: {cedula_foto.content_type}")
+                if len(contenido) > 0:
+                    url_cedula = await subir_imagen_cloudflare(contenido, f"cedula_{cedula}_{uuid.uuid4().hex[:8]}.jpg")
+                    if url_cedula:
+                        print(f"✅ Foto subida desde UploadFile: {url_cedula}")
+                    else:
+                        print("⚠️ No se pudo subir la foto desde UploadFile")
             except Exception as e:
-                print(f"⚠️ Error procesando foto: {e}")
+                print(f"⚠️ Error procesando foto UploadFile: {e}")
+        
+        # Si no se subió desde UploadFile, intentar desde base64
+        elif cedula_foto_base64 and len(cedula_foto_base64) > 100:
+            try:
+                print(f"📸 Intentando subir foto desde base64 ({len(cedula_foto_base64)} chars)")
+                url_cedula = await subir_imagen_cloudflare_base64(cedula_foto_base64, f"cedula_{cedula}_{uuid.uuid4().hex[:8]}.jpg")
+                if url_cedula:
+                    print(f"✅ Foto subida desde base64: {url_cedula}")
+                else:
+                    print("⚠️ No se pudo subir la foto desde base64")
+            except Exception as e:
+                print(f"⚠️ Error procesando foto base64: {e}")
 
         db_cliente = Cliente(
             nombre=nombre,
@@ -122,6 +198,7 @@ async def crear_cliente(
         db.refresh(db_cliente)
 
         print(f"✅ Cliente registrado (PENDIENTE): ID {db_cliente.id} - {db_cliente.nombre}")
+        print(f"✅ URL cédula guardada: {db_cliente.url_cedula}")
 
         return {
             "success": True,
@@ -140,6 +217,8 @@ async def crear_cliente(
 
     except Exception as e:
         print(f"❌ Error en registro: {e}")
+        import traceback
+        traceback.print_exc()
         db.rollback()
         return {"error": str(e), "success": False}
 
@@ -372,7 +451,7 @@ def eliminar_cliente(
     }
 
 # ============================================================
-# SUBIR FOTO
+# SUBIR FOTO (ENDPOINT SEPARADO)
 # ============================================================
 @router.post("/{id}/foto")
 async def subir_foto_cedula(
@@ -386,15 +465,24 @@ async def subir_foto_cedula(
     
     try:
         contenido = await cedula_foto.read()
-        url_cedula = await subir_imagen_cloudflare(contenido, f"cedula_{cliente.cedula}.jpg")
+        print(f"📸 Foto recibida: {len(contenido)} bytes, tipo: {cedula_foto.content_type}")
+        
+        if len(contenido) == 0:
+            return {"success": False, "error": "Archivo vacío"}
+        
+        url_cedula = await subir_imagen_cloudflare(contenido, f"cedula_{cliente.cedula}_{uuid.uuid4().hex[:8]}.jpg")
         
         if url_cedula:
             cliente.url_cedula = url_cedula
             db.commit()
+            print(f"✅ Foto guardada: {url_cedula}")
             return {"success": True, "url": url_cedula}
         else:
-            return {"success": False, "error": "No se pudo subir la imagen"}
+            return {"success": False, "error": "No se pudo subir la imagen a Cloudflare"}
     except Exception as e:
+        print(f"❌ Error subiendo foto: {e}")
+        import traceback
+        traceback.print_exc()
         return {"success": False, "error": str(e)}
 
 # ============================================================
@@ -451,22 +539,15 @@ def obtener_estado_cuenta(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
-    """
-    Obtiene el estado de cuenta completo de un cliente
-    Incluye: resumen financiero, financiamientos activos, historial de pagos
-    """
     try:
-        # Verificar que el cliente existe
         cliente = db.query(Cliente).filter(Cliente.id == id).first()
         if not cliente:
             raise HTTPException(status_code=404, detail="Cliente no encontrado")
         
-        # Obtener todos los financiamientos del cliente
         financiamientos = db.query(Financiamiento).filter(
             Financiamiento.cliente_id == id
         ).order_by(Financiamiento.id.desc()).all()
         
-        # Variables para resumen financiero
         total_financiado = 0
         total_pagado = 0
         total_deuda = 0
@@ -478,23 +559,18 @@ def obtener_estado_cuenta(
         financiamientos_atrasados = 0
         cuotas_con_deuda = 0
         
-        # Lista para financiamientos con detalles
         financiamientos_detalle = []
         hoy = datetime.now(timezone.utc)
         
         for fin in financiamientos:
-            # Obtener cuotas de este financiamiento
             cuotas = db.query(Cuota).filter(Cuota.financiamiento_id == fin.id).all()
             
-            # Contar cuotas por estado
             pagadas = [c for c in cuotas if c.estado == "pagada"]
             pendientes = [c for c in cuotas if c.estado != "pagada"]
             atrasadas = [c for c in cuotas if c.estado == "pendiente" and c.fecha_vencimiento and c.fecha_vencimiento < hoy]
             
-            # Calcular montos
             monto_financiado = fin.monto_total_bs or 0
             
-            # ✅ CORREGIDO: Calcular monto pagado correctamente (sin usar monto_pagado)
             monto_pagado = 0
             for c in pagadas:
                 if c.monto_total_bs:
@@ -506,7 +582,6 @@ def obtener_estado_cuenta(
                 else:
                     monto_pagado += 0
             
-            # Calcular deuda pendiente
             monto_deuda = 0
             for c in pendientes:
                 if c.monto_total_bs:
@@ -526,7 +601,6 @@ def obtener_estado_cuenta(
             cuotas_pendientes += len(pendientes)
             cuotas_con_deuda += len([c for c in pendientes if (c.monto_total_bs or 0) > 0 or (c.monto_base_bs or 0) > 0])
             
-            # Estado del financiamiento
             if fin.estado in ["activo", "aprobado"]:
                 financiamientos_activos += 1
                 if len(atrasadas) > 0:
@@ -534,12 +608,10 @@ def obtener_estado_cuenta(
             elif fin.estado == "completado":
                 financiamientos_completados += 1
             
-            # Fecha de creación
             fecha_creacion = None
             if fin.fecha_primera_cuota:
                 fecha_creacion = fin.fecha_primera_cuota.isoformat()
             
-            # Crear detalle del financiamiento
             financiamientos_detalle.append({
                 "id": fin.id,
                 "codigo": fin.codigo,
@@ -560,12 +632,10 @@ def obtener_estado_cuenta(
                 "nivel_aplicado": fin.nivel_aplicado
             })
         
-        # Calcular nivel y tasa
         nivel, config = calcular_nivel(cliente.score)
         tasa = obtener_tasa_actual(db)
         disponible = calcular_usado_disponible(cliente.id, db)
         
-        # Calcular porcentaje de cumplimiento
         porcentaje_cumplimiento = 0
         if total_cuotas > 0:
             porcentaje_cumplimiento = round((cuotas_pagadas / total_cuotas) * 100, 2)
@@ -582,7 +652,8 @@ def obtener_estado_cuenta(
                 "nivel": cliente.nivel,
                 "score": cliente.score,
                 "estado": cliente.estado,
-                "fecha_registro": cliente.fecha_creacion.isoformat() if cliente.fecha_creacion else None
+                "fecha_registro": cliente.fecha_creacion.isoformat() if cliente.fecha_creacion else None,
+                "url_cedula": cliente.url_cedula
             },
             "resumen_financiero": {
                 "total_financiado_bs": round(total_financiado, 2),
@@ -636,40 +707,25 @@ def calcular_propuesta_nivel(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
-    """
-    Calcula la propuesta de financiamiento basada en el nivel del cliente
-    y el monto solicitado en Bs
-    """
     try:
-        # Verificar que el cliente existe
         cliente = db.query(Cliente).filter(Cliente.id == id).first()
         if not cliente:
             raise HTTPException(status_code=404, detail="Cliente no encontrado")
         
-        # Obtener tasa actual
         tasa = obtener_tasa_actual(db)
-        
-        # Calcular nivel y configuración
         nivel, config = calcular_nivel(cliente.score)
-        
-        # Obtener disponible del cliente
         disponible = calcular_usado_disponible(cliente.id, db)
         
-        # Convertir monto a USD para validaciones
         monto_total_usd = monto_total_bs / tasa if tasa > 0 else 0
         
-        # Calcular límites
         limite_max_usd = config["monto_max_usd"]
         limite_max_bs = round(limite_max_usd * tasa, 2) if tasa > 0 else 0
         
-        # Verificar si el monto excede el límite
         excede_limite = monto_total_usd > limite_max_usd
         
-        # Verificar si tiene disponible
         disponible_usd = disponible.get("disponible_usd", 0) if isinstance(disponible, dict) else disponible
         disponible_bs = disponible_usd * tasa if tasa > 0 else 0
         
-        # Calcular entrada, financiamiento y cuotas
         entrada_pct = config["entrada_pct"]
         financia_pct = config["financia_pct"]
         
@@ -678,18 +734,14 @@ def calcular_propuesta_nivel(
         entrada_usd = entrada_bs / tasa if tasa > 0 else 0
         financia_usd = financia_bs / tasa if tasa > 0 else 0
         
-        # Calcular cuotas base y máximas
         cuotas_base = config["cuotas_base"]
         cuotas_max = config["cuotas_max"]
         
-        # Determinar si requiere aprobación extra
         requiere_aprobacion = config["aprobacion_extra"]
         
-        # Calcular monto de cuota base
         monto_cuota_base_bs = financia_bs / cuotas_base if cuotas_base > 0 else 0
         monto_cuota_base_usd = financia_usd / cuotas_base if cuotas_base > 0 else 0
         
-        # Calcular monto de cuota máxima
         monto_cuota_max_bs = financia_bs / cuotas_max if cuotas_max > 0 else 0
         monto_cuota_max_usd = financia_usd / cuotas_max if cuotas_max > 0 else 0
         
