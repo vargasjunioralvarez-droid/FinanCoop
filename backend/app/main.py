@@ -67,7 +67,7 @@ ALLOWED_ORIGINS = [
     "ionic://localhost",
     "http://localhost",
     "https://localhost",
-    "https://financash-frontend.onrender.com",
+    "https://financoop-frontend.onrender.com",
     "https://financash-backend.onrender.com",
     "https://financoop.onrender.com",
     "null",
