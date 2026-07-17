@@ -3,14 +3,14 @@ services:
   - type: web
     name: financash-backend
     runtime: python
-    rootDir: backend
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT  # ← CORREGIDO
+    # rootDir: backend  ← ELIMINA ESTA LÍNEA
+    buildCommand: cd backend && pip install -r requirements.txt
+    startCommand: cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: DATABASE_URL
         sync: false
       - key: FRONTEND_URL
-        value: https://financash-frontend.onrender.com  # ← CORREGIDO
+        value: https://financash-frontend.onrender.com
       - key: SECRET_KEY
         generateValue: true
       - key: PYTHON_VERSION
@@ -22,7 +22,7 @@ services:
       - key: JWT_EXPIRE_MINUTES
         value: "1440"
 
-  # FRONTEND - Vue.js con Vue Router (history mode)
+  # FRONTEND - Vue.js
   - type: web
     name: financash-frontend
     runtime: static
@@ -35,4 +35,4 @@ services:
         destination: /index.html
     envVars:
       - key: VITE_API_URL
-        value: https://financash-backend.onrender.com  # ← CORREGIDO
+        value: https://financash-backend.onrender.com
