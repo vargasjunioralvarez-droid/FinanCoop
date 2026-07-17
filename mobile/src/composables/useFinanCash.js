@@ -1,5 +1,6 @@
 // mobile/src/composables/useFinanCash.js
 import { ref, computed } from 'vue'
+import { CapacitorHttp } from '@capacitor/core'
 
 const API_URL = 'https://financoop.onrender.com'
 
@@ -251,7 +252,7 @@ function copiarAlPortapapeles(texto) {
   }
 }
 
-// ============ API CALLS CON fetch (CORREGIDO) ============
+// ============ API CALLS CON CapacitorHttp ============
 async function apiCall(endpoint, options = {}) {
   const url = `${API_URL}${endpoint}`
 
@@ -266,7 +267,6 @@ async function apiCall(endpoint, options = {}) {
     headers['Content-Type'] = 'application/json'
   }
 
-  // ✅ CORREGIDO: Enviar token para TODOS los endpoints que lo requieran
   const endpointsQueNecesitanToken = [
     '/app/', '/config/', '/upload/', '/clientes/', 
     '/financiamientos/', '/pagos/', '/admin/'
@@ -282,32 +282,31 @@ async function apiCall(endpoint, options = {}) {
   try {
     console.log(`🌐 API Call: ${options.method || 'GET'} ${url}`)
 
-    const fetchOptions = {
+    const httpOptions = {
       method: options.method || 'GET',
+      url: url,
       headers: headers,
     }
 
-    if (options.body && (options.method === 'POST' || options.method === 'PUT' || options.method === 'PATCH')) {
-      fetchOptions.body = options.body instanceof FormData 
-        ? options.body 
-        : JSON.stringify(options.body)
+    if (options.body) {
+      if (options.body instanceof FormData) {
+        const formDataObj = {}
+        options.body.forEach((value, key) => {
+          formDataObj[key] = value
+        })
+        httpOptions.data = formDataObj
+      } else {
+        httpOptions.data = options.body
+      }
     }
 
-    const response = await fetch(url, fetchOptions)
-
-    let data = {}
-    const contentType = response.headers.get('content-type')
-    if (contentType && contentType.includes('application/json')) {
-      data = await response.json()
-    } else {
-      const text = await response.text()
-      console.log('📥 Respuesta no-JSON:', text.substring(0, 200))
-      data = { error: text || `HTTP ${response.status}` }
-    }
+    const response = await CapacitorHttp.request(httpOptions)
 
     console.log(`✅ Response status: ${response.status}`)
 
-    if (!response.ok) {
+    const data = response.data || {}
+
+    if (response.status < 200 || response.status >= 300) {
       const errorMsg = data?.detail || data?.error || `HTTP ${response.status}`
       throw new Error(errorMsg)
     }
@@ -586,9 +585,8 @@ function recalcularMontosConNuevaTasa(nuevaTasa) {
   })
 }
 
-// ============ PAGOS (CORREGIDO) ============
+// ============ PAGOS ============
 async function reportarPago(payload = null) {
-  // Si se pasa payload, usar ese (desde PagarView)
   if (payload) {
     console.log('📤 Reportando pago con payload:', payload)
     cargandoPago.value = true
@@ -608,7 +606,6 @@ async function reportarPago(payload = null) {
         return false
       }
       
-      // Limpiar formulario
       pagoForm.value = {
         metodo: 'pago_movil',
         referencia: '',
@@ -626,14 +623,12 @@ async function reportarPago(payload = null) {
       
     } catch (err) {
       console.error('❌ Error reportando pago:', err)
-      const errorDetail = err.response?.data?.detail || err.message || 'Error desconocido'
-      error.value = typeof errorDetail === 'object' ? JSON.stringify(errorDetail) : errorDetail
+      error.value = err.message || 'Error desconocido'
       cargandoPago.value = false
       return false
     }
   }
   
-  // Método antiguo (sin payload) - mantener para compatibilidad
   if (!cuotaSeleccionada.value) {
     error.value = 'No hay cuota seleccionada'
     return false
