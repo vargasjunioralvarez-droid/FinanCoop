@@ -68,7 +68,7 @@ ALLOWED_ORIGINS = [
     "http://localhost",
     "https://localhost",
     "https://financoop-frontend.onrender.com",
-    "https://financash-backend.onrender.com",
+    "https://financoop-backend.onrender.com",
     "https://financoop.onrender.com",
     "null",
     "",
