@@ -16,7 +16,7 @@ services:
       - key: PYTHON_VERSION
         value: 3.11.0
 
-  # FRONTEND - Vue.js
+  # FRONTEND - Vue.js con Vue Router
   - type: web
     name: financash-frontend
     runtime: static
