@@ -106,7 +106,6 @@ async def crear_cliente(
         if existe:
             raise HTTPException(status_code=409, detail=f"Cliente con cédula {cedula} ya existe")
 
-        # Subir foto
         url_cedula = None
         if cedula_foto and cedula_foto.size and cedula_foto.size > 0:
             try:
@@ -124,7 +123,6 @@ async def crear_cliente(
         pin_generado = generar_pin()
         pin_hasheado = hash_pin(pin_generado)
 
-        # 🔥 ASIGNAR TIENDA DEL USUARIO ACTUAL
         tienda_id = None
         if hasattr(current_user, 'tienda_id') and current_user.tienda_id:
             tienda_id = current_user.tienda_id
@@ -244,14 +242,18 @@ async def crear_cliente_json(
         raise HTTPException(status_code=500, detail=str(e))
 
 # ============================================================
-# APROBAR CLIENTE
+# APROBAR CLIENTE (SOLO admin_central)
 # ============================================================
 @router.post("/aprobar")
 async def aprobar_cliente(
     data: ClienteAprobar,
     db: Session = Depends(get_db),
-    current_admin = Depends(get_current_admin)
+    current_user = Depends(get_current_admin)
 ):
+    # 🔥 SOLO admin_central puede aprobar clientes
+    if current_user.rol != "admin_central":
+        raise HTTPException(status_code=403, detail="Solo el administrador central puede aprobar clientes")
+    
     try:
         cliente = db.query(Cliente).filter(Cliente.id == data.cliente_id).first()
         if not cliente:
@@ -307,7 +309,6 @@ def listar_clientes(
 ):
     query = db.query(Cliente)
     
-    # 🔥 FILTRO POR TIENDA
     if tienda_id:
         query = query.filter(Cliente.tienda_id == tienda_id)
     
@@ -376,7 +377,7 @@ def obtener_cliente(
     }
 
 # ============================================================
-# ACTUALIZAR CLIENTE
+# ACTUALIZAR CLIENTE (SOLO admin_central)
 # ============================================================
 @router.put("/{id}")
 def actualizar_cliente(
@@ -385,6 +386,10 @@ def actualizar_cliente(
     db: Session = Depends(get_db),
     current_admin = Depends(get_current_admin)
 ):
+    # 🔥 SOLO admin_central
+    if current_admin.rol != "admin_central":
+        raise HTTPException(status_code=403, detail="Solo el administrador central puede editar clientes")
+    
     cliente = db.query(Cliente).filter(Cliente.id == id).first()
     if not cliente:
         raise HTTPException(status_code=404, detail="Cliente no encontrado")
@@ -415,7 +420,7 @@ def actualizar_cliente(
     }
 
 # ============================================================
-# ELIMINAR CLIENTE
+# ELIMINAR CLIENTE (SOLO admin_central)
 # ============================================================
 @router.delete("/{id}")
 def eliminar_cliente(
@@ -423,6 +428,10 @@ def eliminar_cliente(
     db: Session = Depends(get_db),
     current_admin = Depends(get_current_admin)
 ):
+    # 🔥 SOLO admin_central
+    if current_admin.rol != "admin_central":
+        raise HTTPException(status_code=403, detail="Solo el administrador central puede eliminar clientes")
+    
     cliente = db.query(Cliente).filter(Cliente.id == id).first()
     if not cliente:
         raise HTTPException(status_code=404, detail="Cliente no encontrado")
@@ -441,7 +450,7 @@ def eliminar_cliente(
     return {"success": True, "mensaje": f"Cliente {nombre} eliminado"}
 
 # ============================================================
-# BUSCAR CLIENTE POR CÉDULA (SIN FILTRO TIENDA - VISIBLE PARA TODOS)
+# BUSCAR CLIENTE POR CÉDULA (TODOS PUEDEN BUSCAR)
 # ============================================================
 @router.get("/buscar/{cedula}")
 def buscar_cliente_por_cedula(cedula: str, db: Session = Depends(get_db)):

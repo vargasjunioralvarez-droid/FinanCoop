@@ -20,7 +20,7 @@ class UsuarioCreate(BaseModel):
     password: str
     nombre: Optional[str] = None
     email: Optional[str] = None
-    rol: str = "usuario"  # "admin", "tienda", "cajero"
+    rol: str = "cajero"
     activo: bool = True
     tienda_id: Optional[int] = None
 
@@ -52,9 +52,8 @@ def dashboard(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin)
 ):
-    """Panel de control con estadísticas. Admin ve todo, tienda ve solo lo suyo."""
     try:
-        tienda_id = None if current_user.rol == "admin" else current_user.tienda_id
+        tienda_id = None if current_user.rol == "admin_central" else current_user.tienda_id
         
         query_clientes = db.query(Cliente)
         query_financiamientos = db.query(Financiamiento)
@@ -84,16 +83,15 @@ def dashboard(
         raise HTTPException(status_code=500, detail=str(e))
 
 # ============================================================
-# CRUD TIENDAS (SOLO ADMIN CENTRAL)
+# CRUD TIENDAS (SOLO admin_central)
 # ============================================================
 @router.get("/tiendas")
 def listar_tiendas(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin)
 ):
-    """Listar tiendas. Solo admin central."""
-    if current_user.rol != "admin":
-        raise HTTPException(status_code=403, detail="Solo administrador central")
+    if current_user.rol != "admin_central":
+        raise HTTPException(status_code=403, detail="Solo el administrador central puede gestionar tiendas")
     
     tiendas = db.query(Tienda).order_by(Tienda.nombre).all()
     return [
@@ -117,9 +115,8 @@ def crear_tienda(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin)
 ):
-    """Crear nueva tienda. Solo admin central."""
-    if current_user.rol != "admin":
-        raise HTTPException(status_code=403, detail="Solo administrador central")
+    if current_user.rol != "admin_central":
+        raise HTTPException(status_code=403, detail="Solo el administrador central puede crear tiendas")
     
     existe = db.query(Tienda).filter(Tienda.codigo == data.codigo).first()
     if existe:
@@ -145,9 +142,8 @@ def actualizar_tienda(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin)
 ):
-    """Actualizar tienda. Solo admin central."""
-    if current_user.rol != "admin":
-        raise HTTPException(status_code=403, detail="Solo administrador central")
+    if current_user.rol != "admin_central":
+        raise HTTPException(status_code=403, detail="Solo el administrador central")
     
     tienda = db.query(Tienda).filter(Tienda.id == id).first()
     if not tienda:
@@ -166,7 +162,7 @@ def actualizar_tienda(
     return {"success": True, "mensaje": "Tienda actualizada"}
 
 # ============================================================
-# LISTAR USUARIOS
+# LISTAR USUARIOS (admin_central ve todos, otros ven solo su tienda)
 # ============================================================
 @router.get("/usuarios")
 def listar_usuarios(
@@ -175,11 +171,10 @@ def listar_usuarios(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin)
 ):
-    """Listar usuarios. Admin ve todos, tienda ve solo los de su tienda."""
     try:
         query = db.query(Usuario)
         
-        if current_user.rol != "admin":
+        if current_user.rol != "admin_central":
             query = query.filter(
                 (Usuario.tienda_id == current_user.tienda_id) | 
                 (Usuario.id == current_user.id)
@@ -212,13 +207,18 @@ def listar_usuarios(
         logger.error(f"❌ Error listando usuarios: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# ============================================================
+# CREAR USUARIO (SOLO admin_central)
+# ============================================================
 @router.post("/usuarios")
 def crear_usuario(
     usuario_data: UsuarioCreate,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin)
 ):
-    """Crear usuario. Admin crea cualquier rol, tienda solo crea cajeros para su tienda."""
+    if current_user.rol != "admin_central":
+        raise HTTPException(status_code=403, detail="Solo el administrador central puede crear usuarios")
+    
     try:
         existe = db.query(Usuario).filter(Usuario.username == usuario_data.username).first()
         if existe:
@@ -227,14 +227,7 @@ def crear_usuario(
         if len(usuario_data.password) < 8:
             raise HTTPException(status_code=400, detail="La contraseña debe tener al menos 8 caracteres")
         
-        # Si el creador es tienda, forzar tienda_id y rol limitado
-        tienda_id = usuario_data.tienda_id
-        rol = usuario_data.rol
-        
-        if current_user.rol == "tienda":
-            tienda_id = current_user.tienda_id
-            if rol not in ["cajero", "tienda"]:
-                rol = "cajero"
+        tienda_id = usuario_data.tienda_id if usuario_data.rol != "admin_central" else None
         
         if tienda_id:
             tienda = db.query(Tienda).filter(Tienda.id == tienda_id).first()
@@ -246,7 +239,7 @@ def crear_usuario(
             password=hash_password(usuario_data.password),
             nombre=usuario_data.nombre,
             email=usuario_data.email,
-            rol=rol,
+            rol=usuario_data.rol,
             activo=usuario_data.activo,
             tienda_id=tienda_id,
             creado_por=current_user.username
@@ -273,6 +266,9 @@ def crear_usuario(
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
+# ============================================================
+# ACTUALIZAR USUARIO (SOLO admin_central)
+# ============================================================
 @router.put("/usuarios/{id}")
 def actualizar_usuario(
     id: int,
@@ -280,16 +276,13 @@ def actualizar_usuario(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin)
 ):
-    """Actualizar usuario."""
+    if current_user.rol != "admin_central":
+        raise HTTPException(status_code=403, detail="Solo el administrador central puede modificar usuarios")
+    
     try:
         usuario = db.query(Usuario).filter(Usuario.id == id).first()
         if not usuario:
             raise HTTPException(status_code=404, detail="Usuario no encontrado")
-        
-        # Tienda no puede modificar admins ni otras tiendas
-        if current_user.rol == "tienda":
-            if usuario.tienda_id != current_user.tienda_id and usuario.id != current_user.id:
-                raise HTTPException(status_code=403, detail="No puedes modificar usuarios de otra tienda")
         
         if usuario_data.password:
             if len(usuario_data.password) < 8:
@@ -299,12 +292,12 @@ def actualizar_usuario(
             usuario.nombre = usuario_data.nombre
         if usuario_data.email is not None:
             usuario.email = usuario_data.email
-        if usuario_data.rol is not None and current_user.rol == "admin":
+        if usuario_data.rol is not None:
             usuario.rol = usuario_data.rol
         if usuario_data.activo is not None:
             usuario.activo = usuario_data.activo
-        if usuario_data.tienda_id is not None and current_user.rol == "admin":
-            usuario.tienda_id = usuario_data.tienda_id
+        if usuario_data.tienda_id is not None:
+            usuario.tienda_id = usuario_data.tienda_id if usuario_data.rol != "admin_central" else None
         
         db.commit()
         db.refresh(usuario)
@@ -317,13 +310,18 @@ def actualizar_usuario(
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
+# ============================================================
+# ELIMINAR USUARIO (SOLO admin_central)
+# ============================================================
 @router.delete("/usuarios/{id}")
 def eliminar_usuario(
     id: int,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin)
 ):
-    """Eliminar usuario."""
+    if current_user.rol != "admin_central":
+        raise HTTPException(status_code=403, detail="Solo el administrador central puede eliminar usuarios")
+    
     try:
         usuario = db.query(Usuario).filter(Usuario.id == id).first()
         if not usuario:
@@ -331,9 +329,6 @@ def eliminar_usuario(
         
         if usuario.id == current_user.id:
             raise HTTPException(status_code=403, detail="No puedes eliminar tu propio usuario")
-        
-        if current_user.rol == "tienda" and usuario.tienda_id != current_user.tienda_id:
-            raise HTTPException(status_code=403, detail="No puedes eliminar usuarios de otra tienda")
         
         db.delete(usuario)
         db.commit()
@@ -347,18 +342,17 @@ def eliminar_usuario(
         raise HTTPException(status_code=500, detail=str(e))
 
 # ============================================================
-# CLIENTES PENDIENTES (FILTRADO POR TIENDA)
+# CLIENTES PENDIENTES
 # ============================================================
 @router.get("/clientes/pendientes")
 def clientes_pendientes(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin)
 ):
-    """Clientes pendientes de aprobación. Filtrado por tienda."""
     try:
         query = db.query(Cliente).filter(Cliente.estado == "pendiente")
         
-        if current_user.rol != "admin" and current_user.tienda_id:
+        if current_user.rol != "admin_central" and current_user.tienda_id:
             query = query.filter(Cliente.tienda_id == current_user.tienda_id)
         
         clientes = query.order_by(Cliente.creado_en.desc()).all()
@@ -384,21 +378,20 @@ def clientes_pendientes(
         raise HTTPException(status_code=500, detail=str(e))
 
 # ============================================================
-# FINANCIAMIENTOS PENDIENTES (FILTRADO POR TIENDA)
+# FINANCIAMIENTOS PENDIENTES
 # ============================================================
 @router.get("/financiamientos/pendientes")
 def financiamientos_pendientes(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin)
 ):
-    """Financiamientos que requieren aprobación extra."""
     try:
         query = db.query(Financiamiento).filter(
             Financiamiento.requiere_aprobacion == True,
             Financiamiento.estado == "activo"
         )
         
-        if current_user.rol != "admin" and current_user.tienda_id:
+        if current_user.rol != "admin_central" and current_user.tienda_id:
             query = query.filter(Financiamiento.tienda_id == current_user.tienda_id)
         
         fins = query.order_by(Financiamiento.creado_en.desc()).all()
@@ -424,16 +417,15 @@ def financiamientos_pendientes(
         raise HTTPException(status_code=500, detail=str(e))
 
 # ============================================================
-# REPORTES (FILTRADO POR TIENDA)
+# REPORTES
 # ============================================================
 @router.get("/reportes")
 def reportes(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin)
 ):
-    """Reportes del sistema. Filtrado por tienda."""
     try:
-        tienda_id = None if current_user.rol == "admin" else current_user.tienda_id
+        tienda_id = None if current_user.rol == "admin_central" else current_user.tienda_id
         
         q_clientes = db.query(Cliente)
         q_creditos = db.query(Financiamiento)
