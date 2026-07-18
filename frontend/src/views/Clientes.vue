@@ -699,7 +699,7 @@ const cargarTodos = async () => {
   cargando.value = true
   try {
     const data = await api.get('/clientes')
-    clientes.value = data
+clientes.value = data.clientes || data  // Soporta ambas respuestas
     cargarSolicitudesLocales()
   } catch (e) {
     console.error('Error cargando clientes:', e)

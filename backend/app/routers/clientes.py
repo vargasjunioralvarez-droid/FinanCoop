@@ -10,7 +10,7 @@ from app.utils import (
     calcular_usado_disponible, obtener_tasa_actual, generar_token,
     enviar_pin_cliente_completo
 )
-from app.auth import get_current_admin, get_current_user, hash_pin
+from app.auth import get_current_admin, get_current_user, get_current_tienda, hash_pin
 from datetime import datetime, timezone
 import httpx
 import os
@@ -51,7 +51,6 @@ CLOUDFLARE_API_TOKEN = os.getenv("CLOUDFLARE_API_TOKEN", "")
 
 async def subir_imagen_cloudflare(archivo_bytes: bytes, nombre_archivo: str) -> Optional[str]:
     if not CLOUDFLARE_ACCOUNT_ID or not CLOUDFLARE_API_TOKEN:
-        logger.warning("Cloudflare no configurado")
         return None
     try:
         url = f"https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/images/v1"
@@ -70,7 +69,7 @@ async def subir_imagen_cloudflare(archivo_bytes: bytes, nombre_archivo: str) -> 
                         return f"https://imagedelivery.net/{CLOUDFLARE_ACCOUNT_ID}/{image_id}/public"
             return None
     except Exception as e:
-        logger.error(f"Error subiendo a Cloudflare: {e}")
+        logger.error(f"Error Cloudflare: {e}")
         return None
 
 async def subir_imagen_cloudflare_base64(base64_string: str, nombre_archivo: str) -> Optional[str]:
@@ -79,12 +78,11 @@ async def subir_imagen_cloudflare_base64(base64_string: str, nombre_archivo: str
             base64_string = base64_string.split(',')[1]
         archivo_bytes = base64.b64decode(base64_string)
         return await subir_imagen_cloudflare(archivo_bytes, nombre_archivo)
-    except Exception as e:
-        logger.error(f"Error decodificando base64: {e}")
+    except:
         return None
 
 # ============================================================
-# ✅ CREAR CLIENTE (PIN HASHEADO)
+# ✅ CREAR CLIENTE (CON TIENDA AUTOMÁTICA)
 # ============================================================
 @router.post("")
 async def crear_cliente(
@@ -98,7 +96,8 @@ async def crear_cliente(
     referencia_parentesco: Optional[str] = Form(""),
     cedula_foto: Optional[UploadFile] = File(None),
     cedula_foto_base64: Optional[str] = Form(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
 ):
     try:
         logger.info(f"📝 Registrando cliente: {cedula}")
@@ -107,22 +106,28 @@ async def crear_cliente(
         if existe:
             raise HTTPException(status_code=409, detail=f"Cliente con cédula {cedula} ya existe")
 
+        # Subir foto
         url_cedula = None
         if cedula_foto and cedula_foto.size and cedula_foto.size > 0:
             try:
                 contenido = await cedula_foto.read()
                 if len(contenido) > 0:
                     url_cedula = await subir_imagen_cloudflare(contenido, f"cedula_{cedula}_{uuid.uuid4().hex[:8]}.jpg")
-            except Exception as e:
-                logger.warning(f"Error procesando foto: {e}")
+            except:
+                pass
         elif cedula_foto_base64 and len(cedula_foto_base64) > 100:
             try:
                 url_cedula = await subir_imagen_cloudflare_base64(cedula_foto_base64, f"cedula_{cedula}_{uuid.uuid4().hex[:8]}.jpg")
-            except Exception as e:
-                logger.warning(f"Error procesando foto base64: {e}")
+            except:
+                pass
 
         pin_generado = generar_pin()
         pin_hasheado = hash_pin(pin_generado)
+
+        # 🔥 ASIGNAR TIENDA DEL USUARIO ACTUAL
+        tienda_id = None
+        if hasattr(current_user, 'tienda_id') and current_user.tienda_id:
+            tienda_id = current_user.tienda_id
 
         db_cliente = Cliente(
             nombre=nombre,
@@ -139,14 +144,15 @@ async def crear_cliente(
             token_app=generar_token(),
             estado="pendiente",
             nivel="nuevo",
-            score=0
+            score=0,
+            tienda_id=tienda_id
         )
         
         db.add(db_cliente)
         db.commit()
         db.refresh(db_cliente)
 
-        logger.info(f"✅ Cliente registrado (PENDIENTE): ID {db_cliente.id} - {db_cliente.nombre}")
+        logger.info(f"✅ Cliente registrado: ID {db_cliente.id} - Tienda: {tienda_id}")
 
         return {
             "success": True,
@@ -160,6 +166,7 @@ async def crear_cliente(
                 "telefono": db_cliente.telefono,
                 "email": db_cliente.email,
                 "estado": "pendiente",
+                "tienda_id": tienda_id,
                 "url_cedula": url_cedula
             }
         }
@@ -172,12 +179,13 @@ async def crear_cliente(
         raise HTTPException(status_code=500, detail=str(e))
 
 # ============================================================
-# CREAR CLIENTE VIA JSON (BACKUP)
+# CREAR CLIENTE VIA JSON
 # ============================================================
 @router.post("/json")
 async def crear_cliente_json(
     cliente_data: ClienteCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
 ):
     try:
         logger.info(f"📝 Registrando cliente (JSON): {cliente_data.cedula}")
@@ -188,6 +196,10 @@ async def crear_cliente_json(
 
         pin_generado = generar_pin()
         pin_hasheado = hash_pin(pin_generado)
+
+        tienda_id = None
+        if hasattr(current_user, 'tienda_id') and current_user.tienda_id:
+            tienda_id = current_user.tienda_id
 
         db_cliente = Cliente(
             nombre=cliente_data.nombre,
@@ -203,25 +215,25 @@ async def crear_cliente_json(
             token_app=generar_token(),
             estado="pendiente",
             nivel="nuevo",
-            score=0
+            score=0,
+            tienda_id=tienda_id
         )
         
         db.add(db_cliente)
         db.commit()
         db.refresh(db_cliente)
 
-        logger.info(f"✅ Cliente registrado (JSON): ID {db_cliente.id}")
-
         return {
             "success": True,
             "id": db_cliente.id,
-            "mensaje": "Registro exitoso. Tu cuenta está en verificación.",
+            "mensaje": "Registro exitoso.",
             "pin": pin_generado,
             "cliente": {
                 "id": db_cliente.id,
                 "nombre": db_cliente.nombre,
                 "cedula": db_cliente.cedula,
-                "estado": "pendiente"
+                "estado": "pendiente",
+                "tienda_id": tienda_id
             }
         }
 
@@ -232,7 +244,7 @@ async def crear_cliente_json(
         raise HTTPException(status_code=500, detail=str(e))
 
 # ============================================================
-# APROBAR CLIENTE Y ENVIAR PIN
+# APROBAR CLIENTE
 # ============================================================
 @router.post("/aprobar")
 async def aprobar_cliente(
@@ -261,8 +273,6 @@ async def aprobar_cliente(
             pin=pin_generado
         )
         
-        logger.info(f"✅ Cliente aprobado: {cliente.nombre}")
-        
         return {
             "success": True,
             "mensaje": f"Cliente {cliente.nombre} aprobado.",
@@ -284,7 +294,7 @@ async def aprobar_cliente(
         raise HTTPException(status_code=500, detail=str(e))
 
 # ============================================================
-# LISTAR CLIENTES (CON PAGINACIÓN)
+# LISTAR CLIENTES (CON FILTRO POR TIENDA)
 # ============================================================
 @router.get("")
 def listar_clientes(
@@ -292,9 +302,14 @@ def listar_clientes(
     limit: int = Query(50, ge=1, le=100),
     estado: Optional[str] = None,
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user)
+    current_user = Depends(get_current_user),
+    tienda_id: Optional[int] = Depends(get_current_tienda)
 ):
     query = db.query(Cliente)
+    
+    # 🔥 FILTRO POR TIENDA
+    if tienda_id:
+        query = query.filter(Cliente.tienda_id == tienda_id)
     
     if estado:
         query = query.filter(Cliente.estado == estado)
@@ -306,6 +321,7 @@ def listar_clientes(
         "total": total,
         "skip": skip,
         "limit": limit,
+        "tienda_filtro": tienda_id,
         "clientes": [
             {
                 "id": c.id,
@@ -318,6 +334,8 @@ def listar_clientes(
                 "score": c.score,
                 "estado": c.estado or "pendiente",
                 "url_cedula": c.url_cedula,
+                "tienda_id": c.tienda_id,
+                "tienda_nombre": c.tienda.nombre if c.tienda else None,
                 "ultimo_acceso": c.ultimo_acceso.isoformat() if c.ultimo_acceso else None,
                 "creado_en": c.creado_en.isoformat() if c.creado_en else None
             }
@@ -353,8 +371,8 @@ def obtener_cliente(
         "total_compras": cliente.total_compras,
         "url_cedula": cliente.url_cedula,
         "estado": cliente.estado or "pendiente",
-        "ultimo_acceso": cliente.ultimo_acceso.isoformat() if cliente.ultimo_acceso else None,
-        "creado_en": cliente.creado_en.isoformat() if cliente.creado_en else None
+        "tienda_id": cliente.tienda_id,
+        "tienda_nombre": cliente.tienda.nombre if cliente.tienda else None
     }
 
 # ============================================================
@@ -411,7 +429,6 @@ def eliminar_cliente(
     
     nombre = cliente.nombre
     
-    # Eliminar en cascada
     financiamientos = db.query(Financiamiento).filter(Financiamiento.cliente_id == id).all()
     for fin in financiamientos:
         db.query(Pago).filter(Pago.financiamiento_id == fin.id).delete(synchronize_session=False)
@@ -421,47 +438,10 @@ def eliminar_cliente(
     db.delete(cliente)
     db.commit()
     
-    logger.info(f"🗑️ Cliente eliminado: {nombre} (ID: {id})")
-    
-    return {
-        "success": True,
-        "mensaje": f"Cliente {nombre} eliminado correctamente"
-    }
+    return {"success": True, "mensaje": f"Cliente {nombre} eliminado"}
 
 # ============================================================
-# SUBIR FOTO CÉDULA
-# ============================================================
-@router.post("/{id}/foto")
-async def subir_foto_cedula(
-    id: int,
-    cedula_foto: UploadFile = File(...),
-    db: Session = Depends(get_db)
-):
-    cliente = db.query(Cliente).filter(Cliente.id == id).first()
-    if not cliente:
-        raise HTTPException(status_code=404, detail="Cliente no encontrado")
-    
-    try:
-        contenido = await cedula_foto.read()
-        if len(contenido) == 0:
-            raise HTTPException(status_code=400, detail="Archivo vacío")
-        
-        url_cedula = await subir_imagen_cloudflare(contenido, f"cedula_{cliente.cedula}_{uuid.uuid4().hex[:8]}.jpg")
-        
-        if url_cedula:
-            cliente.url_cedula = url_cedula
-            db.commit()
-            return {"success": True, "url": url_cedula}
-        else:
-            raise HTTPException(status_code=500, detail="No se pudo subir la imagen")
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"❌ Error subiendo foto: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-# ============================================================
-# BUSCAR CLIENTE POR CÉDULA
+# BUSCAR CLIENTE POR CÉDULA (SIN FILTRO TIENDA - VISIBLE PARA TODOS)
 # ============================================================
 @router.get("/buscar/{cedula}")
 def buscar_cliente_por_cedula(cedula: str, db: Session = Depends(get_db)):
@@ -484,14 +464,13 @@ def buscar_cliente_por_cedula(cedula: str, db: Session = Depends(get_db)):
         "telefono": cliente.telefono,
         "email": cliente.email,
         "direccion": cliente.direccion,
-        "referencia_nombre": cliente.referencia_nombre,
-        "referencia_telefono": cliente.referencia_telefono,
-        "referencia_parentesco": cliente.referencia_parentesco,
         "score": cliente.score,
         "nivel": cliente.nivel,
         "total_compras": cliente.total_compras,
         "url_cedula": cliente.url_cedula,
         "estado": cliente.estado or "pendiente",
+        "tienda_id": cliente.tienda_id,
+        "tienda_nombre": cliente.tienda.nombre if cliente.tienda else None,
         "limite_disponible": disponible,
         "nivel_config": {
             "monto_max_usd": config["monto_max_usd"],
@@ -506,7 +485,7 @@ def buscar_cliente_por_cedula(cedula: str, db: Session = Depends(get_db)):
     }
 
 # ============================================================
-# OBTENER ESTADO DE CUENTA DEL CLIENTE
+# ESTADO DE CUENTA
 # ============================================================
 @router.get("/{id}/estado-cuenta")
 def obtener_estado_cuenta(
@@ -529,19 +508,14 @@ def obtener_estado_cuenta(
         total_cuotas = 0
         cuotas_pagadas = 0
         cuotas_pendientes = 0
-        financiamientos_activos = 0
-        financiamientos_completados = 0
-        financiamientos_atrasados = 0
         
         financiamientos_detalle = []
         hoy = datetime.now(timezone.utc)
         
         for fin in financiamientos:
             cuotas = db.query(Cuota).filter(Cuota.financiamiento_id == fin.id).all()
-            
             pagadas = [c for c in cuotas if c.estado == "pagada"]
             pendientes = [c for c in cuotas if c.estado != "pagada"]
-            atrasadas = [c for c in cuotas if c.estado == "pendiente" and c.fecha_vencimiento and c.fecha_vencimiento < hoy]
             
             monto_financiado = fin.monto_total_bs or 0
             monto_pagado = sum(c.monto_total_bs or c.monto or c.monto_base_bs or 0 for c in pagadas)
@@ -554,31 +528,19 @@ def obtener_estado_cuenta(
             cuotas_pagadas += len(pagadas)
             cuotas_pendientes += len(pendientes)
             
-            if fin.estado in ["activo", "aprobado"]:
-                financiamientos_activos += 1
-                if len(atrasadas) > 0:
-                    financiamientos_atrasados += 1
-            elif fin.estado == "completado":
-                financiamientos_completados += 1
-            
             financiamientos_detalle.append({
                 "id": fin.id,
                 "codigo": fin.codigo,
                 "monto_total_bs": round(monto_financiado, 2),
-                "monto_total_usd": round(fin.monto_total_usd or 0, 2),
                 "monto_pagado_bs": round(monto_pagado, 2),
                 "deuda_restante_bs": round(monto_deuda, 2),
                 "estado": fin.estado,
                 "cuotas_totales": len(cuotas),
                 "cuotas_pagadas": len(pagadas),
                 "cuotas_pendientes": len(pendientes),
-                "cuotas_atrasadas": len(atrasadas),
+                "tienda_nombre": fin.tienda.nombre if fin.tienda else None,
                 "descripcion": fin.descripcion or ""
             })
-        
-        nivel, config = calcular_nivel(cliente.score)
-        tasa = obtener_tasa_actual(db)
-        disponible = calcular_usado_disponible(cliente.id, db)
         
         porcentaje_cumplimiento = round((cuotas_pagadas / total_cuotas) * 100, 2) if total_cuotas > 0 else 0
         
@@ -588,11 +550,10 @@ def obtener_estado_cuenta(
                 "id": cliente.id,
                 "nombre": cliente.nombre,
                 "cedula": cliente.cedula,
-                "telefono": cliente.telefono,
-                "email": cliente.email,
                 "nivel": cliente.nivel,
                 "score": cliente.score,
-                "estado": cliente.estado
+                "estado": cliente.estado,
+                "tienda_nombre": cliente.tienda.nombre if cliente.tienda else None
             },
             "resumen_financiero": {
                 "total_financiado_bs": round(total_financiado, 2),
@@ -601,24 +562,20 @@ def obtener_estado_cuenta(
                 "total_cuotas": total_cuotas,
                 "cuotas_pagadas": cuotas_pagadas,
                 "cuotas_pendientes": cuotas_pendientes,
-                "porcentaje_cumplimiento": porcentaje_cumplimiento,
-                "financiamientos_activos": financiamientos_activos,
-                "financiamientos_completados": financiamientos_completados,
-                "financiamientos_atrasados": financiamientos_atrasados
+                "porcentaje_cumplimiento": porcentaje_cumplimiento
             },
             "financiamientos": financiamientos_detalle[:10],
-            "tasa_dolar_actual": tasa,
             "fecha_consulta": datetime.now(timezone.utc).isoformat()
         }
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"❌ Error obteniendo estado de cuenta: {e}")
-        raise HTTPException(status_code=500, detail=f"Error al obtener estado de cuenta: {str(e)}")
+        logger.error(f"❌ Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ============================================================
-# CALCULAR PROPUESTA DE NIVEL Y FINANCIAMIENTO
+# PROPUESTA DE NIVEL
 # ============================================================
 @router.get("/{id}/nivel-propuesta")
 def calcular_propuesta_nivel(
@@ -638,75 +595,36 @@ def calcular_propuesta_nivel(
         
         monto_total_usd = monto_total_bs / tasa if tasa > 0 else 0
         limite_max_usd = config["monto_max_usd"]
-        limite_max_bs = round(limite_max_usd * tasa, 2) if tasa > 0 else 0
-        excede_limite = monto_total_usd > limite_max_usd
         
-        disponible_usd = disponible.get("disponible_usd", 0) if isinstance(disponible, dict) else disponible
-        disponible_bs = disponible_usd * tasa if tasa > 0 else 0
-        
-        entrada_pct = config["entrada_pct"]
-        financia_pct = config["financia_pct"]
-        
-        entrada_bs = monto_total_bs * (entrada_pct / 100)
+        entrada_bs = monto_total_bs * (config["entrada_pct"] / 100)
         financia_bs = monto_total_bs - entrada_bs
-        entrada_usd = entrada_bs / tasa if tasa > 0 else 0
-        financia_usd = financia_bs / tasa if tasa > 0 else 0
-        
-        cuotas_base = config["cuotas_base"]
-        cuotas_max = config["cuotas_max"]
-        requiere_aprobacion = config["aprobacion_extra"]
-        
-        monto_cuota_base_bs = financia_bs / cuotas_base if cuotas_base > 0 else 0
-        monto_cuota_base_usd = financia_usd / cuotas_base if cuotas_base > 0 else 0
-        monto_cuota_max_bs = financia_bs / cuotas_max if cuotas_max > 0 else 0
-        monto_cuota_max_usd = financia_usd / cuotas_max if cuotas_max > 0 else 0
         
         return {
             "success": True,
             "cliente": {
                 "id": cliente.id,
                 "nombre": cliente.nombre,
-                "cedula": cliente.cedula,
                 "nivel": cliente.nivel,
                 "score": cliente.score
             },
             "propuesta": {
                 "monto_solicitado_bs": round(monto_total_bs, 2),
                 "monto_solicitado_usd": round(monto_total_usd, 2),
-                "limite_maximo_bs": limite_max_bs,
                 "limite_maximo_usd": limite_max_usd,
-                "disponible_bs": round(disponible_bs, 2),
-                "disponible_usd": round(disponible_usd, 2),
-                "excede_limite": excede_limite,
+                "disponible_usd": disponible.get("disponible_usd", 0),
                 "entrada_bs": round(entrada_bs, 2),
-                "entrada_usd": round(entrada_usd, 2),
-                "entrada_pct": entrada_pct,
-                "financia_bs": round(financia_bs, 2),
-                "financia_usd": round(financia_usd, 2),
-                "financia_pct": financia_pct,
-                "cuotas_base": cuotas_base,
-                "cuotas_max": cuotas_max,
-                "monto_cuota_base_bs": round(monto_cuota_base_bs, 2),
-                "monto_cuota_max_bs": round(monto_cuota_max_bs, 2),
-                "requiere_aprobacion_extra": requiere_aprobacion
-            },
-            "configuracion_nivel": {
-                "min_score": config["min_score"],
-                "max_score": config["max_score"],
-                "monto_max_usd": config["monto_max_usd"],
                 "entrada_pct": config["entrada_pct"],
+                "financia_bs": round(financia_bs, 2),
                 "financia_pct": config["financia_pct"],
                 "cuotas_base": config["cuotas_base"],
                 "cuotas_max": config["cuotas_max"],
-                "mora_diaria": config["mora_diaria"],
-                "aprobacion_extra": config["aprobacion_extra"]
+                "requiere_aprobacion_extra": config["aprobacion_extra"]
             },
-            "tasa_dolar_actual": tasa,
-            "fecha_consulta": datetime.now(timezone.utc).isoformat()
+            "configuracion_nivel": config,
+            "tasa_dolar_actual": tasa
         }
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"❌ Error calculando propuesta: {e}")
-        raise HTTPException(status_code=500, detail=f"Error al calcular propuesta: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))

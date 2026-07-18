@@ -6,7 +6,7 @@ from typing import Optional
 import logging
 
 from app.database import get_db
-from app.models import Usuario, Cliente, Financiamiento, Pago, Cuota
+from app.models import Usuario, Cliente, Financiamiento, Pago, Cuota, Tienda
 from app.auth import get_current_admin, hash_password, verify_password
 
 logger = logging.getLogger(__name__)
@@ -20,8 +20,9 @@ class UsuarioCreate(BaseModel):
     password: str
     nombre: Optional[str] = None
     email: Optional[str] = None
-    rol: str = "usuario"
+    rol: str = "usuario"  # "admin", "tienda", "cajero"
     activo: bool = True
+    tienda_id: Optional[int] = None
 
 class UsuarioUpdate(BaseModel):
     password: Optional[str] = None
@@ -29,46 +30,143 @@ class UsuarioUpdate(BaseModel):
     email: Optional[str] = None
     rol: Optional[str] = None
     activo: Optional[bool] = None
+    tienda_id: Optional[int] = None
+
+class TiendaCreate(BaseModel):
+    nombre: str
+    codigo: str
+    direccion: Optional[str] = None
+    telefono: Optional[str] = None
+
+class TiendaUpdate(BaseModel):
+    nombre: Optional[str] = None
+    direccion: Optional[str] = None
+    telefono: Optional[str] = None
+    activo: Optional[bool] = None
 
 # ============================================================
-# DASHBOARD
+# DASHBOARD (CON FILTRO POR TIENDA)
 # ============================================================
 @router.get("/dashboard")
 def dashboard(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin)
 ):
-    """Panel de control con estadísticas generales."""
+    """Panel de control con estadísticas. Admin ve todo, tienda ve solo lo suyo."""
     try:
-        total_clientes = db.query(Cliente).count()
-        clientes_pendientes = db.query(Cliente).filter(Cliente.estado == "pendiente").count()
-        clientes_aprobados = db.query(Cliente).filter(Cliente.estado == "aprobado").count()
+        tienda_id = None if current_user.rol == "admin" else current_user.tienda_id
         
-        total_financiamientos = db.query(Financiamiento).count()
-        financiamientos_activos = db.query(Financiamiento).filter(Financiamiento.estado == "activo").count()
-        financiamientos_completados = db.query(Financiamiento).filter(Financiamiento.estado == "completado").count()
+        query_clientes = db.query(Cliente)
+        query_financiamientos = db.query(Financiamiento)
+        query_pagos = db.query(Pago)
         
-        pagos_pendientes = db.query(Pago).filter(Pago.estado == "pendiente").count()
+        if tienda_id:
+            query_clientes = query_clientes.filter(Cliente.tienda_id == tienda_id)
+            query_financiamientos = query_financiamientos.filter(Financiamiento.tienda_id == tienda_id)
+            query_pagos = query_pagos.join(Financiamiento).filter(Financiamiento.tienda_id == tienda_id)
         
         return {
+            "tienda": current_user.tienda.nombre if current_user.tienda else "Central",
             "clientes": {
-                "total": total_clientes,
-                "pendientes": clientes_pendientes,
-                "aprobados": clientes_aprobados
+                "total": query_clientes.count(),
+                "pendientes": query_clientes.filter(Cliente.estado == "pendiente").count(),
+                "aprobados": query_clientes.filter(Cliente.estado == "aprobado").count()
             },
             "financiamientos": {
-                "total": total_financiamientos,
-                "activos": financiamientos_activos,
-                "completados": financiamientos_completados
+                "total": query_financiamientos.count(),
+                "activos": query_financiamientos.filter(Financiamiento.estado == "activo").count(),
+                "completados": query_financiamientos.filter(Financiamiento.estado == "completado").count()
             },
-            "pagos_pendientes": pagos_pendientes
+            "pagos_pendientes": query_pagos.filter(Pago.estado == "pendiente").count()
         }
     except Exception as e:
         logger.error(f"❌ Error en dashboard: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # ============================================================
-# LISTAR USUARIOS (SOLO ADMIN)
+# CRUD TIENDAS (SOLO ADMIN CENTRAL)
+# ============================================================
+@router.get("/tiendas")
+def listar_tiendas(
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_admin)
+):
+    """Listar tiendas. Solo admin central."""
+    if current_user.rol != "admin":
+        raise HTTPException(status_code=403, detail="Solo administrador central")
+    
+    tiendas = db.query(Tienda).order_by(Tienda.nombre).all()
+    return [
+        {
+            "id": t.id,
+            "nombre": t.nombre,
+            "codigo": t.codigo,
+            "direccion": t.direccion,
+            "telefono": t.telefono,
+            "activo": t.activo,
+            "total_clientes": db.query(Cliente).filter(Cliente.tienda_id == t.id).count(),
+            "total_creditos": db.query(Financiamiento).filter(Financiamiento.tienda_id == t.id).count(),
+            "creado_en": t.creado_en.isoformat() if t.creado_en else None
+        }
+        for t in tiendas
+    ]
+
+@router.post("/tiendas")
+def crear_tienda(
+    data: TiendaCreate,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_admin)
+):
+    """Crear nueva tienda. Solo admin central."""
+    if current_user.rol != "admin":
+        raise HTTPException(status_code=403, detail="Solo administrador central")
+    
+    existe = db.query(Tienda).filter(Tienda.codigo == data.codigo).first()
+    if existe:
+        raise HTTPException(status_code=409, detail="El código de tienda ya existe")
+    
+    tienda = Tienda(
+        nombre=data.nombre,
+        codigo=data.codigo.upper(),
+        direccion=data.direccion,
+        telefono=data.telefono
+    )
+    db.add(tienda)
+    db.commit()
+    db.refresh(tienda)
+    
+    logger.info(f"✅ Tienda creada: {tienda.nombre} ({tienda.codigo})")
+    return {"success": True, "id": tienda.id, "nombre": tienda.nombre}
+
+@router.put("/tiendas/{id}")
+def actualizar_tienda(
+    id: int,
+    data: TiendaUpdate,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_admin)
+):
+    """Actualizar tienda. Solo admin central."""
+    if current_user.rol != "admin":
+        raise HTTPException(status_code=403, detail="Solo administrador central")
+    
+    tienda = db.query(Tienda).filter(Tienda.id == id).first()
+    if not tienda:
+        raise HTTPException(status_code=404, detail="Tienda no encontrada")
+    
+    if data.nombre is not None:
+        tienda.nombre = data.nombre
+    if data.direccion is not None:
+        tienda.direccion = data.direccion
+    if data.telefono is not None:
+        tienda.telefono = data.telefono
+    if data.activo is not None:
+        tienda.activo = data.activo
+    
+    db.commit()
+    return {"success": True, "mensaje": "Tienda actualizada"}
+
+# ============================================================
+# LISTAR USUARIOS
 # ============================================================
 @router.get("/usuarios")
 def listar_usuarios(
@@ -77,10 +175,18 @@ def listar_usuarios(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin)
 ):
-    """Listar usuarios del panel administrativo."""
+    """Listar usuarios. Admin ve todos, tienda ve solo los de su tienda."""
     try:
-        total = db.query(Usuario).count()
-        usuarios = db.query(Usuario).order_by(Usuario.id).offset(skip).limit(limit).all()
+        query = db.query(Usuario)
+        
+        if current_user.rol != "admin":
+            query = query.filter(
+                (Usuario.tienda_id == current_user.tienda_id) | 
+                (Usuario.id == current_user.id)
+            )
+        
+        total = query.count()
+        usuarios = query.order_by(Usuario.id).offset(skip).limit(limit).all()
         
         return {
             "total": total,
@@ -94,6 +200,8 @@ def listar_usuarios(
                     "email": u.email,
                     "rol": u.rol,
                     "activo": u.activo,
+                    "tienda_id": u.tienda_id,
+                    "tienda_nombre": u.tienda.nombre if u.tienda else None,
                     "ultimo_acceso": u.ultimo_acceso.isoformat() if u.ultimo_acceso else None,
                     "creado_en": u.creado_en.isoformat() if u.creado_en else None
                 }
@@ -104,16 +212,13 @@ def listar_usuarios(
         logger.error(f"❌ Error listando usuarios: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# ============================================================
-# CREAR USUARIO (SOLO ADMIN)
-# ============================================================
 @router.post("/usuarios")
 def crear_usuario(
     usuario_data: UsuarioCreate,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin)
 ):
-    """Crear nuevo usuario del panel (admin, cajero, etc)."""
+    """Crear usuario. Admin crea cualquier rol, tienda solo crea cajeros para su tienda."""
     try:
         existe = db.query(Usuario).filter(Usuario.username == usuario_data.username).first()
         if existe:
@@ -122,20 +227,35 @@ def crear_usuario(
         if len(usuario_data.password) < 8:
             raise HTTPException(status_code=400, detail="La contraseña debe tener al menos 8 caracteres")
         
+        # Si el creador es tienda, forzar tienda_id y rol limitado
+        tienda_id = usuario_data.tienda_id
+        rol = usuario_data.rol
+        
+        if current_user.rol == "tienda":
+            tienda_id = current_user.tienda_id
+            if rol not in ["cajero", "tienda"]:
+                rol = "cajero"
+        
+        if tienda_id:
+            tienda = db.query(Tienda).filter(Tienda.id == tienda_id).first()
+            if not tienda:
+                raise HTTPException(status_code=404, detail="Tienda no encontrada")
+        
         nuevo = Usuario(
             username=usuario_data.username,
             password=hash_password(usuario_data.password),
             nombre=usuario_data.nombre,
             email=usuario_data.email,
-            rol=usuario_data.rol,
+            rol=rol,
             activo=usuario_data.activo,
+            tienda_id=tienda_id,
             creado_por=current_user.username
         )
         db.add(nuevo)
         db.commit()
         db.refresh(nuevo)
         
-        logger.info(f"✅ Usuario creado: {nuevo.username} por {current_user.username}")
+        logger.info(f"✅ Usuario creado: {nuevo.username} (rol: {nuevo.rol}, tienda: {tienda_id})")
         
         return {
             "id": nuevo.id,
@@ -143,7 +263,8 @@ def crear_usuario(
             "nombre": nuevo.nombre,
             "email": nuevo.email,
             "rol": nuevo.rol,
-            "activo": nuevo.activo
+            "activo": nuevo.activo,
+            "tienda_id": nuevo.tienda_id
         }
     except HTTPException:
         raise
@@ -152,9 +273,6 @@ def crear_usuario(
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
-# ============================================================
-# ACTUALIZAR USUARIO (SOLO ADMIN)
-# ============================================================
 @router.put("/usuarios/{id}")
 def actualizar_usuario(
     id: int,
@@ -162,11 +280,16 @@ def actualizar_usuario(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin)
 ):
-    """Actualizar datos de un usuario del panel."""
+    """Actualizar usuario."""
     try:
         usuario = db.query(Usuario).filter(Usuario.id == id).first()
         if not usuario:
             raise HTTPException(status_code=404, detail="Usuario no encontrado")
+        
+        # Tienda no puede modificar admins ni otras tiendas
+        if current_user.rol == "tienda":
+            if usuario.tienda_id != current_user.tienda_id and usuario.id != current_user.id:
+                raise HTTPException(status_code=403, detail="No puedes modificar usuarios de otra tienda")
         
         if usuario_data.password:
             if len(usuario_data.password) < 8:
@@ -176,24 +299,17 @@ def actualizar_usuario(
             usuario.nombre = usuario_data.nombre
         if usuario_data.email is not None:
             usuario.email = usuario_data.email
-        if usuario_data.rol is not None:
+        if usuario_data.rol is not None and current_user.rol == "admin":
             usuario.rol = usuario_data.rol
         if usuario_data.activo is not None:
             usuario.activo = usuario_data.activo
+        if usuario_data.tienda_id is not None and current_user.rol == "admin":
+            usuario.tienda_id = usuario_data.tienda_id
         
         db.commit()
         db.refresh(usuario)
         
-        logger.info(f"✅ Usuario actualizado: {usuario.username} por {current_user.username}")
-        
-        return {
-            "id": usuario.id,
-            "username": usuario.username,
-            "nombre": usuario.nombre,
-            "email": usuario.email,
-            "rol": usuario.rol,
-            "activo": usuario.activo
-        }
+        return {"success": True, "mensaje": "Usuario actualizado"}
     except HTTPException:
         raise
     except Exception as e:
@@ -201,16 +317,13 @@ def actualizar_usuario(
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
-# ============================================================
-# ELIMINAR USUARIO (SOLO ADMIN)
-# ============================================================
 @router.delete("/usuarios/{id}")
 def eliminar_usuario(
     id: int,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin)
 ):
-    """Eliminar un usuario del panel."""
+    """Eliminar usuario."""
     try:
         usuario = db.query(Usuario).filter(Usuario.id == id).first()
         if not usuario:
@@ -219,10 +332,11 @@ def eliminar_usuario(
         if usuario.id == current_user.id:
             raise HTTPException(status_code=403, detail="No puedes eliminar tu propio usuario")
         
+        if current_user.rol == "tienda" and usuario.tienda_id != current_user.tienda_id:
+            raise HTTPException(status_code=403, detail="No puedes eliminar usuarios de otra tienda")
+        
         db.delete(usuario)
         db.commit()
-        
-        logger.info(f"🗑️ Usuario eliminado: {usuario.username} por {current_user.username}")
         
         return {"mensaje": f"Usuario {usuario.username} eliminado"}
     except HTTPException:
@@ -233,16 +347,21 @@ def eliminar_usuario(
         raise HTTPException(status_code=500, detail=str(e))
 
 # ============================================================
-# CLIENTES PENDIENTES
+# CLIENTES PENDIENTES (FILTRADO POR TIENDA)
 # ============================================================
 @router.get("/clientes/pendientes")
 def clientes_pendientes(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin)
 ):
-    """Listar clientes pendientes de aprobación."""
+    """Clientes pendientes de aprobación. Filtrado por tienda."""
     try:
-        clientes = db.query(Cliente).filter(Cliente.estado == "pendiente").order_by(Cliente.creado_en.desc()).all()
+        query = db.query(Cliente).filter(Cliente.estado == "pendiente")
+        
+        if current_user.rol != "admin" and current_user.tienda_id:
+            query = query.filter(Cliente.tienda_id == current_user.tienda_id)
+        
+        clientes = query.order_by(Cliente.creado_en.desc()).all()
         
         return {
             "total": len(clientes),
@@ -254,6 +373,7 @@ def clientes_pendientes(
                     "telefono": c.telefono,
                     "email": c.email,
                     "url_cedula": c.url_cedula,
+                    "tienda_nombre": c.tienda.nombre if c.tienda else None,
                     "creado_en": c.creado_en.isoformat() if c.creado_en else None
                 }
                 for c in clientes
@@ -264,19 +384,24 @@ def clientes_pendientes(
         raise HTTPException(status_code=500, detail=str(e))
 
 # ============================================================
-# FINANCIAMIENTOS PENDIENTES DE APROBACIÓN
+# FINANCIAMIENTOS PENDIENTES (FILTRADO POR TIENDA)
 # ============================================================
 @router.get("/financiamientos/pendientes")
 def financiamientos_pendientes(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin)
 ):
-    """Listar financiamientos que requieren aprobación extra."""
+    """Financiamientos que requieren aprobación extra."""
     try:
-        fins = db.query(Financiamiento).filter(
+        query = db.query(Financiamiento).filter(
             Financiamiento.requiere_aprobacion == True,
             Financiamiento.estado == "activo"
-        ).order_by(Financiamiento.creado_en.desc()).all()
+        )
+        
+        if current_user.rol != "admin" and current_user.tienda_id:
+            query = query.filter(Financiamiento.tienda_id == current_user.tienda_id)
+        
+        fins = query.order_by(Financiamiento.creado_en.desc()).all()
         
         resultado = []
         for fin in fins:
@@ -289,50 +414,52 @@ def financiamientos_pendientes(
                 "monto_total_bs": round(fin.monto_total_bs, 2),
                 "monto_total_usd": round(fin.monto_total_usd, 2),
                 "cuotas_solicitadas": fin.cuotas_solicitadas,
-                "nivel_cliente": cliente.nivel if cliente else "",
+                "tienda_nombre": fin.tienda.nombre if fin.tienda else None,
                 "creado_en": fin.creado_en.isoformat() if fin.creado_en else None
             })
         
         return {"total": len(resultado), "financiamientos": resultado}
     except Exception as e:
-        logger.error(f"❌ Error listando financiamientos pendientes: {e}")
+        logger.error(f"❌ Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # ============================================================
-# REPORTES
+# REPORTES (FILTRADO POR TIENDA)
 # ============================================================
 @router.get("/reportes")
 def reportes(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin)
 ):
-    """Generar reportes del sistema."""
+    """Reportes del sistema. Filtrado por tienda."""
     try:
-        total_clientes = db.query(Cliente).count()
-        total_creditos = db.query(Financiamiento).count()
-        creditos_activos = db.query(Financiamiento).filter(Financiamiento.estado == "activo").count()
-        creditos_completados = db.query(Financiamiento).filter(Financiamiento.estado == "completado").count()
-        pagos_pendientes = db.query(Pago).filter(Pago.estado == "pendiente").count()
-        pagos_conciliados = db.query(Pago).filter(Pago.estado == "conciliado").count()
+        tienda_id = None if current_user.rol == "admin" else current_user.tienda_id
+        
+        q_clientes = db.query(Cliente)
+        q_creditos = db.query(Financiamiento)
+        q_pagos = db.query(Pago)
+        
+        if tienda_id:
+            q_clientes = q_clientes.filter(Cliente.tienda_id == tienda_id)
+            q_creditos = q_creditos.filter(Financiamiento.tienda_id == tienda_id)
+            q_pagos = q_pagos.join(Financiamiento).filter(Financiamiento.tienda_id == tienda_id)
         
         return {
             "fecha_reporte": datetime.now(timezone.utc).isoformat(),
-            "clientes": {
-                "total": total_clientes
-            },
+            "tienda": current_user.tienda.nombre if current_user.tienda else "Todas las tiendas",
+            "clientes": {"total": q_clientes.count()},
             "creditos": {
-                "total": total_creditos,
-                "activos": creditos_activos,
-                "completados": creditos_completados
+                "total": q_creditos.count(),
+                "activos": q_creditos.filter(Financiamiento.estado == "activo").count(),
+                "completados": q_creditos.filter(Financiamiento.estado == "completado").count()
             },
             "pagos": {
-                "pendientes": pagos_pendientes,
-                "conciliados": pagos_conciliados
+                "pendientes": q_pagos.filter(Pago.estado == "pendiente").count(),
+                "conciliados": q_pagos.filter(Pago.estado == "conciliado").count()
             }
         }
     except Exception as e:
         logger.error(f"❌ Error generando reportes: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# Necesario para el reporte
 from datetime import datetime, timezone

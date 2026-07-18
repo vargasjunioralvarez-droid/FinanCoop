@@ -5,6 +5,24 @@ from sqlalchemy.orm import relationship
 from app.database import Base
 
 # ============================================================
+# MODELO: TIENDA (NUEVO)
+# ============================================================
+class Tienda(Base):
+    __tablename__ = "tiendas"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    nombre = Column(String(200), nullable=False)
+    codigo = Column(String(20), unique=True, nullable=False, index=True)
+    direccion = Column(Text, nullable=True)
+    telefono = Column(String(20), nullable=True)
+    activo = Column(Boolean, default=True)
+    creado_en = Column(DateTime(timezone=True), server_default=func.now())
+    
+    usuarios = relationship("Usuario", back_populates="tienda")
+    clientes = relationship("Cliente", back_populates="tienda")
+    financiamientos = relationship("Financiamiento", back_populates="tienda")
+
+# ============================================================
 # MODELO: USUARIO
 # ============================================================
 class Usuario(Base):
@@ -15,12 +33,15 @@ class Usuario(Base):
     password = Column(String(255), nullable=False)
     nombre = Column(String(200), nullable=True)
     email = Column(String(200), nullable=True)
-    rol = Column(String(50), default="usuario")
+    rol = Column(String(50), default="usuario")  # "admin", "tienda", "cajero"
     activo = Column(Boolean, default=True)
+    tienda_id = Column(Integer, ForeignKey("tiendas.id"), nullable=True, index=True)
     creado_por = Column(String(100), nullable=True)
     ultimo_acceso = Column(DateTime(timezone=True), nullable=True)
     creado_en = Column(DateTime(timezone=True), server_default=func.now())
     actualizado_en = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    tienda = relationship("Tienda", back_populates="usuarios")
 
 # ============================================================
 # MODELO: CLIENTE
@@ -48,12 +69,15 @@ class Cliente(Base):
     pin_hash = Column(String(255), nullable=True)
     token_app = Column(String(500), nullable=True)
     estado = Column(String(20), default="pendiente")
+    tienda_id = Column(Integer, ForeignKey("tiendas.id"), nullable=True, index=True)
     ultimo_acceso = Column(DateTime(timezone=True), nullable=True)
     creado_en = Column(DateTime(timezone=True), server_default=func.now())
     actualizado_en = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    tienda = relationship("Tienda", back_populates="clientes")
 
 # ============================================================
-# MODELO: HISTORIAL DE ESTADOS (NUEVO)
+# MODELO: HISTORIAL DE ESTADOS
 # ============================================================
 class HistorialEstado(Base):
     __tablename__ = "historial_estados"
@@ -109,6 +133,7 @@ class Financiamiento(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     cliente_id = Column(Integer, ForeignKey("clientes.id"), nullable=False)
+    tienda_id = Column(Integer, ForeignKey("tiendas.id"), nullable=True, index=True)
     codigo = Column(String(20), unique=True, nullable=True)
     descripcion = Column(Text, nullable=True)
     
@@ -148,6 +173,7 @@ class Financiamiento(Base):
     actualizado_en = Column(DateTime(timezone=True), onupdate=func.now())
     
     cliente = relationship("Cliente", backref="financiamientos")
+    tienda = relationship("Tienda", back_populates="financiamientos")
     cuotas = relationship("Cuota", backref="financiamiento", lazy="joined")
 
 # ============================================================
@@ -237,7 +263,7 @@ class Pago(Base):
     cuota = relationship("Cuota", backref="pagos")
 
 # ============================================================
-# MODELO: TOKEN BLACKLIST (NUEVO)
+# MODELO: TOKEN BLACKLIST
 # ============================================================
 class TokenBlacklist(Base):
     __tablename__ = "token_blacklist"

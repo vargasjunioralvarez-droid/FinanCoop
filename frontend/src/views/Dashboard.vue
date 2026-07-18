@@ -293,8 +293,8 @@ const cargarDatos = async () => {
 
     // Clientes
     const clientesData = await api.get('/clientes')
-    stats.value.clientes = clientesData.length
-
+    const listaClientes = clientesData.clientes || clientesData
+    stats.value.clientes = listaClientes.length
     // Financiamientos
     const financiamientos = await api.get('/financiamientos')
     const activos = financiamientos.filter(f => f.estado === 'activo')

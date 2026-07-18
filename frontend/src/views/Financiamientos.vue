@@ -360,7 +360,7 @@ const calcularMorosidad = (fin) => {
 const cargarDatos = async () => {
   try {
     const response = await api.get('/financiamientos')
-    const financiamientosData = Array.isArray(response) ? response : response.data || []
+    const financiamientosData = response.financiamientos || response.data || responseata || []
     
     const clientesResponse = await api.get('/clientes')
     const clientesData = Array.isArray(clientesResponse) ? clientesResponse : clientesResponse.data || []

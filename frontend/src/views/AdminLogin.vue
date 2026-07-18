@@ -17,6 +17,7 @@
                 variant="outlined"
                 density="comfortable"
                 required
+                autocomplete="username"
               />
               <v-text-field
                 v-model="password"
@@ -26,6 +27,7 @@
                 variant="outlined"
                 density="comfortable"
                 required
+                autocomplete="current-password"
               />
               <v-btn
                 type="submit"
@@ -69,20 +71,11 @@ const login = async () => {
   cargando.value = true
 
   try {
-    console.log('📡 Enviando login con:', username.value)
-
-    // ✅ CORREGIDO: No usar .toString(), enviar URLSearchParams directamente
-    const formData = new URLSearchParams()
-    formData.append('username', username.value)
-    formData.append('password', password.value)
-
-    const data = await api.post('/auth/login', formData, {
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded'
-      }
+    // ✅ NUEVO: Enviar como JSON (más seguro y limpio)
+    const data = await api.post('/auth/login-json', {
+      username: username.value,
+      password: password.value
     })
-
-    console.log('📡 Response:', data)
 
     if (data.access_token) {
       localStorage.setItem('admin_token', data.access_token)
@@ -90,15 +83,11 @@ const login = async () => {
       localStorage.setItem('admin_username', data.username)
       localStorage.setItem('admin_nombre', data.nombre)
       
-      console.log('✅ Login exitoso:', data.username)
-      
-      // 🔥 FORZAR recarga completa para que App.vue se actualice
       window.location.href = data.rol === 'admin' ? '/usuarios' : '/inicio'
     } else {
       alert('❌ Credenciales incorrectas')
     }
   } catch (error) {
-    console.error('❌ Error de login:', error)
     const mensaje = error.response?.data?.detail || 'Error de conexión con el servidor'
     alert('❌ ' + mensaje)
   } finally {
