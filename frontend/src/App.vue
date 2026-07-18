@@ -37,7 +37,9 @@
         Cajero
       </v-btn>
       
+      <!-- Solo Admin y Tienda ven Clientes -->
       <v-btn 
+        v-if="esAdminOTienda"
         to="/clientes" 
         variant="text" 
         class="nav-btn mx-1"
@@ -57,7 +59,9 @@
         Financiamientos
       </v-btn>
       
+      <!-- Solo Admin y Tienda ven Conciliación -->
       <v-btn 
+        v-if="esAdminOTienda"
         to="/conciliacion" 
         color="warning" 
         variant="elevated"
@@ -68,7 +72,7 @@
         Conciliación
       </v-btn>
       
-      <!-- ✅ SOLO ADMIN: Menú Configuración -->
+      <!-- SOLO ADMIN: Menú Administración -->
       <v-menu v-if="esAdmin">
         <template v-slot:activator="{ props }">
           <v-btn 
@@ -111,9 +115,21 @@
         </v-list>
       </v-menu>
       
+      <!-- Tienda actual -->
+      <v-chip 
+        v-if="tiendaNombre"
+        class="ml-2" 
+        color="green-darken-1" 
+        variant="tonal" 
+        size="small"
+        prepend-icon="mdi-store"
+      >
+        {{ tiendaNombre }}
+      </v-chip>
+      
       <!-- Tasa en la barra -->
       <v-chip 
-        class="ml-3" 
+        class="ml-2" 
         color="white" 
         variant="outlined" 
         size="small"
@@ -142,15 +158,21 @@
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { api } from '@/config/api'
 
-const router = useRouter()
 const route = useRoute()
 const tasaActual = ref(40.0)
+const tiendaNombre = ref('')
 
 const mostrarNav = computed(() => route.path !== '/login')
+
 const esAdmin = computed(() => localStorage.getItem('admin_rol') === 'admin')
+
+const esAdminOTienda = computed(() => {
+  const rol = localStorage.getItem('admin_rol')
+  return rol === 'admin' || rol === 'tienda'
+})
 
 const cargarTasa = async () => {
   try {
@@ -161,6 +183,17 @@ const cargarTasa = async () => {
   }
 }
 
+const cargarUsuario = async () => {
+  try {
+    const data = await api.get('/auth/verificar')
+    if (data.tienda_nombre) {
+      tiendaNombre.value = data.tienda_nombre
+    }
+  } catch (e) {
+    // No hay sesión o error
+  }
+}
+
 const cerrarSesion = () => {
   localStorage.clear()
   window.location.href = '/login'
@@ -168,6 +201,7 @@ const cerrarSesion = () => {
 
 onMounted(() => {
   cargarTasa()
+  cargarUsuario()
   setInterval(cargarTasa, 300000)
 })
 </script>
