@@ -230,15 +230,20 @@
             </div>
             
             <v-btn 
-              v-if="cuotasSeleccionadas" 
-              color="success" 
-              @click="paso = 3" 
-              class="mt-3"
-              block
-              size="large"
-            >
-              Confirmar Propuesta →
-            </v-btn>
+  v-if="cuotasSeleccionadas && !excedeLimite" 
+  color="success" 
+  @click="paso = 3" 
+  class="mt-3"
+  block
+  size="large"
+>
+  Confirmar Propuesta →
+</v-btn>
+
+<v-alert v-if="excedeLimite" type="error" class="mt-3" border="start">
+  <v-icon start>mdi-cancel</v-icon>
+  No se puede continuar: el monto solicitado excede el límite de crédito disponible.
+</v-alert>
             
             <v-btn @click="paso = 1" class="mt-2" block variant="text">
               ← Volver
@@ -324,6 +329,9 @@
 import { ref, computed, onMounted } from 'vue'
 import { api } from '@/config/api'
 
+const excedeLimite = computed(() => {
+  return propuesta.value?.propuesta?.excede_limite || propuesta.value?.excede_limite || false
+})
 const paso = ref(1)
 const busquedaCedula = ref('')
 const clienteEncontrado = ref(null)
