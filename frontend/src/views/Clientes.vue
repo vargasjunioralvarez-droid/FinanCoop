@@ -59,8 +59,8 @@
                 <template v-slot:item.acciones="{ item }">
                   <div class="d-flex gap-1">
                     <v-btn icon="mdi-eye" size="small" color="info" @click="verDetalle(item)"></v-btn>
-                    <v-btn v-if="esAdmin" icon="mdi-pencil" size="small" color="primary" @click="editarCliente(item)"></v-btn>
-                    <v-btn v-if="esAdmin" icon="mdi-delete" size="small" color="error" @click="eliminarCliente(item)"></v-btn>
+                    <v-btn v-if="esAdminCentral" icon="mdi-pencil" size="small" color="primary" @click="editarCliente(item)"></v-btn>
+                    <v-btn v-if="esAdminCentral" icon="mdi-delete" size="small" color="error" @click="eliminarCliente(item)"></v-btn>
                   </div>
                 </template>
               </v-data-table>
@@ -96,61 +96,24 @@
 
                 <template v-slot:item.foto="{ item }">
                   <div class="d-flex align-center">
-                    <v-avatar 
-                      v-if="tieneFotoReal(item)" 
-                      size="40" 
-                      class="mr-2 cursor-pointer"
-                      @click="verFotoAmpliada(item)"
-                    >
+                    <v-avatar v-if="tieneFotoReal(item)" size="40" class="mr-2 cursor-pointer" @click="verFotoAmpliada(item)">
                       <v-img :src="item.url_cedula" cover>
-                        <template v-slot:placeholder>
-                          <v-icon color="grey">mdi-image</v-icon>
-                        </template>
+                        <template v-slot:placeholder><v-icon color="grey">mdi-image</v-icon></template>
                       </v-img>
                     </v-avatar>
-                    
-                    <v-icon 
-                      v-else 
-                      :color="item.url_cedula ? 'success' : 'grey'" 
-                      size="24"
-                      class="mr-2"
-                    >
+                    <v-icon v-else :color="item.url_cedula ? 'success' : 'grey'" size="24" class="mr-2">
                       {{ item.url_cedula ? 'mdi-check-circle' : 'mdi-image-off' }}
                     </v-icon>
-                    
-                    <v-btn
-                      v-if="tieneFotoReal(item)"
-                      icon="mdi-magnify"
-                      size="x-small"
-                      color="primary"
-                      variant="text"
-                      @click="verFotoAmpliada(item)"
-                      title="Ver foto"
-                    ></v-btn>
-                    
-                    <span v-else class="text-caption text-grey">
-                      {{ item.url_cedula ? 'Sí (sin URL)' : 'No' }}
-                    </span>
+                    <v-btn v-if="tieneFotoReal(item)" icon="mdi-magnify" size="x-small" color="primary" variant="text" @click="verFotoAmpliada(item)" title="Ver foto"></v-btn>
+                    <span v-else class="text-caption text-grey">{{ item.url_cedula ? 'Sí (sin URL)' : 'No' }}</span>
                   </div>
                 </template>
 
                 <template v-slot:item.acciones="{ item }">
                   <div class="d-flex gap-1">
                     <v-btn icon="mdi-eye" size="small" color="info" @click="verDetalle(item)"></v-btn>
-                    <v-btn 
-                      icon="mdi-check-circle" 
-                      size="small" 
-                      color="success"
-                      @click="aprobarCliente(item)"
-                      :loading="aprobandoId === item.id"
-                      title="Aprobar y enviar PIN"
-                    ></v-btn>
-                    <v-btn 
-                      icon="mdi-delete" 
-                      size="small" 
-                      color="error"
-                      @click="eliminarCliente(item)"
-                    ></v-btn>
+                    <v-btn v-if="esAdminCentral" icon="mdi-check-circle" size="small" color="success" @click="aprobarCliente(item)" :loading="aprobandoId === item.id" title="Aprobar y enviar PIN"></v-btn>
+                    <v-btn v-if="esAdminCentral" icon="mdi-delete" size="small" color="error" @click="eliminarCliente(item)"></v-btn>
                   </div>
                 </template>
               </v-data-table>
@@ -175,35 +138,14 @@
           <v-btn icon="mdi-close" variant="text" @click="dialogFoto = false"></v-btn>
         </v-card-title>
         <v-card-text class="text-center pa-4">
-          <v-img
-            :src="fotoCliente.url_cedula"
-            max-height="70vh"
-            contain
-            class="rounded-lg elevation-2 bg-grey-darken-3"
-          >
+          <v-img :src="fotoCliente.url_cedula" max-height="70vh" contain class="rounded-lg elevation-2 bg-grey-darken-3">
             <template v-slot:placeholder>
-              <v-row align="center" justify="center" class="fill-height">
-                <v-progress-circular indeterminate color="primary"></v-progress-circular>
-              </v-row>
+              <v-row align="center" justify="center" class="fill-height"><v-progress-circular indeterminate color="primary"></v-progress-circular></v-row>
             </template>
           </v-img>
-          
           <div class="mt-4 d-flex justify-center gap-2">
-            <v-btn
-              :href="fotoCliente.url_cedula"
-              target="_blank"
-              color="primary"
-              prepend-icon="mdi-open-in-new"
-            >
-              Abrir en nueva pestaña
-            </v-btn>
-            <v-btn
-              color="secondary"
-              prepend-icon="mdi-download"
-              @click="descargarFoto(fotoCliente)"
-            >
-              Descargar
-            </v-btn>
+            <v-btn :href="fotoCliente.url_cedula" target="_blank" color="primary" prepend-icon="mdi-open-in-new">Abrir en nueva pestaña</v-btn>
+            <v-btn color="secondary" prepend-icon="mdi-download" @click="descargarFoto(fotoCliente)">Descargar</v-btn>
           </div>
         </v-card-text>
       </v-card>
@@ -213,45 +155,25 @@
     <v-dialog v-model="dialogAprobar" max-width="450">
       <v-card>
         <v-card-title class="text-h5 bg-success text-white">
-          <v-icon start>mdi-check-circle</v-icon>
-          Aprobar Cliente
+          <v-icon start>mdi-check-circle</v-icon>Aprobar Cliente
         </v-card-title>
         <v-card-text class="pt-4" v-if="clienteAprobar">
-          <p class="text-body-1">
-            ¿Aprobar a <strong>{{ clienteAprobar.nombre }}</strong>?
-          </p>
-          
+          <p class="text-body-1">¿Aprobar a <strong>{{ clienteAprobar.nombre }}</strong>?</p>
           <div v-if="tieneFotoReal(clienteAprobar)" class="mt-3 text-center">
             <p class="text-caption text-grey mb-2">Foto de cédula:</p>
-            <v-img
-              :src="clienteAprobar.url_cedula"
-              max-height="150"
-              contain
-              class="rounded"
-              @click="verFotoAmpliada(clienteAprobar)"
-            ></v-img>
+            <v-img :src="clienteAprobar.url_cedula" max-height="150" contain class="rounded" @click="verFotoAmpliada(clienteAprobar)"></v-img>
           </div>
-          
           <v-list density="compact" class="bg-grey-lighten-4 rounded mt-2">
-            <v-list-item>
-              <v-list-item-title>Cédula</v-list-item-title>
-              <v-list-item-subtitle>{{ clienteAprobar.cedula }}</v-list-item-subtitle>
-            </v-list-item>
-            <v-list-item>
-              <v-list-item-title>Teléfono</v-list-item-title>
-              <v-list-item-subtitle>{{ clienteAprobar.telefono }}</v-list-item-subtitle>
-            </v-list-item>
+            <v-list-item><v-list-item-title>Cédula</v-list-item-title><v-list-item-subtitle>{{ clienteAprobar.cedula }}</v-list-item-subtitle></v-list-item>
+            <v-list-item><v-list-item-title>Teléfono</v-list-item-title><v-list-item-subtitle>{{ clienteAprobar.telefono }}</v-list-item-subtitle></v-list-item>
           </v-list>
-          <p class="text-caption text-grey mt-3">
-            Se enviará un SMS/WhatsApp con el PIN de acceso al número registrado.
-          </p>
+          <p class="text-caption text-grey mt-3">Se enviará un SMS/WhatsApp con el PIN de acceso al número registrado.</p>
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
           <v-btn @click="dialogAprobar = false">Cancelar</v-btn>
           <v-btn color="success" @click="confirmarAprobar" :loading="aprobando">
-            <v-icon start>mdi-send</v-icon>
-            Aprobar y Enviar PIN
+            <v-icon start>mdi-send</v-icon>Aprobar y Enviar PIN
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -262,14 +184,10 @@
       <v-card v-if="clienteSeleccionado">
         <v-card-title class="text-h5">
           {{ clienteSeleccionado.nombre }}
-          <v-chip 
-            :color="clienteSeleccionado.estado === 'aprobado' ? 'success' : 'warning'" 
-            class="ml-2"
-          >
+          <v-chip :color="clienteSeleccionado.estado === 'aprobado' ? 'success' : 'warning'" class="ml-2">
             {{ clienteSeleccionado.estado === 'aprobado' ? '✅ Aprobado' : '⏳ Pendiente' }}
           </v-chip>
         </v-card-title>
-        
         <v-card-text>
           <v-row>
             <v-col cols="12" md="6">
@@ -281,72 +199,40 @@
             <v-col cols="12" md="6">
               <p><strong>Score:</strong> {{ clienteSeleccionado.score }} pts</p>
               <p><strong>Total Compras:</strong> {{ clienteSeleccionado.total_compras }}</p>
-              <p><strong>Nivel:</strong> 
-                <v-chip :color="colorNivel(clienteSeleccionado.nivel)" size="small">
-                  {{ clienteSeleccionado.nivel }}
-                </v-chip>
-              </p>
-              <p><strong>PIN:</strong> 
-                <v-chip color="primary" size="small" v-if="clienteSeleccionado.pin">
-                  {{ clienteSeleccionado.pin }}
-                </v-chip>
-                <span v-else class="text-grey">Sin PIN</span>
-              </p>
+              <p><strong>Nivel:</strong> <v-chip :color="colorNivel(clienteSeleccionado.nivel)" size="small">{{ clienteSeleccionado.nivel }}</v-chip></p>
+              <p><strong>PIN:</strong> <v-chip color="primary" size="small" v-if="clienteSeleccionado.pin">{{ clienteSeleccionado.pin }}</v-chip><span v-else class="text-grey">Sin PIN</span></p>
             </v-col>
           </v-row>
-
           <v-divider class="my-3"></v-divider>
           <h3 class="text-h6 mb-2">Referencia</h3>
           <p><strong>Nombre:</strong> {{ clienteSeleccionado.referencia_nombre || 'N/A' }}</p>
           <p><strong>Teléfono:</strong> {{ clienteSeleccionado.referencia_telefono || 'N/A' }}</p>
           <p><strong>Parentesco:</strong> {{ clienteSeleccionado.referencia_parentesco || 'N/A' }}</p>
-
           <v-divider class="my-3"></v-divider>
           <h3 class="text-h6 mb-2">Foto de Cédula</h3>
-          
           <div v-if="tieneFotoReal(clienteSeleccionado)" class="text-center">
-            <v-img
-              :src="clienteSeleccionado.url_cedula"
-              max-height="250"
-              contain
-              class="rounded-lg elevation-2 cursor-pointer bg-grey-darken-3"
-              @click="verFotoAmpliada(clienteSeleccionado)"
-            >
-              <template v-slot:placeholder>
-                <v-row align="center" justify="center" class="fill-height">
-                  <v-progress-circular indeterminate color="primary"></v-progress-circular>
-                </v-row>
-              </template>
+            <v-img :src="clienteSeleccionado.url_cedula" max-height="250" contain class="rounded-lg elevation-2 cursor-pointer bg-grey-darken-3" @click="verFotoAmpliada(clienteSeleccionado)">
+              <template v-slot:placeholder><v-row align="center" justify="center" class="fill-height"><v-progress-circular indeterminate color="primary"></v-progress-circular></v-row></template>
             </v-img>
             <div class="mt-2">
               <v-btn color="primary" size="small" prepend-icon="mdi-magnify" @click="verFotoAmpliada(clienteSeleccionado)" class="mr-2">Ver ampliada</v-btn>
               <v-btn :href="clienteSeleccionado.url_cedula" target="_blank" color="secondary" size="small" prepend-icon="mdi-open-in-new">Abrir original</v-btn>
             </div>
           </div>
-          
           <div v-else-if="esClienteLocal(clienteSeleccionado)" class="text-center py-4 bg-grey-lighten-4 rounded">
             <v-icon size="48" color="grey">mdi-image-off</v-icon>
             <p class="text-body-2 text-grey mt-2">Cliente registrado localmente</p>
             <p class="text-caption text-grey">La foto no está disponible en el servidor</p>
           </div>
-          
-          <v-alert v-else type="warning" density="compact" class="mt-2">
-            <v-icon start>mdi-image-off</v-icon>
-            No hay foto de cédula registrada
-          </v-alert>
-          
+          <v-alert v-else type="warning" density="compact" class="mt-2"><v-icon start>mdi-image-off</v-icon>No hay foto de cédula registrada</v-alert>
           <v-divider class="my-3"></v-divider>
-          
           <h3 class="text-h6 mb-2">Financiamientos</h3>
           <v-alert v-if="!financiamientosCliente.length" type="info" density="compact">Sin financiamientos</v-alert>
-          
           <v-expansion-panels v-else>
             <v-expansion-panel v-for="fin in financiamientosCliente" :key="fin.id">
               <v-expansion-panel-title>
                 <div class="d-flex align-center w-100">
-                  <v-icon :color="fin.estado === 'activo' ? 'success' : 'grey'" class="mr-2">
-                    {{ fin.estado === 'activo' ? 'mdi-clock-outline' : 'mdi-check-circle' }}
-                  </v-icon>
+                  <v-icon :color="fin.estado === 'activo' ? 'success' : 'grey'" class="mr-2">{{ fin.estado === 'activo' ? 'mdi-clock-outline' : 'mdi-check-circle' }}</v-icon>
                   <span class="flex-grow-1">{{ fin.codigo }}</span>
                   <v-chip :color="fin.estado === 'activo' ? 'warning' : 'success'" size="small">{{ fin.estado }}</v-chip>
                 </div>
@@ -362,10 +248,9 @@
             </v-expansion-panel>
           </v-expansion-panels>
         </v-card-text>
-        
         <v-card-actions>
           <v-btn @click="dialogDetalle = false">Cerrar</v-btn>
-          <v-btn v-if="clienteSeleccionado.estado !== 'aprobado'" color="success" @click="dialogDetalle = false; aprobarCliente(clienteSeleccionado)">Aprobar</v-btn>
+          <v-btn v-if="esAdminCentral && clienteSeleccionado.estado !== 'aprobado'" color="success" @click="dialogDetalle = false; aprobarCliente(clienteSeleccionado)">Aprobar</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -394,14 +279,9 @@
         <v-card-text>
           <v-list>
             <v-list-item v-for="c in cuotas" :key="c.id" :class="{ 'bg-success-lighten-4': c.estado === 'pagada', 'bg-error-lighten-4': c.dias_atraso > 0 }" class="mb-2 rounded">
-              <v-list-item-title>
-                <v-icon :color="c.estado === 'pagada' ? 'success' : 'error'" class="mr-2">{{ c.estado === 'pagada' ? 'mdi-check-circle' : 'mdi-alert-circle' }}</v-icon>
-                Cuota #{{ c.numero }}
-              </v-list-item-title>
+              <v-list-item-title><v-icon :color="c.estado === 'pagada' ? 'success' : 'error'" class="mr-2">{{ c.estado === 'pagada' ? 'mdi-check-circle' : 'mdi-alert-circle' }}</v-icon>Cuota #{{ c.numero }}</v-list-item-title>
               <v-list-item-subtitle><v-chip :color="c.estado === 'pagada' ? 'success' : 'warning'" size="small">{{ c.estado }}</v-chip></v-list-item-subtitle>
-              <template v-slot:append>
-                <div class="text-right"><div class="text-h6">BS {{ formatearBS(c.monto_total_bs) }}</div><div class="text-caption">{{ formatearFecha(c.fecha_vencimiento) }}</div></div>
-              </template>
+              <template v-slot:append><div class="text-right"><div class="text-h6">BS {{ formatearBS(c.monto_total_bs) }}</div><div class="text-caption">{{ formatearFecha(c.fecha_vencimiento) }}</div></div></template>
             </v-list-item>
           </v-list>
         </v-card-text>
@@ -442,15 +322,14 @@ const financiamientosCliente = ref([])
 const cuotas = ref([])
 const snackbar = ref({ show: false, text: '', color: 'success' })
 
-const esAdmin = computed(() => {
-  const rol = localStorage.getItem('admin_rol')
-  return rol === 'admin_central'
-})
+// ✅ Solo admin_central puede aprobar/editar/eliminar
+const esAdminCentral = computed(() => localStorage.getItem('admin_rol') === 'admin_central')
 
 const headersVerificados = [
   { title: 'Nombre', key: 'nombre', sortable: true },
   { title: 'Cédula', key: 'cedula', sortable: true },
   { title: 'Teléfono', key: 'telefono' },
+  { title: 'Tienda', key: 'tienda_nombre' },
   { title: 'Nivel', key: 'nivel' },
   { title: 'Score', key: 'score' },
   { title: 'PIN', key: 'pin' },
@@ -461,6 +340,7 @@ const headersPendientes = [
   { title: 'Nombre', key: 'nombre', sortable: true },
   { title: 'Cédula', key: 'cedula', sortable: true },
   { title: 'Teléfono', key: 'telefono' },
+  { title: 'Tienda', key: 'tienda_nombre' },
   { title: 'Foto', key: 'foto', sortable: false },
   { title: 'Registrado', key: 'creado_en' },
   { title: 'Acciones', key: 'acciones', sortable: false }
@@ -481,17 +361,8 @@ const clientesPendientesFiltrados = computed(() => {
   return clientesPendientes.value.filter(c => c.nombre.toLowerCase().includes(q) || c.cedula.includes(q))
 })
 
-const tieneFotoReal = (cliente) => {
-  if (!cliente || !cliente.url_cedula) return false
-  if (cliente.url_cedula === '📷 Sí') return false
-  if (cliente.url_cedula.startsWith('local_')) return false
-  return cliente.url_cedula.startsWith('http')
-}
-
-const esClienteLocal = (cliente) => {
-  if (!cliente) return false
-  return cliente._esLocal || (cliente.id && cliente.id.toString().startsWith('local_'))
-}
+const tieneFotoReal = (cliente) => cliente?.url_cedula?.startsWith('http') || false
+const esClienteLocal = (cliente) => cliente?._esLocal || cliente?.id?.toString().startsWith('local_') || false
 
 const verFotoAmpliada = (cliente) => {
   if (!tieneFotoReal(cliente)) { mostrarMensaje('Este cliente no tiene foto disponible', 'warning'); return }
@@ -505,11 +376,7 @@ const descargarFoto = (cliente) => {
   document.body.appendChild(link); link.click(); document.body.removeChild(link)
 }
 
-const colorNivel = (nivel) => {
-  const colores = { nuevo: 'grey', bronce: 'brown', plata: 'blue', oro: 'amber', platino: 'purple' }
-  return colores[nivel] || 'grey'
-}
-
+const colorNivel = (nivel) => ({ nuevo: 'grey', bronce: 'brown', plata: 'blue', oro: 'amber', platino: 'purple' })[nivel] || 'grey'
 const formatearBS = (monto) => monto ? Number(monto).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0,00'
 const formatearFecha = (fechaStr) => fechaStr ? new Date(fechaStr).toLocaleDateString('es-VE', { day: '2-digit', month: '2-digit', year: 'numeric' }) : ''
 const mostrarMensaje = (texto, color = 'success') => { snackbar.value = { show: true, text: texto, color } }
@@ -530,9 +397,9 @@ const cargarSolicitudesLocales = () => {
       score: 0, total_compras: 0, nivel: 'nuevo', pin: null, _esLocal: true
     }))
     const cedulasExistentes = new Set(clientes.value.map(c => c.cedula))
-    const clientesFiltrados = nuevosClientes.filter(c => !cedulasExistentes.has(c.cedula))
-    if (clientesFiltrados.length) clientes.value = [...clientes.value, ...clientesFiltrados]
-  } catch (error) { console.error('❌ Error cargando solicitudes locales:', error) }
+    const filtrados = nuevosClientes.filter(c => !cedulasExistentes.has(c.cedula))
+    if (filtrados.length) clientes.value = [...clientes.value, ...filtrados]
+  } catch (e) {}
 }
 
 const cargarTodos = async () => {
@@ -549,11 +416,11 @@ const verDetalle = async (cliente) => {
   if (esClienteLocal(cliente)) { clienteSeleccionado.value = cliente; dialogDetalle.value = true; financiamientosCliente.value = []; return }
   try { clienteSeleccionado.value = await api.get(`/clientes/${cliente.id}`) } catch (e) { clienteSeleccionado.value = cliente }
   dialogDetalle.value = true
-  try { const financiamientos = await api.get('/financiamientos'); financiamientosCliente.value = financiamientos.filter(f => f.cliente_id === cliente.id) } catch (e) { financiamientosCliente.value = [] }
+  try { const fins = await api.get('/financiamientos'); financiamientosCliente.value = fins.filter(f => f.cliente_id === cliente.id) } catch (e) { financiamientosCliente.value = [] }
 }
 
 const verCuotas = async (finId) => {
-  try { cuotas.value = await api.get(`/financiamientos/${finId}/cuotas`); dialogCuotas.value = true } catch (e) { console.error('Error cargando cuotas:', e) }
+  try { cuotas.value = await api.get(`/financiamientos/${finId}/cuotas`); dialogCuotas.value = true } catch (e) {}
 }
 
 const aprobarCliente = (cliente) => { clienteAprobar.value = cliente; dialogAprobar.value = true }
@@ -566,39 +433,35 @@ const confirmarAprobar = async () => {
     const esLocal = esClienteLocal(clienteAprobar.value)
     
     if (esLocal) {
-      mostrarMensaje('📝 Creando cliente en el sistema...', 'info')
-      const response = await fetch('https://financoop.onrender.com/api/v1/clientes', {
+      mostrarMensaje('📝 Creando cliente...', 'info')
+      const r = await fetch('https://financoop.onrender.com/api/v1/clientes', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ nombre: clienteAprobar.value.nombre, cedula: clienteAprobar.value.cedula, telefono: clienteAprobar.value.telefono, email: clienteAprobar.value.email || '', direccion: clienteAprobar.value.direccion || '', referencia_nombre: clienteAprobar.value.referencia_nombre || '', referencia_telefono: clienteAprobar.value.referencia_telefono || '', referencia_parentesco: clienteAprobar.value.referencia_parentesco || '' })
       })
-      const data = await response.json()
-      if (!response.ok || !data.success) throw new Error(data.error || 'Error al crear cliente')
-      
-      const solicitudes = JSON.parse(localStorage.getItem('solicitudes_clientes') || '[]')
-      localStorage.setItem('solicitudes_clientes', JSON.stringify(solicitudes.filter(s => s.cedula !== clienteAprobar.value.cedula)))
-      mostrarMensaje(`✅ ${clienteAprobar.value.nombre} creado exitosamente`, 'success')
-      
-      if (data.id) {
-        mostrarMensaje('📱 Enviando PIN...', 'info')
-        const aprobarResponse = await fetch('https://financoop.onrender.com/api/v1/clientes/aprobar', {
+      const d = await r.json()
+      if (!r.ok || !d.success) throw new Error(d.error || 'Error al crear')
+      localStorage.setItem('solicitudes_clientes', JSON.stringify(JSON.parse(localStorage.getItem('solicitudes_clientes') || '[]').filter(s => s.cedula !== clienteAprobar.value.cedula)))
+      mostrarMensaje(`✅ ${clienteAprobar.value.nombre} creado`, 'success')
+      if (d.id) {
+        const ar = await fetch('https://financoop.onrender.com/api/v1/clientes/aprobar', {
           method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify({ cliente_id: data.id })
+          body: JSON.stringify({ cliente_id: d.id })
         })
-        const aprobarData = await aprobarResponse.json()
-        if (aprobarData.success) mostrarMensaje(`✅ ${clienteAprobar.value.nombre} aprobado. PIN enviado.`, 'success')
-        else throw new Error(aprobarData.error || 'Error al aprobar')
+        const ad = await ar.json()
+        if (ad.success) mostrarMensaje(`✅ ${clienteAprobar.value.nombre} aprobado. PIN enviado.`, 'success')
+        else throw new Error(ad.error || 'Error al aprobar')
       }
     } else {
-      const response = await fetch('https://financoop.onrender.com/api/v1/clientes/aprobar', {
+      const r = await fetch('https://financoop.onrender.com/api/v1/clientes/aprobar', {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ cliente_id: clienteAprobar.value.id })
       })
-      const data = await response.json()
-      if (!data.success) throw new Error(data.error || 'Error al aprobar')
+      const d = await r.json()
+      if (!d.success) throw new Error(d.error || 'Error al aprobar')
       mostrarMensaje(`✅ ${clienteAprobar.value.nombre} aprobado`, 'success')
     }
     await cargarTodos(); tabActiva.value = 'verificados'
-  } catch (error) { mostrarMensaje(error.message || 'Error al aprobar cliente', 'error') }
+  } catch (e) { mostrarMensaje(e.message || 'Error', 'error') }
   finally { aprobando.value = false; aprobandoId.value = null; dialogAprobar.value = false }
 }
 
@@ -609,16 +472,14 @@ const guardarEdicion = async () => {
   try {
     await api.put(`/clientes/${clienteEditando.value.id}`, { nombre: clienteEditando.value.nombre, telefono: clienteEditando.value.telefono, email: clienteEditando.value.email || '', direccion: clienteEditando.value.direccion || '' })
     mostrarMensaje('Cliente actualizado'); dialogEditar.value = false; await cargarTodos()
-  } catch (error) { mostrarMensaje('Error al actualizar', 'error') }
+  } catch (e) { mostrarMensaje('Error al actualizar', 'error') }
   finally { guardando.value = false }
 }
 
 const eliminarCliente = async (cliente) => {
   if (!confirm(`¿Eliminar a ${cliente.nombre}?`)) return
-  try {
-    await api.delete(`/clientes/${cliente.id}`)
-    mostrarMensaje('Cliente eliminado'); await cargarTodos()
-  } catch (error) { mostrarMensaje('Error al eliminar', 'error') }
+  try { await api.delete(`/clientes/${cliente.id}`); mostrarMensaje('Cliente eliminado'); await cargarTodos() }
+  catch (e) { mostrarMensaje('Error al eliminar', 'error') }
 }
 
 onMounted(() => { cargarTodos() })
