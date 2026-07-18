@@ -239,7 +239,7 @@
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
-import { api } from '@/config/api'  // ✅ Usar 'api'
+import { api } from '@/config/api'
 
 const stats = ref({
   clientes: 0,
@@ -255,12 +255,13 @@ const recientes = ref([])
 const nivelesData = ref([])
 
 const maxNivel = computed(() => {
-  const max = Math.max(...nivelesData.value.map(n => n.cantidad))
+  if (nivelesData.value.length === 0) return 1
+  const max = Math.max(...nivelesData.value.map(n => n.cantidad || 0))
   return max > 0 ? max : 1
 })
 
 const formatearBS = (monto) => {
-  if (!monto) return '0,00'
+  if (!monto && monto !== 0) return '0,00'
   return Number(monto).toLocaleString('es-VE', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
@@ -268,7 +269,7 @@ const formatearBS = (monto) => {
 }
 
 const formatearUSD = (monto) => {
-  if (!monto) return '0.00'
+  if (!monto && monto !== 0) return '0.00'
   return Number(monto).toLocaleString('en-US', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
@@ -287,18 +288,19 @@ const formatearFecha = (fechaStr) => {
 
 const cargarDatos = async () => {
   try {
-    // Tasa
+    // ✅ Tasa del dólar
     const tasaData = await api.get('/config/tasa-dolar')
-    stats.value.tasa = tasaData.tasa
+    stats.value.tasa = tasaData.tasa || 0
 
-    // Clientes
+    // ✅ Clientes - el interceptor ya devuelve array
     const clientesData = await api.get('/clientes')
-    const listaClientes = clientesData.clientes || clientesData
-    stats.value.clientes = listaClientes.length
-    // Financiamientos
+    stats.value.clientes = Array.isArray(clientesData) ? clientesData.length : 0
+
+    // ✅ Financiamientos - el interceptor ya devuelve array
     const financiamientos = await api.get('/financiamientos')
-    const activos = financiamientos.filter(f => f.estado === 'activo')
-    const completados = financiamientos.filter(f => f.estado === 'completado')
+    const listaFinanciamientos = Array.isArray(financiamientos) ? financiamientos : []
+    
+    const activos = listaFinanciamientos.filter(f => f.estado === 'activo')
     stats.value.activos = activos.length
 
     // Cuotas y cartera
@@ -316,24 +318,30 @@ const cargarDatos = async () => {
       platino: '#AB47BC'
     }
 
-    for (const fin of financiamientos) {
+    for (const fin of listaFinanciamientos) {
       // Contar por nivel
-      if (nivelesConteo[fin.nivel_aplicado] !== undefined) {
+      if (fin.nivel_aplicado && nivelesConteo[fin.nivel_aplicado] !== undefined) {
         nivelesConteo[fin.nivel_aplicado]++
       }
 
-      const cuotas = await api.get(`/financiamientos/${fin.id}/cuotas`)
-      const cuotasPendientes = cuotas.filter(c => c.estado === 'pendiente')
-      const cuotasVencidas = cuotas.filter(c => {
-        return c.estado === 'pendiente' && new Date(c.fecha_vencimiento) < new Date()
-      })
+      try {
+        const cuotasData = await api.get(`/financiamientos/${fin.id}/cuotas`)
+        const cuotas = Array.isArray(cuotasData) ? cuotasData : (cuotasData?.cuotas || [])
+        
+        const cuotasPendientes = cuotas.filter(c => c.estado === 'pendiente')
+        const cuotasVencidas = cuotas.filter(c => {
+          return c.estado === 'pendiente' && new Date(c.fecha_vencimiento) < new Date()
+        })
 
-      pendientes += cuotasPendientes.length
-      vencidas += cuotasVencidas.length
+        pendientes += cuotasPendientes.length
+        vencidas += cuotasVencidas.length
 
-      if (fin.estado === 'activo') {
-        cartera_bs += fin.monto_financia_bs || 0
-        cartera_usd += fin.monto_financia_usd || 0
+        if (fin.estado === 'activo') {
+          cartera_bs += fin.monto_financia_bs || 0
+          cartera_usd += fin.monto_financia_usd || 0
+        }
+      } catch (e) {
+        // Si falla una consulta de cuotas, continuar con la siguiente
       }
     }
 
@@ -342,7 +350,7 @@ const cargarDatos = async () => {
     stats.value.cartera_bs = cartera_bs
     stats.value.cartera_usd = cartera_usd
 
-    // Preparar datos de niveles para gráfica
+    // Datos para gráfica de niveles
     nivelesData.value = Object.keys(nivelesConteo).map(n => ({
       nombre: n.toUpperCase(),
       cantidad: nivelesConteo[n],
@@ -350,15 +358,15 @@ const cargarDatos = async () => {
     }))
 
     // Recientes (últimos 5)
-    recientes.value = financiamientos
-      .sort((a, b) => new Date(b.fecha_creacion) - new Date(a.fecha_creacion))
+    recientes.value = listaFinanciamientos
+      .sort((a, b) => new Date(b.creado_en || b.fecha_creacion || 0) - new Date(a.creado_en || a.fecha_creacion || 0))
       .slice(0, 5)
       .map(f => ({
-        codigo: f.codigo,
-        cliente: f.cliente?.nombre || 'Sin nombre',
-        monto_total_bs: f.monto_total_bs,
-        estado: f.estado,
-        fecha_creacion: f.fecha_creacion
+        codigo: f.codigo || 'N/A',
+        cliente: f.cliente_nombre || 'Sin nombre',
+        monto_total_bs: f.monto_total_bs || 0,
+        estado: f.estado || 'activo',
+        fecha_creacion: f.creado_en || f.fecha_creacion || new Date().toISOString()
       }))
 
   } catch (error) {
