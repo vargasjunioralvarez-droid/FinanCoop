@@ -118,35 +118,74 @@ const tasaActual = ref(40.0)
 const tiendaNombre = ref('')
 
 const mostrarNav = computed(() => route.path !== '/login')
-const esAdmin = computed(() => localStorage.getItem('admin_rol') === 'admin_central')
+
+const esAdmin = computed(() => {
+  const rol = localStorage.getItem('admin_rol')
+  return rol === 'admin_central'
+})
+
 const esAdminOTienda = computed(() => {
   const rol = localStorage.getItem('admin_rol')
   return rol === 'admin_central' || rol === 'admin_tienda'
 })
 
 const cargarTasa = async () => {
-  try { const data = await api.get('/config/tasa-dolar'); tasaActual.value = data.tasa } catch (e) {}
+  try {
+    const data = await api.get('/config/tasa-dolar')
+    if (data && data.tasa) tasaActual.value = data.tasa
+  } catch (e) {
+    // Silencioso - la tasa no es crítica
+  }
 }
 
 const cargarUsuario = async () => {
+  const token = localStorage.getItem('admin_token')
+  if (!token) return  // No intentar si no hay sesión
+  
   try {
     const data = await api.get('/auth/verificar')
-    if (data.tienda_nombre) tiendaNombre.value = data.tienda_nombre
-  } catch (e) {}
+    if (data && data.tienda_nombre) {
+      tiendaNombre.value = data.tienda_nombre
+    }
+  } catch (e) {
+    // Silencioso - el interceptor maneja 401 redirigiendo al login
+  }
 }
 
-const cerrarSesion = () => { localStorage.clear(); window.location.href = '/login' }
+const cerrarSesion = () => {
+  localStorage.clear()
+  window.location.href = '/login'
+}
 
 onMounted(() => {
   cargarTasa()
   cargarUsuario()
-  setInterval(cargarTasa, 300000)
+  setInterval(cargarTasa, 300000) // Actualizar tasa cada 5 minutos
 })
 </script>
 
 <style scoped>
-.app-bar-gradient { background: linear-gradient(135deg, #1565c0 0%, #0d47a1 100%) !important; }
-.nav-btn { text-transform: none; letter-spacing: 0.5px; font-weight: 500; border-radius: 10px; padding: 0 16px !important; height: 40px; transition: all 0.3s ease; }
-.nav-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
-.nav-btn-active { background: rgba(255,255,255,0.15) !important; font-weight: 600; }
+.app-bar-gradient {
+  background: linear-gradient(135deg, #1565c0 0%, #0d47a1 100%) !important;
+}
+
+.nav-btn {
+  text-transform: none;
+  letter-spacing: 0.5px;
+  font-weight: 500;
+  border-radius: 10px;
+  padding: 0 16px !important;
+  height: 40px;
+  transition: all 0.3s ease;
+}
+
+.nav-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+
+.nav-btn-active {
+  background: rgba(255,255,255,0.15) !important;
+  font-weight: 600;
+}
 </style>
