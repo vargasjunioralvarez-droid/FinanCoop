@@ -174,7 +174,7 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     if sub is None:
         raise HTTPException(status_code=401, detail="Token inválido")
 
-    if rol == "admin" or rol == "tienda" or rol == "cajero":
+    if rol in ["admin", "admin_central", "admin_tienda", "tienda", "cajero"]:
         usuario = db.query(Usuario).filter(Usuario.username == sub, Usuario.activo == True).first()
         if usuario:
             return usuario
