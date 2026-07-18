@@ -80,7 +80,7 @@
         </div>
       </v-card>
 
-      <!-- 🔥 FOTO DE CÉDULA - USA url_cedula del usuario -->
+      <!-- FOTO DE CÉDULA -->
       <v-card class="section-card glass-card" elevation="0">
         <div class="section-header"><div class="d-flex align-center"><v-icon color="#4facfe" size="20" class="mr-2">mdi-card-account-details</v-icon><span>Documento de Identidad</span></div></div>
         <v-divider style="border-color: rgba(255,255,255,0.06);" />
@@ -128,11 +128,11 @@
     <!-- DIALOG: Cambiar PIN -->
     <v-dialog v-model="dialogCambiarPin" max-width="400">
       <v-card class="glass-card">
-        <v-card-title class="text-center pt-4">Cambiar PIN</v-card-title>
+        <v-card-title class="text-center pt-4">🔐 Cambiar PIN</v-card-title>
         <v-card-text>
-          <v-text-field v-model="pinActual" label="PIN actual" type="password" maxlength="4" variant="outlined" density="compact" class="custom-field" bg-color="rgba(255,255,255,0.06)" />
-          <v-text-field v-model="pinNuevo" label="PIN nuevo (4 dígitos)" type="password" maxlength="4" variant="outlined" density="compact" class="custom-field mt-2" bg-color="rgba(255,255,255,0.06)" />
-          <v-text-field v-model="pinConfirmar" label="Confirmar PIN nuevo" type="password" maxlength="4" variant="outlined" density="compact" class="custom-field mt-2" bg-color="rgba(255,255,255,0.06)" />
+          <v-text-field v-model="pinActual" label="PIN actual" type="password" maxlength="4" variant="outlined" density="compact" class="custom-field" bg-color="rgba(255,255,255,0.08)" placeholder="••••" />
+          <v-text-field v-model="pinNuevo" label="PIN nuevo (4 dígitos)" type="password" maxlength="4" variant="outlined" density="compact" class="custom-field mt-2" bg-color="rgba(255,255,255,0.08)" placeholder="••••" />
+          <v-text-field v-model="pinConfirmar" label="Confirmar PIN nuevo" type="password" maxlength="4" variant="outlined" density="compact" class="custom-field mt-2" bg-color="rgba(255,255,255,0.08)" placeholder="••••" />
           <v-alert v-if="errorPin" type="error" density="compact" class="mt-2">{{ errorPin }}</v-alert>
         </v-card-text>
         <v-card-actions class="pa-4">
@@ -186,6 +186,7 @@ const guardarNuevoPin = async () => {
     const data = await response.json()
     if (!response.ok) throw new Error(data.detail || 'Error al cambiar PIN')
     dialogCambiarPin.value = false
+    pinActual.value = ''; pinNuevo.value = ''; pinConfirmar.value = ''
     alert('✅ PIN actualizado correctamente')
   } catch (e) { errorPin.value = e.message || 'Error al cambiar PIN' }
   finally { cambiandoPin.value = false }
@@ -222,14 +223,16 @@ onMounted(() => {
 .section-header span { font-size: 13px; font-weight: 600; color: #ffffff; }
 .info-field { padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
 .info-field:last-child { border-bottom: none; }
-.field-label { font-size: 10px; color: rgba(255,255,255,0.3); text-transform: uppercase; letter-spacing: 0.5px; }
-.field-value { font-size: 14px; font-weight: 500; color: #ffffff; }
+.field-label { font-size: 10px; color: rgba(255,255,255,0.4); text-transform: uppercase; letter-spacing: 0.5px; }
+.field-value { font-size: 15px; font-weight: 600; color: #ffffff; opacity: 1; }
 .settings-list { padding: 4px 0; }
-.setting-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; cursor: pointer; color: rgba(255,255,255,0.7); }
+.setting-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; cursor: pointer; color: rgba(255,255,255,0.85); }
 .setting-item:hover { background: rgba(255,255,255,0.04); }
-.setting-item span { font-size: 13px; }
+.setting-item span { font-size: 14px; font-weight: 500; }
 .logout-btn { background: rgba(239,68,68,0.1) !important; color: #f87171 !important; border: 1px solid rgba(239,68,68,0.15); margin-top: 8px; }
 .cursor-pointer { cursor: pointer; }
-.custom-field :deep(.v-field) { border-radius: 12px !important; border: 1px solid rgba(255,255,255,0.15) !important; }
-.custom-field :deep(.v-field__input) { color: #ffffff !important; }
+.custom-field :deep(.v-field) { border-radius: 12px !important; border: 1px solid rgba(255,255,255,0.2) !important; }
+.custom-field :deep(.v-field__input) { color: #ffffff !important; padding-top: 8px !important; padding-bottom: 8px !important; }
+.custom-field :deep(.v-field__input::placeholder) { color: rgba(255,255,255,0.7) !important; font-weight: 500 !important; opacity: 1 !important; }
+.custom-field :deep(.v-label) { color: rgba(255,255,255,0.6) !important; }
 </style>
