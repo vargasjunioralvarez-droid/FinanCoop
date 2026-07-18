@@ -87,19 +87,26 @@
         {{ auth.tasaActual }} BS/$
       </v-chip>
       
+      <!-- Indicador de refresco automático -->
+      <v-tooltip text="Refresco automático cada 30s">
+        <template v-slot:activator="{ props }">
+          <v-icon v-bind="props" size="14" class="ml-1" color="green-lighten-2">mdi-sync</v-icon>
+        </template>
+      </v-tooltip>
+      
       <v-btn icon="mdi-logout" size="small" class="ml-2" @click="auth.logout()" title="Cerrar sesión"></v-btn>
     </v-app-bar>
     
     <v-main>
       <v-container fluid class="pa-6">
-        <router-view></router-view>
+        <router-view :key="$route.fullPath"></router-view>
       </v-container>
     </v-main>
   </v-app>
 </template>
 
 <script setup>
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
@@ -107,10 +114,73 @@ const route = useRoute()
 const auth = useAuthStore()
 const mostrarNav = computed(() => route.path !== '/login')
 
+// ============================================================
+// 🔄 POLLING INTELIGENTE - Refresco automático sin saturar
+// ============================================================
+let pollTimer = null
+let visibilityTimer = null
+const POLL_INTERVAL = 30000  // 30 segundos
+
+const startPolling = () => {
+  // Solo si hay sesión activa
+  if (!auth.token) return
+  
+  // Limpiar timer anterior
+  stopPolling()
+  
+  // Iniciar nuevo polling
+  pollTimer = setInterval(() => {
+    // Solo refrescar si la pestaña está visible (no satura cuando está en segundo plano)
+    if (document.visibilityState === 'visible') {
+      auth.cargarUsuario()
+      auth.cargarTasa()
+    }
+  }, POLL_INTERVAL)
+}
+
+const stopPolling = () => {
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
+}
+
+// Detectar cuando el usuario cambia de pestaña
+const handleVisibilityChange = () => {
+  if (document.visibilityState === 'visible') {
+    // Al volver a la pestaña, refrescar inmediatamente
+    auth.cargarUsuario()
+    auth.cargarTasa()
+    startPolling()
+  } else {
+    // Al minimizar, detener polling para no saturar
+    stopPolling()
+  }
+}
+
+// Iniciar/detener polling cuando cambia el token (login/logout)
+watch(() => auth.token, (newToken) => {
+  if (newToken) {
+    startPolling()
+  } else {
+    stopPolling()
+  }
+})
+
 onMounted(() => {
   auth.cargarTasa()
   auth.cargarUsuario()
-  setInterval(() => auth.cargarTasa(), 300000)
+  
+  // Iniciar polling si hay sesión
+  startPolling()
+  
+  // Detectar visibilidad de la pestaña
+  document.addEventListener('visibilitychange', handleVisibilityChange)
+})
+
+onUnmounted(() => {
+  stopPolling()
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
 })
 </script>
 
