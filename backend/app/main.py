@@ -69,8 +69,9 @@ ALLOWED_ORIGINS = [
 
 if IS_PROD:
     ALLOWED_ORIGINS = [
-        "https://financoop-frontend.onrender.com",
-        "https://financoop.onrender.com",
+        "https://financoop-frontend.onrender.com",  # ← Frontend
+        "https://financoop-backend.onrender.com",   # ← Backend
+        "https://financoop.onrender.com",           # ← Por si acaso
         "capacitor://localhost",
         "ionic://localhost",
     ]
