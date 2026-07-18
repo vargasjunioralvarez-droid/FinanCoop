@@ -1,6 +1,5 @@
 <template>
   <v-app>
-    <!-- App Bar -->
     <v-app-bar 
       v-if="mostrarNav"
       color="primary" 
@@ -15,72 +14,52 @@
       
       <v-spacer></v-spacer>
       
-      <!-- Botones para TODOS -->
-      <v-btn 
-        to="/inicio" 
-        variant="text" 
-        class="nav-btn mx-1"
-        :class="{ 'nav-btn-active': $route.path === '/inicio' }"
-      >
+      <!-- Dashboard -->
+      <v-btn to="/inicio" variant="text" class="nav-btn mx-1"
+        :class="{ 'nav-btn-active': $route.path === '/inicio' }">
         <v-icon start>mdi-view-dashboard</v-icon>
         Dashboard
       </v-btn>
       
-      <v-btn 
-        to="/cajero" 
-        color="success" 
-        variant="elevated"
-        class="nav-btn mx-1"
-        :class="{ 'nav-btn-active': $route.path === '/cajero' }"
-      >
+      <!-- Cajero (Nueva Venta) - TODOS -->
+      <v-btn to="/cajero" color="success" variant="elevated" class="nav-btn mx-1"
+        :class="{ 'nav-btn-active': $route.path === '/cajero' }">
         <v-icon start>mdi-cart-plus</v-icon>
         Cajero
       </v-btn>
       
-      <!-- Solo Admin y Tienda ven Clientes -->
-      <v-btn 
-        v-if="esAdminOTienda"
-        to="/clientes" 
-        variant="text" 
-        class="nav-btn mx-1"
-        :class="{ 'nav-btn-active': $route.path === '/clientes' }"
-      >
+      <!-- Clientes - TODOS -->
+      <v-btn to="/clientes" variant="text" class="nav-btn mx-1"
+        :class="{ 'nav-btn-active': $route.path === '/clientes' }">
         <v-icon start>mdi-account-group</v-icon>
         Clientes
       </v-btn>
+
+      <!-- Mis Ventas - TODOS -->
+      <v-btn to="/mis-ventas" variant="text" class="nav-btn mx-1"
+        :class="{ 'nav-btn-active': $route.path === '/mis-ventas' }">
+        <v-icon start>mdi-cart-check</v-icon>
+        Mis Ventas
+      </v-btn>
       
-      <v-btn 
-        to="/financiamientos" 
-        variant="text" 
-        class="nav-btn mx-1"
-        :class="{ 'nav-btn-active': $route.path === '/financiamientos' }"
-      >
+      <!-- Financiamientos - Admin Tienda + Central -->
+      <v-btn v-if="esAdminOTienda" to="/financiamientos" variant="text" class="nav-btn mx-1"
+        :class="{ 'nav-btn-active': $route.path === '/financiamientos' }">
         <v-icon start>mdi-file-document-multiple</v-icon>
         Financiamientos
       </v-btn>
       
-      <!-- Solo Admin y Tienda ven Conciliación -->
-      <v-btn 
-        v-if="esAdminOTienda"
-        to="/conciliacion" 
-        color="warning" 
-        variant="elevated"
-        class="nav-btn mx-1"
-        :class="{ 'nav-btn-active': $route.path === '/conciliacion' }"
-      >
+      <!-- Conciliación - Admin Tienda + Central -->
+      <v-btn v-if="esAdminOTienda" to="/conciliacion" color="warning" variant="elevated" class="nav-btn mx-1"
+        :class="{ 'nav-btn-active': $route.path === '/conciliacion' }">
         <v-icon start>mdi-cash-check</v-icon>
         Conciliación
       </v-btn>
       
-      <!-- SOLO ADMIN: Menú Administración -->
+      <!-- Admin Central -->
       <v-menu v-if="esAdmin">
         <template v-slot:activator="{ props }">
-          <v-btn 
-            v-bind="props"
-            color="info" 
-            variant="elevated"
-            class="nav-btn mx-1"
-          >
+          <v-btn v-bind="props" color="info" variant="elevated" class="nav-btn mx-1">
             <v-icon start>mdi-cog</v-icon>
             Admin
             <v-icon end size="14">mdi-chevron-down</v-icon>
@@ -88,64 +67,37 @@
         </template>
         <v-list elevation="4" rounded="lg">
           <v-list-item to="/tiendas">
-            <template v-slot:prepend>
-              <v-icon color="green">mdi-store</v-icon>
-            </template>
+            <template v-slot:prepend><v-icon color="green">mdi-store</v-icon></template>
             <v-list-item-title>Tiendas</v-list-item-title>
           </v-list-item>
           <v-list-item to="/usuarios">
-            <template v-slot:prepend>
-              <v-icon color="error">mdi-shield-account</v-icon>
-            </template>
+            <template v-slot:prepend><v-icon color="error">mdi-shield-account</v-icon></template>
             <v-list-item-title>Usuarios</v-list-item-title>
           </v-list-item>
           <v-divider></v-divider>
           <v-list-item to="/configuracion">
-            <template v-slot:prepend>
-              <v-icon color="primary">mdi-currency-usd</v-icon>
-            </template>
+            <template v-slot:prepend><v-icon color="primary">mdi-currency-usd</v-icon></template>
             <v-list-item-title>Tasa del Dólar</v-list-item-title>
           </v-list-item>
           <v-list-item to="/niveles">
-            <template v-slot:prepend>
-              <v-icon color="amber-darken-2">mdi-trophy</v-icon>
-            </template>
+            <template v-slot:prepend><v-icon color="amber">mdi-trophy</v-icon></template>
             <v-list-item-title>Niveles</v-list-item-title>
           </v-list-item>
         </v-list>
       </v-menu>
       
       <!-- Tienda actual -->
-      <v-chip 
-        v-if="tiendaNombre"
-        class="ml-2" 
-        color="green-darken-1" 
-        variant="tonal" 
-        size="small"
-        prepend-icon="mdi-store"
-      >
+      <v-chip v-if="tiendaNombre" class="ml-2" color="green-darken-1" variant="tonal" size="small" prepend-icon="mdi-store">
         {{ tiendaNombre }}
       </v-chip>
       
-      <!-- Tasa en la barra -->
-      <v-chip 
-        class="ml-2" 
-        color="white" 
-        variant="outlined" 
-        size="small"
-        prepend-icon="mdi-currency-usd"
-      >
+      <!-- Tasa -->
+      <v-chip class="ml-2" color="white" variant="outlined" size="small" prepend-icon="mdi-currency-usd">
         {{ tasaActual }} BS/$
       </v-chip>
       
-      <!-- Cerrar sesión -->
-      <v-btn 
-        icon="mdi-logout" 
-        size="small"
-        class="ml-2"
-        @click="cerrarSesion"
-        title="Cerrar sesión"
-      ></v-btn>
+      <!-- Salir -->
+      <v-btn icon="mdi-logout" size="small" class="ml-2" @click="cerrarSesion" title="Cerrar sesión"></v-btn>
     </v-app-bar>
     
     <v-main>
@@ -167,30 +119,36 @@ const tiendaNombre = ref('')
 
 const mostrarNav = computed(() => route.path !== '/login')
 
-const esAdmin = computed(() => localStorage.getItem('admin_rol') === 'admin')
+const esAdmin = computed(() => {
+  const rol = localStorage.getItem('admin_rol')
+  return rol === 'admin_central'
+})
 
 const esAdminOTienda = computed(() => {
   const rol = localStorage.getItem('admin_rol')
-  return rol === 'admin' || rol === 'tienda'
+  return rol === 'admin_central' || rol === 'admin_tienda'
 })
 
 const cargarTasa = async () => {
   try {
     const data = await api.get('/config/tasa-dolar')
-    tasaActual.value = data.tasa
+    if (data && data.tasa) tasaActual.value = data.tasa
   } catch (e) {
-    console.error('Error cargando tasa:', e)
+    // Silencioso - la tasa no es crítica
   }
 }
 
 const cargarUsuario = async () => {
+  const token = localStorage.getItem('admin_token')
+  if (!token) return  // No intentar si no hay sesión
+  
   try {
     const data = await api.get('/auth/verificar')
-    if (data.tienda_nombre) {
+    if (data && data.tienda_nombre) {
       tiendaNombre.value = data.tienda_nombre
     }
   } catch (e) {
-    // No hay sesión o error
+    // Silencioso - el interceptor maneja 401 redirigiendo al login
   }
 }
 
@@ -202,7 +160,7 @@ const cerrarSesion = () => {
 onMounted(() => {
   cargarTasa()
   cargarUsuario()
-  setInterval(cargarTasa, 300000)
+  setInterval(cargarTasa, 300000) // Actualizar tasa cada 5 minutos
 })
 </script>
 
