@@ -337,6 +337,7 @@ def listar_clientes(
                 "url_cedula": c.url_cedula,
                 "tienda_id": c.tienda_id,
                 "tienda_nombre": c.tienda.nombre if c.tienda else None,
+                "pin": c.pin if current_user.rol == "admin_central" else "****",
                 "ultimo_acceso": c.ultimo_acceso.isoformat() if c.ultimo_acceso else None,
                 "creado_en": c.creado_en.isoformat() if c.creado_en else None
             }
