@@ -462,8 +462,11 @@ async function cargarDatos() {
 
     datosCliente.value = data
     if (data.cliente) {
-      usuario.value = data.cliente
-    }
+  usuario.value = {
+    ...data.cliente,
+    url_cedula: data.cliente.url_cedula || null  // Asegurar que url_cedula se copie
+  }
+}
 
     tasaActual.value = data.tasa_actual || 0
     financiamientos.value = data.financiamientos_activos || []
