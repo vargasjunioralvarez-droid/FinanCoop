@@ -53,11 +53,9 @@
 
 <script setup>
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
-import { api } from '@/config/api'
+import { useAuthStore } from '@/stores/auth'
 
-const router = useRouter()
-
+const auth = useAuthStore()
 const username = ref('')
 const password = ref('')
 const cargando = ref(false)
@@ -71,21 +69,14 @@ const login = async () => {
   cargando.value = true
 
   try {
-    // ✅ NUEVO: Enviar como JSON (más seguro y limpio)
-    const data = await api.post('/auth/login-json', {
-      username: username.value,
-      password: password.value
-    })
-
-    if (data.access_token) {
-      localStorage.setItem('admin_token', data.access_token)
-      localStorage.setItem('admin_rol', data.rol)
-      localStorage.setItem('admin_username', data.username)
-      localStorage.setItem('admin_nombre', data.nombre)
-      
-      window.location.href = data.rol === 'admin' ? '/usuarios' : '/inicio'
+    const data = await auth.login(username.value, password.value)
+    
+    if (data.rol === 'admin_central') {
+      window.location.href = '/usuarios'
+    } else if (data.rol === 'admin_tienda') {
+      window.location.href = '/inicio'
     } else {
-      alert('❌ Credenciales incorrectas')
+      window.location.href = '/cajero'
     }
   } catch (error) {
     const mensaje = error.response?.data?.detail || 'Error de conexión con el servidor'
