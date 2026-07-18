@@ -1,5 +1,5 @@
 # backend/app/models.py
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Float, ForeignKey, Text
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Float, ForeignKey, Text, Index
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.database import Base
@@ -17,11 +17,13 @@ class Usuario(Base):
     email = Column(String(200), nullable=True)
     rol = Column(String(50), default="usuario")
     activo = Column(Boolean, default=True)
+    creado_por = Column(String(100), nullable=True)
+    ultimo_acceso = Column(DateTime(timezone=True), nullable=True)
     creado_en = Column(DateTime(timezone=True), server_default=func.now())
     actualizado_en = Column(DateTime(timezone=True), onupdate=func.now())
 
 # ============================================================
-# MODELO: CLIENTE (CON ESTADO)
+# MODELO: CLIENTE
 # ============================================================
 class Cliente(Base):
     __tablename__ = "clientes"
@@ -43,12 +45,29 @@ class Cliente(Base):
     cuotas_pagadas_tiempo = Column(Integer, default=0)
     cuotas_con_mora = Column(Integer, default=0)
     pin = Column(String(10), nullable=True)
+    pin_hash = Column(String(255), nullable=True)
     token_app = Column(String(500), nullable=True)
-    # ✅ NUEVO: Estado del cliente
-    estado = Column(String(20), default="pendiente")  # "pendiente" o "aprobado"
+    estado = Column(String(20), default="pendiente")
     ultimo_acceso = Column(DateTime(timezone=True), nullable=True)
     creado_en = Column(DateTime(timezone=True), server_default=func.now())
     actualizado_en = Column(DateTime(timezone=True), onupdate=func.now())
+
+# ============================================================
+# MODELO: HISTORIAL DE ESTADOS (NUEVO)
+# ============================================================
+class HistorialEstado(Base):
+    __tablename__ = "historial_estados"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    entidad_tipo = Column(String(50), nullable=False)
+    entidad_id = Column(Integer, nullable=False)
+    estado_anterior = Column(String(50), nullable=True)
+    estado_nuevo = Column(String(50), nullable=False)
+    cambiado_por = Column(String(200), nullable=True)
+    motivo = Column(Text, nullable=True)
+    ip_origen = Column(String(50), nullable=True)
+    cliente_id = Column(Integer, ForeignKey("clientes.id"), nullable=True)
+    fecha = Column(DateTime(timezone=True), server_default=func.now())
 
 # ============================================================
 # MODELO: TASA DOLAR
@@ -59,6 +78,7 @@ class TasaDolar(Base):
     id = Column(Integer, primary_key=True, index=True)
     tasa = Column(Float, nullable=False)
     fuente = Column(String(100), default="manual")
+    actualizado_por = Column(String(100), nullable=True)
     fecha = Column(DateTime(timezone=True), server_default=func.now())
 
 # ============================================================
@@ -128,7 +148,7 @@ class Financiamiento(Base):
     actualizado_en = Column(DateTime(timezone=True), onupdate=func.now())
     
     cliente = relationship("Cliente", backref="financiamientos")
-    cuotas = relationship("Cuota", backref="financiamiento")
+    cuotas = relationship("Cuota", backref="financiamiento", lazy="joined")
 
 # ============================================================
 # MODELO: CUOTA
@@ -151,6 +171,7 @@ class Cuota(Base):
     monto_usd = Column(Float, default=0)
     mora = Column(Float, default=0)
     mora_usd = Column(Float, default=0)
+    monto_pagado = Column(Float, default=0)
     
     fecha_vencimiento = Column(DateTime(timezone=True), nullable=False)
     fecha_pago = Column(DateTime(timezone=True), nullable=True)
@@ -171,6 +192,8 @@ class ConfiguracionPago(Base):
     cedula_pago_movil = Column(String(20), nullable=True)
     banco_transferencia = Column(String(100), nullable=True)
     cuenta_transferencia = Column(String(50), nullable=True)
+    correo_zelle = Column(String(200), nullable=True)
+    correo_binance = Column(String(200), nullable=True)
     creado_en = Column(DateTime(timezone=True), server_default=func.now())
     actualizado_en = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -191,17 +214,35 @@ class Pago(Base):
     
     monto_reportado_bs = Column(Float, nullable=True)
     monto_confirmado_bs = Column(Float, nullable=True)
+    monto_original_bs = Column(Float, nullable=True)
     banco_origen = Column(String(100), nullable=True)
     telefono_pago = Column(String(20), nullable=True)
     cedula_pago = Column(String(20), nullable=True)
     comprobante = Column(String(500), nullable=True)
     
+    modo_pago = Column(String(50), default="cuota")
+    cuotas_incluidas = Column(Text, nullable=True)
+    pago_padre_id = Column(Integer, nullable=True)
+    
     estado = Column(String(50), default="pendiente")
     fecha_reporte = Column(DateTime(timezone=True), server_default=func.now())
     fecha_confirmacion = Column(DateTime(timezone=True), nullable=True)
+    fecha_rechazo = Column(DateTime(timezone=True), nullable=True)
     conciliado_por = Column(String(100), nullable=True)
+    rechazado_por = Column(String(100), nullable=True)
     
     creado_en = Column(DateTime(timezone=True), server_default=func.now())
     
     financiamiento = relationship("Financiamiento", backref="pagos")
     cuota = relationship("Cuota", backref="pagos")
+
+# ============================================================
+# MODELO: TOKEN BLACKLIST (NUEVO)
+# ============================================================
+class TokenBlacklist(Base):
+    __tablename__ = "token_blacklist"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    jti = Column(String(255), unique=True, index=True, nullable=False)
+    expira_en = Column(DateTime(timezone=True), nullable=False)
+    creado_en = Column(DateTime(timezone=True), server_default=func.now())
