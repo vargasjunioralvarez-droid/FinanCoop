@@ -1,7 +1,6 @@
 // frontend/src/router.js
 import { createRouter, createWebHistory } from 'vue-router'
 
-// Importar vistas
 import Dashboard from '@/views/Dashboard.vue'
 import CajeroView from '@/views/CajeroView.vue'
 import Clientes from '@/views/Clientes.vue'
@@ -12,123 +11,66 @@ import ConfiguracionView from '@/views/ConfiguracionView.vue'
 import NivelesView from '@/views/NivelesView.vue'
 import AdminLoginView from '@/views/AdminLogin.vue'
 import UsuariosView from '@/views/UsuariosView.vue'
-import AdminTiendas from '@/views/AdminTiendas.vue'  // ← NUEVA VISTA
+import AdminTiendas from '@/views/AdminTiendas.vue'
+import MisVentas from '@/views/MisVentas.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
-    // ============================================================
-    // 🔓 RUTAS PÚBLICAS
-    // ============================================================
-    {
-      path: '/',
-      redirect: '/login'
-    },
-    {
-      path: '/login',
-      component: AdminLoginView,
-      meta: { public: true }
-    },
+    // 🔓 PÚBLICAS
+    { path: '/', redirect: '/login' },
+    { path: '/login', component: AdminLoginView, meta: { public: true } },
 
-    // ============================================================
-    // 🔒 RUTAS PARA TODOS LOS AUTENTICADOS
-    // ============================================================
-    {
-      path: '/inicio',
-      component: Dashboard,
-      meta: { requiresAuth: true }
-    },
-    {
-      path: '/cajero',
-      component: CajeroView,
-      meta: { requiresAuth: true }
-    },
-    {
-      path: '/clientes',
-      component: Clientes,
-      meta: { requiresAuth: true }
-    },
-    {
-      path: '/financiamientos',
-      component: Financiamientos,
-      meta: { requiresAuth: true }
-    },
-    {
-      path: '/cuotas/:id',
-      component: Cuotas,
-      props: true,
-      meta: { requiresAuth: true }
-    },
-    {
-      path: '/conciliacion',
-      component: ConciliacionView,
-      meta: { requiresAuth: true }
-    },
+    // 🔒 TODOS LOS AUTENTICADOS (cajero, admin_tienda, admin_central)
+    { path: '/inicio', component: Dashboard, meta: { requiresAuth: true } },
+    { path: '/cajero', component: CajeroView, meta: { requiresAuth: true } },
+    { path: '/clientes', component: Clientes, meta: { requiresAuth: true } },
+    { path: '/mis-ventas', component: MisVentas, meta: { requiresAuth: true } },
 
-    // ============================================================
-    // 👑 RUTAS SOLO PARA ADMINISTRADOR
-    // ============================================================
-    {
-      path: '/usuarios',
-      component: UsuariosView,
-      meta: { requiresAuth: true, requiresAdmin: true }
-    },
-    {
-      path: '/tiendas',           // ← NUEVA RUTA
-      component: AdminTiendas,
-      meta: { requiresAuth: true, requiresAdmin: true }
-    },
-    {
-      path: '/configuracion',
-      component: ConfiguracionView,
-      meta: { requiresAuth: true, requiresAdmin: true }
-    },
-    {
-      path: '/niveles',
-      component: NivelesView,
-      meta: { requiresAuth: true, requiresAdmin: true }
-    }
+    // 🔒 ADMIN TIENDA + ADMIN CENTRAL
+    { path: '/financiamientos', component: Financiamientos, meta: { requiresAuth: true, requiresAdminTienda: true } },
+    { path: '/cuotas/:id', component: Cuotas, props: true, meta: { requiresAuth: true, requiresAdminTienda: true } },
+    { path: '/conciliacion', component: ConciliacionView, meta: { requiresAuth: true, requiresAdminTienda: true } },
+
+    // 👑 SOLO ADMIN CENTRAL
+    { path: '/usuarios', component: UsuariosView, meta: { requiresAuth: true, requiresAdmin: true } },
+    { path: '/tiendas', component: AdminTiendas, meta: { requiresAuth: true, requiresAdmin: true } },
+    { path: '/configuracion', component: ConfiguracionView, meta: { requiresAuth: true, requiresAdmin: true } },
+    { path: '/niveles', component: NivelesView, meta: { requiresAuth: true, requiresAdmin: true } },
   ]
 })
 
-// ============================================================
-// ✅ GUARDIA DE NAVEGACIÓN CON ROLES
-// ============================================================
 router.beforeEach((to, from, next) => {
   const token = localStorage.getItem('admin_token')
   const rol = localStorage.getItem('admin_rol')
 
-  const isPublic = to.meta.public
-  const requiresAuth = to.meta.requiresAuth
-  const requiresAdmin = to.meta.requiresAdmin
-
-  // 1. RUTAS PÚBLICAS (login)
-  if (isPublic) {
+  // Público
+  if (to.meta.public) {
     if (token) {
-      // Ya está logueado, redirigir según rol
-      if (rol === 'admin') {
-        next('/usuarios')
-      } else if (rol === 'tienda') {
-        next('/cajero')  // Tienda ve el panel de ventas
-      } else {
-        next('/inicio')
-      }
+      if (rol === 'admin_central') next('/usuarios')
+      else if (rol === 'admin_tienda') next('/inicio')
+      else next('/cajero')
       return
     }
     next()
     return
   }
 
-  // 2. REQUIERE AUTENTICACIÓN
+  // Autenticación
   if (!token) {
     next('/login')
     return
   }
 
-  // 3. REQUIERE SER ADMIN (solo admin central)
-  if (requiresAdmin && rol !== 'admin') {
-    alert('⛔ Solo el administrador central puede acceder a esta sección')
+  // Solo admin_central
+  if (to.meta.requiresAdmin && rol !== 'admin_central') {
     next('/inicio')
+    return
+  }
+
+  // Solo admin_tienda o admin_central
+  if (to.meta.requiresAdminTienda && rol === 'cajero') {
+    next('/mis-ventas')
     return
   }
 

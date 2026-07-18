@@ -199,18 +199,13 @@ def get_current_admin(token: str = Depends(oauth2_scheme), db: Session = Depends
     username = payload.get("sub")
     rol = payload.get("rol")
 
-    if username is None:
-        raise HTTPException(status_code=401, detail="Token inválido")
-
-    if rol not in ["admin", "tienda", "cajero"]:
+    if rol not in ["admin_central", "admin_tienda", "cajero"]:
         raise HTTPException(status_code=403, detail="Permisos insuficientes")
 
     usuario = db.query(Usuario).filter(Usuario.username == username, Usuario.activo == True).first()
     if not usuario:
         raise HTTPException(status_code=403, detail="Usuario no encontrado o inactivo")
-
     return usuario
-
 # ─────────────────────────────────────────────────────────────
 # 📱 CLIENTES (app móvil)
 # ─────────────────────────────────────────────────────────────
@@ -236,16 +231,8 @@ def get_current_cliente(token: str = Depends(oauth2_scheme), db: Session = Depen
 # 🏪 OBTENER TIENDA DEL USUARIO ACTUAL (NUEVO)
 # ─────────────────────────────────────────────────────────────
 
-def get_current_tienda(
-    current_user = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """
-    Retorna el tienda_id del usuario actual.
-    - Admin (rol='admin'): retorna None (ve todo)
-    - Tienda/Cajero: retorna su tienda_id (solo ve su tienda)
-    """
-    if hasattr(current_user, 'rol') and current_user.rol == "admin":
+def get_current_tienda(current_user = Depends(get_current_user)):
+    if hasattr(current_user, 'rol') and current_user.rol == "admin_central":
         return None
     return getattr(current_user, 'tienda_id', None)
 
