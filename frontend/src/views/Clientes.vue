@@ -20,9 +20,7 @@
 
         <v-window v-model="tabActiva" class="mt-4">
           
-          <!-- ========================================== -->
           <!-- PESTAÑA: CLIENTES VERIFICADOS -->
-          <!-- ========================================== -->
           <v-window-item value="verificados">
             <v-card>
               <v-card-title class="d-flex align-center">
@@ -69,9 +67,7 @@
             </v-card>
           </v-window-item>
 
-          <!-- ========================================== -->
           <!-- PESTAÑA: CLIENTES POR VERIFICAR -->
-          <!-- ========================================== -->
           <v-window-item value="pendientes">
             <v-card>
               <v-card-title class="d-flex align-center">
@@ -98,10 +94,8 @@
                   <v-chip color="warning" size="small">⏳ Pendiente</v-chip>
                 </template>
 
-                <!-- ✅ COLUMNA FOTO CORREGIDA - CON MINIATURA Y BOTÓN VER -->
                 <template v-slot:item.foto="{ item }">
                   <div class="d-flex align-center">
-                    <!-- Miniatura si tiene URL real -->
                     <v-avatar 
                       v-if="tieneFotoReal(item)" 
                       size="40" 
@@ -115,7 +109,6 @@
                       </v-img>
                     </v-avatar>
                     
-                    <!-- Icono si no tiene foto real -->
                     <v-icon 
                       v-else 
                       :color="item.url_cedula ? 'success' : 'grey'" 
@@ -125,7 +118,6 @@
                       {{ item.url_cedula ? 'mdi-check-circle' : 'mdi-image-off' }}
                     </v-icon>
                     
-                    <!-- Botón ver foto -->
                     <v-btn
                       v-if="tieneFotoReal(item)"
                       icon="mdi-magnify"
@@ -173,9 +165,7 @@
       </v-col>
     </v-row>
 
-    <!-- ========================================== -->
     <!-- DIALOG: Ver Foto Ampliada -->
-    <!-- ========================================== -->
     <v-dialog v-model="dialogFoto" max-width="800">
       <v-card v-if="fotoCliente">
         <v-card-title class="d-flex align-center">
@@ -219,9 +209,7 @@
       </v-card>
     </v-dialog>
 
-    <!-- ========================================== -->
     <!-- DIALOG: Aprobar Cliente -->
-    <!-- ========================================== -->
     <v-dialog v-model="dialogAprobar" max-width="450">
       <v-card>
         <v-card-title class="text-h5 bg-success text-white">
@@ -233,7 +221,6 @@
             ¿Aprobar a <strong>{{ clienteAprobar.nombre }}</strong>?
           </p>
           
-          <!-- Mostrar foto en el dialog de aprobar -->
           <div v-if="tieneFotoReal(clienteAprobar)" class="mt-3 text-center">
             <p class="text-caption text-grey mb-2">Foto de cédula:</p>
             <v-img
@@ -270,9 +257,7 @@
       </v-card>
     </v-dialog>
 
-    <!-- ========================================== -->
     <!-- DIALOG: Detalle del Cliente -->
-    <!-- ========================================== -->
     <v-dialog v-model="dialogDetalle" max-width="700">
       <v-card v-if="clienteSeleccionado">
         <v-card-title class="text-h5">
@@ -310,18 +295,15 @@
             </v-col>
           </v-row>
 
-          <!-- Referencia -->
           <v-divider class="my-3"></v-divider>
           <h3 class="text-h6 mb-2">Referencia</h3>
           <p><strong>Nombre:</strong> {{ clienteSeleccionado.referencia_nombre || 'N/A' }}</p>
           <p><strong>Teléfono:</strong> {{ clienteSeleccionado.referencia_telefono || 'N/A' }}</p>
           <p><strong>Parentesco:</strong> {{ clienteSeleccionado.referencia_parentesco || 'N/A' }}</p>
 
-          <!-- ✅ FOTO DE CÉDULA CORREGIDA -->
           <v-divider class="my-3"></v-divider>
           <h3 class="text-h6 mb-2">Foto de Cédula</h3>
           
-          <!-- Tiene foto real -->
           <div v-if="tieneFotoReal(clienteSeleccionado)" class="text-center">
             <v-img
               :src="clienteSeleccionado.url_cedula"
@@ -337,35 +319,17 @@
               </template>
             </v-img>
             <div class="mt-2">
-              <v-btn
-                color="primary"
-                size="small"
-                prepend-icon="mdi-magnify"
-                @click="verFotoAmpliada(clienteSeleccionado)"
-                class="mr-2"
-              >
-                Ver ampliada
-              </v-btn>
-              <v-btn
-                :href="clienteSeleccionado.url_cedula"
-                target="_blank"
-                color="secondary"
-                size="small"
-                prepend-icon="mdi-open-in-new"
-              >
-                Abrir original
-              </v-btn>
+              <v-btn color="primary" size="small" prepend-icon="mdi-magnify" @click="verFotoAmpliada(clienteSeleccionado)" class="mr-2">Ver ampliada</v-btn>
+              <v-btn :href="clienteSeleccionado.url_cedula" target="_blank" color="secondary" size="small" prepend-icon="mdi-open-in-new">Abrir original</v-btn>
             </div>
           </div>
           
-          <!-- Es cliente local sin foto real -->
           <div v-else-if="esClienteLocal(clienteSeleccionado)" class="text-center py-4 bg-grey-lighten-4 rounded">
             <v-icon size="48" color="grey">mdi-image-off</v-icon>
             <p class="text-body-2 text-grey mt-2">Cliente registrado localmente</p>
             <p class="text-caption text-grey">La foto no está disponible en el servidor</p>
           </div>
           
-          <!-- No tiene foto -->
           <v-alert v-else type="warning" density="compact" class="mt-2">
             <v-icon start>mdi-image-off</v-icon>
             No hay foto de cédula registrada
@@ -373,11 +337,8 @@
           
           <v-divider class="my-3"></v-divider>
           
-          <!-- Financiamientos -->
           <h3 class="text-h6 mb-2">Financiamientos</h3>
-          <v-alert v-if="!financiamientosCliente.length" type="info" density="compact">
-            Sin financiamientos
-          </v-alert>
+          <v-alert v-if="!financiamientosCliente.length" type="info" density="compact">Sin financiamientos</v-alert>
           
           <v-expansion-panels v-else>
             <v-expansion-panel v-for="fin in financiamientosCliente" :key="fin.id">
@@ -387,9 +348,7 @@
                     {{ fin.estado === 'activo' ? 'mdi-clock-outline' : 'mdi-check-circle' }}
                   </v-icon>
                   <span class="flex-grow-1">{{ fin.codigo }}</span>
-                  <v-chip :color="fin.estado === 'activo' ? 'warning' : 'success'" size="small">
-                    {{ fin.estado }}
-                  </v-chip>
+                  <v-chip :color="fin.estado === 'activo' ? 'warning' : 'success'" size="small">{{ fin.estado }}</v-chip>
                 </div>
               </v-expansion-panel-title>
               <v-expansion-panel-text>
@@ -398,9 +357,7 @@
                 <p><strong>Entrada:</strong> BS {{ formatearBS(fin.monto_entrada_bs) }}</p>
                 <p><strong>Cuotas:</strong> {{ fin.cuotas_aprobadas }}</p>
                 <p><strong>Cuota mensual:</strong> BS {{ formatearBS(fin.monto_cuota_bs) }}</p>
-                <v-btn color="primary" size="small" class="mt-2" @click="verCuotas(fin.id)">
-                  Ver Cuotas
-                </v-btn>
+                <v-btn color="primary" size="small" class="mt-2" @click="verCuotas(fin.id)">Ver Cuotas</v-btn>
               </v-expansion-panel-text>
             </v-expansion-panel>
           </v-expansion-panels>
@@ -408,13 +365,7 @@
         
         <v-card-actions>
           <v-btn @click="dialogDetalle = false">Cerrar</v-btn>
-          <v-btn 
-            v-if="clienteSeleccionado.estado !== 'aprobado'"
-            color="success"
-            @click="dialogDetalle = false; aprobarCliente(clienteSeleccionado)"
-          >
-            Aprobar
-          </v-btn>
+          <v-btn v-if="clienteSeleccionado.estado !== 'aprobado'" color="success" @click="dialogDetalle = false; aprobarCliente(clienteSeleccionado)">Aprobar</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -439,39 +390,17 @@
     <!-- Dialog: Cuotas -->
     <v-dialog v-model="dialogCuotas" max-width="500">
       <v-card>
-        <v-card-title>
-          <v-btn icon @click="dialogCuotas = false" class="mr-2">
-            <v-icon>mdi-arrow-left</v-icon>
-          </v-btn>
-          Cuotas
-        </v-card-title>
+        <v-card-title><v-btn icon @click="dialogCuotas = false" class="mr-2"><v-icon>mdi-arrow-left</v-icon></v-btn>Cuotas</v-card-title>
         <v-card-text>
           <v-list>
-            <v-list-item 
-              v-for="c in cuotas" 
-              :key="c.id"
-              :class="{
-                'bg-success-lighten-4': c.estado === 'pagada',
-                'bg-error-lighten-4': c.dias_atraso > 0
-              }"
-              class="mb-2 rounded"
-            >
+            <v-list-item v-for="c in cuotas" :key="c.id" :class="{ 'bg-success-lighten-4': c.estado === 'pagada', 'bg-error-lighten-4': c.dias_atraso > 0 }" class="mb-2 rounded">
               <v-list-item-title>
-                <v-icon :color="c.estado === 'pagada' ? 'success' : 'error'" class="mr-2">
-                  {{ c.estado === 'pagada' ? 'mdi-check-circle' : 'mdi-alert-circle' }}
-                </v-icon>
+                <v-icon :color="c.estado === 'pagada' ? 'success' : 'error'" class="mr-2">{{ c.estado === 'pagada' ? 'mdi-check-circle' : 'mdi-alert-circle' }}</v-icon>
                 Cuota #{{ c.numero }}
               </v-list-item-title>
-              <v-list-item-subtitle>
-                <v-chip :color="c.estado === 'pagada' ? 'success' : 'warning'" size="small">
-                  {{ c.estado }}
-                </v-chip>
-              </v-list-item-subtitle>
+              <v-list-item-subtitle><v-chip :color="c.estado === 'pagada' ? 'success' : 'warning'" size="small">{{ c.estado }}</v-chip></v-list-item-subtitle>
               <template v-slot:append>
-                <div class="text-right">
-                  <div class="text-h6">BS {{ formatearBS(c.monto_total_bs) }}</div>
-                  <div class="text-caption">{{ formatearFecha(c.fecha_vencimiento) }}</div>
-                </div>
+                <div class="text-right"><div class="text-h6">BS {{ formatearBS(c.monto_total_bs) }}</div><div class="text-caption">{{ formatearFecha(c.fecha_vencimiento) }}</div></div>
               </template>
             </v-list-item>
           </v-list>
@@ -482,9 +411,7 @@
     <!-- Snackbar -->
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="5000" multi-line>
       {{ snackbar.text }}
-      <template v-slot:actions>
-        <v-btn variant="text" @click="snackbar.show = false">Cerrar</v-btn>
-      </template>
+      <template v-slot:actions><v-btn variant="text" @click="snackbar.show = false">Cerrar</v-btn></template>
     </v-snackbar>
 
   </v-container>
@@ -494,39 +421,32 @@
 import { ref, computed, onMounted } from 'vue'
 import { api } from '@/config/api'
 
-// Tabs
 const tabActiva = ref('verificados')
-
-// Búsquedas
 const busquedaVerificados = ref('')
 const busquedaPendientes = ref('')
-
-// Datos
 const clientes = ref([])
 const cargando = ref(false)
 const guardando = ref(false)
 const aprobando = ref(false)
 const aprobandoId = ref(null)
-
-// Dialogs
 const dialogDetalle = ref(false)
 const dialogCuotas = ref(false)
 const dialogEditar = ref(false)
 const dialogAprobar = ref(false)
-const dialogFoto = ref(false)  // NUEVO: dialog para foto ampliada
+const dialogFoto = ref(false)
 const clienteSeleccionado = ref(null)
 const clienteEditando = ref(null)
 const clienteAprobar = ref(null)
-const fotoCliente = ref(null)  // NUEVO: cliente cuya foto se está viendo
+const fotoCliente = ref(null)
 const financiamientosCliente = ref([])
 const cuotas = ref([])
-
-// Snackbar
 const snackbar = ref({ show: false, text: '', color: 'success' })
 
-const esAdmin = localStorage.getItem('admin_rol') === 'admin'
+const esAdmin = computed(() => {
+  const rol = localStorage.getItem('admin_rol')
+  return rol === 'admin_central'
+})
 
-// Headers
 const headersVerificados = [
   { title: 'Nombre', key: 'nombre', sortable: true },
   { title: 'Cédula', key: 'cedula', sortable: true },
@@ -546,363 +466,166 @@ const headersPendientes = [
   { title: 'Acciones', key: 'acciones', sortable: false }
 ]
 
-// Computed
 const clientesVerificados = computed(() => clientes.value.filter(c => c.estado === 'aprobado'))
 const clientesPendientes = computed(() => clientes.value.filter(c => c.estado !== 'aprobado'))
 
 const clientesVerificadosFiltrados = computed(() => {
   if (!busquedaVerificados.value) return clientesVerificados.value
   const q = busquedaVerificados.value.toLowerCase()
-  return clientesVerificados.value.filter(c => 
-    c.nombre.toLowerCase().includes(q) || c.cedula.includes(q)
-  )
+  return clientesVerificados.value.filter(c => c.nombre.toLowerCase().includes(q) || c.cedula.includes(q))
 })
 
 const clientesPendientesFiltrados = computed(() => {
   if (!busquedaPendientes.value) return clientesPendientes.value
   const q = busquedaPendientes.value.toLowerCase()
-  return clientesPendientes.value.filter(c => 
-    c.nombre.toLowerCase().includes(q) || c.cedula.includes(q)
-  )
+  return clientesPendientes.value.filter(c => c.nombre.toLowerCase().includes(q) || c.cedula.includes(q))
 })
 
-// ============================================================
-// ✅ FUNCIONES AUXILIARES PARA FOTOS
-// ============================================================
-
-/**
- * Verifica si el cliente tiene una URL real de foto (no es local ni placeholder)
- */
 const tieneFotoReal = (cliente) => {
   if (!cliente || !cliente.url_cedula) return false
-  // Excluir placeholders y URLs locales
   if (cliente.url_cedula === '📷 Sí') return false
   if (cliente.url_cedula.startsWith('local_')) return false
-  // Debe ser una URL HTTP válida
   return cliente.url_cedula.startsWith('http')
 }
 
-/**
- * Verifica si es un cliente local (registrado sin conexión)
- */
 const esClienteLocal = (cliente) => {
   if (!cliente) return false
   return cliente._esLocal || (cliente.id && cliente.id.toString().startsWith('local_'))
 }
 
-/**
- * Abre el dialog para ver la foto ampliada
- */
 const verFotoAmpliada = (cliente) => {
-  if (!tieneFotoReal(cliente)) {
-    mostrarMensaje('Este cliente no tiene foto disponible', 'warning')
-    return
-  }
-  fotoCliente.value = cliente
-  dialogFoto.value = true
+  if (!tieneFotoReal(cliente)) { mostrarMensaje('Este cliente no tiene foto disponible', 'warning'); return }
+  fotoCliente.value = cliente; dialogFoto.value = true
 }
 
-/**
- * Descarga la foto de la cédula
- */
 const descargarFoto = (cliente) => {
   if (!tieneFotoReal(cliente)) return
-  const link = document.createElement('a')
-  link.href = cliente.url_cedula
-  link.download = `cedula_${cliente.cedula}.jpg`
-  link.target = '_blank'
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
+  const link = document.createElement('a'); link.href = cliente.url_cedula
+  link.download = `cedula_${cliente.cedula}.jpg`; link.target = '_blank'
+  document.body.appendChild(link); link.click(); document.body.removeChild(link)
 }
 
 const colorNivel = (nivel) => {
-  const colores = { 
-    nuevo: 'grey', 
-    bronce: 'brown', 
-    plata: 'blue', 
-    oro: 'amber', 
-    platino: 'purple' 
-  }
+  const colores = { nuevo: 'grey', bronce: 'brown', plata: 'blue', oro: 'amber', platino: 'purple' }
   return colores[nivel] || 'grey'
 }
 
-const formatearBS = (monto) => {
-  if (!monto) return '0,00'
-  return Number(monto).toLocaleString('es-VE', { 
-    minimumFractionDigits: 2, 
-    maximumFractionDigits: 2 
-  })
-}
+const formatearBS = (monto) => monto ? Number(monto).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0,00'
+const formatearFecha = (fechaStr) => fechaStr ? new Date(fechaStr).toLocaleDateString('es-VE', { day: '2-digit', month: '2-digit', year: 'numeric' }) : ''
+const mostrarMensaje = (texto, color = 'success') => { snackbar.value = { show: true, text: texto, color } }
 
-const formatearFecha = (fechaStr) => {
-  if (!fechaStr) return ''
-  const fecha = new Date(fechaStr)
-  return fecha.toLocaleDateString('es-VE', { 
-    day: '2-digit', 
-    month: '2-digit', 
-    year: 'numeric' 
-  })
-}
-
-const mostrarMensaje = (texto, color = 'success') => {
-  snackbar.value = { show: true, text: texto, color }
-}
-
-// ============================================================
-// CARGAR SOLICITUDES LOCALES
-// ============================================================
 const cargarSolicitudesLocales = () => {
   const solicitudesStr = localStorage.getItem('solicitudes_clientes')
   if (!solicitudesStr) return
-  
   try {
     const solicitudes = JSON.parse(solicitudesStr)
     if (!solicitudes.length) return
-    
-    console.log(`📋 Cargando ${solicitudes.length} solicitudes locales...`)
-    
     const nuevosClientes = solicitudes.map((sol, index) => ({
-      id: `local_${Date.now()}_${index}`,
-      nombre: sol.nombre || 'Sin nombre',
-      cedula: sol.cedula || '000000',
-      telefono: sol.telefono || '',
-      email: sol.email || '',
-      direccion: sol.direccion || '',
-      referencia_nombre: sol.referencia_nombre || '',
-      referencia_telefono: sol.referencia_telefono || '',
-      referencia_parentesco: sol.referencia_parentesco || '',
-      estado: 'pendiente',
+      id: `local_${Date.now()}_${index}`, nombre: sol.nombre || 'Sin nombre', cedula: sol.cedula || '000000',
+      telefono: sol.telefono || '', email: sol.email || '', direccion: sol.direccion || '',
+      referencia_nombre: sol.referencia_nombre || '', referencia_telefono: sol.referencia_telefono || '',
+      referencia_parentesco: sol.referencia_parentesco || '', estado: 'pendiente',
       url_cedula: sol.url_cedula || (sol.tiene_foto ? '📷 Sí' : null),
       creado_en: sol.fecha_solicitud ? new Date(sol.fecha_solicitud).toLocaleDateString('es-VE') : 'Hoy',
-      score: 0,
-      total_compras: 0,
-      nivel: 'nuevo',
-      pin: null,
-      _esLocal: true
+      score: 0, total_compras: 0, nivel: 'nuevo', pin: null, _esLocal: true
     }))
-    
     const cedulasExistentes = new Set(clientes.value.map(c => c.cedula))
     const clientesFiltrados = nuevosClientes.filter(c => !cedulasExistentes.has(c.cedula))
-    
-    if (clientesFiltrados.length) {
-      clientes.value = [...clientes.value, ...clientesFiltrados]
-      console.log(`✅ ${clientesFiltrados.length} solicitudes locales agregadas`)
-    }
-    
-  } catch (error) {
-    console.error('❌ Error cargando solicitudes locales:', error)
-  }
+    if (clientesFiltrados.length) clientes.value = [...clientes.value, ...clientesFiltrados]
+  } catch (error) { console.error('❌ Error cargando solicitudes locales:', error) }
 }
 
 const cargarTodos = async () => {
   cargando.value = true
   try {
     const data = await api.get('/clientes')
-clientes.value = data.clientes || data  // Soporta ambas respuestas
+    clientes.value = data.clientes || data
     cargarSolicitudesLocales()
-  } catch (e) {
-    console.error('Error cargando clientes:', e)
-    mostrarMensaje('Error al cargar clientes', 'error')
-  } finally {
-    cargando.value = false
-  }
+  } catch (e) { mostrarMensaje('Error al cargar clientes', 'error') }
+  finally { cargando.value = false }
 }
 
 const verDetalle = async (cliente) => {
-  if (esClienteLocal(cliente)) {
-    clienteSeleccionado.value = cliente
-    dialogDetalle.value = true
-    financiamientosCliente.value = []
-    return
-  }
-  
-  try {
-    const data = await api.get(`/clientes/${cliente.id}`)
-    clienteSeleccionado.value = data
-  } catch (e) {
-    clienteSeleccionado.value = cliente
-  }
-  
+  if (esClienteLocal(cliente)) { clienteSeleccionado.value = cliente; dialogDetalle.value = true; financiamientosCliente.value = []; return }
+  try { clienteSeleccionado.value = await api.get(`/clientes/${cliente.id}`) } catch (e) { clienteSeleccionado.value = cliente }
   dialogDetalle.value = true
-  
-  try {
-    const financiamientos = await api.get('/financiamientos')
-    financiamientosCliente.value = financiamientos.filter(f => f.cliente_id === cliente.id)
-  } catch (e) {
-    financiamientosCliente.value = []
-  }
+  try { const financiamientos = await api.get('/financiamientos'); financiamientosCliente.value = financiamientos.filter(f => f.cliente_id === cliente.id) } catch (e) { financiamientosCliente.value = [] }
 }
 
 const verCuotas = async (finId) => {
-  try {
-    const data = await api.get(`/financiamientos/${finId}/cuotas`)
-    cuotas.value = data
-    dialogCuotas.value = true
-  } catch (e) {
-    console.error('Error cargando cuotas:', e)
-  }
+  try { cuotas.value = await api.get(`/financiamientos/${finId}/cuotas`); dialogCuotas.value = true } catch (e) { console.error('Error cargando cuotas:', e) }
 }
 
-const aprobarCliente = (cliente) => {
-  clienteAprobar.value = cliente
-  dialogAprobar.value = true
-}
+const aprobarCliente = (cliente) => { clienteAprobar.value = cliente; dialogAprobar.value = true }
 
 const confirmarAprobar = async () => {
   if (!clienteAprobar.value) return
-  
-  aprobando.value = true
-  aprobandoId.value = clienteAprobar.value.id
-  
+  aprobando.value = true; aprobandoId.value = clienteAprobar.value.id
   try {
     const token = localStorage.getItem('admin_token')
     const esLocal = esClienteLocal(clienteAprobar.value)
     
     if (esLocal) {
       mostrarMensaje('📝 Creando cliente en el sistema...', 'info')
-      
-      const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/clientes`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          nombre: clienteAprobar.value.nombre,
-          cedula: clienteAprobar.value.cedula,
-          telefono: clienteAprobar.value.telefono,
-          email: clienteAprobar.value.email || '',
-          direccion: clienteAprobar.value.direccion || '',
-          referencia_nombre: clienteAprobar.value.referencia_nombre || '',
-          referencia_telefono: clienteAprobar.value.referencia_telefono || '',
-          referencia_parentesco: clienteAprobar.value.referencia_parentesco || ''
-        })
+      const response = await fetch('https://financoop.onrender.com/api/v1/clientes', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nombre: clienteAprobar.value.nombre, cedula: clienteAprobar.value.cedula, telefono: clienteAprobar.value.telefono, email: clienteAprobar.value.email || '', direccion: clienteAprobar.value.direccion || '', referencia_nombre: clienteAprobar.value.referencia_nombre || '', referencia_telefono: clienteAprobar.value.referencia_telefono || '', referencia_parentesco: clienteAprobar.value.referencia_parentesco || '' })
       })
-      
       const data = await response.json()
-      
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Error al crear cliente')
-      }
+      if (!response.ok || !data.success) throw new Error(data.error || 'Error al crear cliente')
       
       const solicitudes = JSON.parse(localStorage.getItem('solicitudes_clientes') || '[]')
-      const nuevas = solicitudes.filter(s => s.cedula !== clienteAprobar.value.cedula)
-      localStorage.setItem('solicitudes_clientes', JSON.stringify(nuevas))
-      
+      localStorage.setItem('solicitudes_clientes', JSON.stringify(solicitudes.filter(s => s.cedula !== clienteAprobar.value.cedula)))
       mostrarMensaje(`✅ ${clienteAprobar.value.nombre} creado exitosamente`, 'success')
       
       if (data.id) {
-        mostrarMensaje('📱 Enviando PIN por WhatsApp...', 'info')
-        
-        const aprobarResponse = await fetch(`${import.meta.env.VITE_API_URL || ''}/clientes/aprobar`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
+        mostrarMensaje('📱 Enviando PIN...', 'info')
+        const aprobarResponse = await fetch('https://financoop.onrender.com/api/v1/clientes/aprobar', {
+          method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
           body: JSON.stringify({ cliente_id: data.id })
         })
-        
         const aprobarData = await aprobarResponse.json()
-        
-        if (aprobarData.success) {
-          mostrarMensaje(
-            `✅ ${clienteAprobar.value.nombre} aprobado. PIN enviado.`,
-            'success'
-          )
-        } else {
-          throw new Error(aprobarData.error || 'Error al aprobar')
-        }
+        if (aprobarData.success) mostrarMensaje(`✅ ${clienteAprobar.value.nombre} aprobado. PIN enviado.`, 'success')
+        else throw new Error(aprobarData.error || 'Error al aprobar')
       }
-      
     } else {
-      const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/clientes/aprobar`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+      const response = await fetch('https://financoop.onrender.com/api/v1/clientes/aprobar', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ cliente_id: clienteAprobar.value.id })
       })
-      
       const data = await response.json()
-      
-      if (!data.success) {
-        throw new Error(data.error || 'Error al aprobar')
-      }
-      
+      if (!data.success) throw new Error(data.error || 'Error al aprobar')
       mostrarMensaje(`✅ ${clienteAprobar.value.nombre} aprobado`, 'success')
     }
-    
-    await cargarTodos()
-    tabActiva.value = 'verificados'
-    
-  } catch (error) {
-    console.error('Error aprobando:', error)
-    mostrarMensaje(error.message || 'Error al aprobar cliente', 'error')
-  } finally {
-    aprobando.value = false
-    aprobandoId.value = null
-    dialogAprobar.value = false
-  }
+    await cargarTodos(); tabActiva.value = 'verificados'
+  } catch (error) { mostrarMensaje(error.message || 'Error al aprobar cliente', 'error') }
+  finally { aprobando.value = false; aprobandoId.value = null; dialogAprobar.value = false }
 }
 
-const editarCliente = (cliente) => {
-  clienteEditando.value = { ...cliente }
-  dialogEditar.value = true
-}
+const editarCliente = (cliente) => { clienteEditando.value = { ...cliente }; dialogEditar.value = true }
 
 const guardarEdicion = async () => {
   guardando.value = true
   try {
-    const token = localStorage.getItem('admin_token')
-    await api.put(`/clientes/${clienteEditando.value.id}`, {
-      nombre: clienteEditando.value.nombre,
-      telefono: clienteEditando.value.telefono,
-      email: clienteEditando.value.email || '',
-      direccion: clienteEditando.value.direccion || ''
-    }, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
-    
-    mostrarMensaje('Cliente actualizado')
-    dialogEditar.value = false
-    await cargarTodos()
-  } catch (error) {
-    console.error('Error actualizando:', error)
-    mostrarMensaje('Error al actualizar', 'error')
-  } finally {
-    guardando.value = false
-  }
+    await api.put(`/clientes/${clienteEditando.value.id}`, { nombre: clienteEditando.value.nombre, telefono: clienteEditando.value.telefono, email: clienteEditando.value.email || '', direccion: clienteEditando.value.direccion || '' })
+    mostrarMensaje('Cliente actualizado'); dialogEditar.value = false; await cargarTodos()
+  } catch (error) { mostrarMensaje('Error al actualizar', 'error') }
+  finally { guardando.value = false }
 }
 
 const eliminarCliente = async (cliente) => {
   if (!confirm(`¿Eliminar a ${cliente.nombre}?`)) return
-  
   try {
-    const token = localStorage.getItem('admin_token')
-    await api.delete(`/clientes/${cliente.id}`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
-    mostrarMensaje('Cliente eliminado')
-    await cargarTodos()
-  } catch (error) {
-    console.error('Error eliminando:', error)
-    mostrarMensaje('Error al eliminar', 'error')
-  }
+    await api.delete(`/clientes/${cliente.id}`)
+    mostrarMensaje('Cliente eliminado'); await cargarTodos()
+  } catch (error) { mostrarMensaje('Error al eliminar', 'error') }
 }
 
-onMounted(() => {
-  cargarTodos()
-})
+onMounted(() => { cargarTodos() })
 </script>
 
 <style scoped>
-.cursor-pointer {
-  cursor: pointer;
-}
-.gap-1 {
-  gap: 4px;
-}
-.gap-2 {
-  gap: 8px;
-}
+.cursor-pointer { cursor: pointer; }
+.gap-1 { gap: 4px; }
+.gap-2 { gap: 8px; }
 </style>
