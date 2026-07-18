@@ -2,8 +2,6 @@
 import axios from 'axios'
 
 const isDevelopment = import.meta.env.MODE === 'development'
-
-// ✅ URL CORRECTA de tu backend
 const API_URL = isDevelopment 
   ? '/api/v1' 
   : 'https://financoop.onrender.com/api/v1'
@@ -30,7 +28,20 @@ api.interceptors.request.use(
 )
 
 api.interceptors.response.use(
-  (response) => response.data,
+  (response) => {
+    const data = response.data
+    
+    // ✅ Extraer array de respuestas paginadas automáticamente
+    if (data && typeof data === 'object') {
+      if (Array.isArray(data.usuarios)) return data.usuarios
+      if (Array.isArray(data.clientes)) return data.clientes
+      if (Array.isArray(data.financiamientos)) return data.financiamientos
+      if (Array.isArray(data.pagos)) return data.pagos
+      if (Array.isArray(data.cuotas)) return data.cuotas
+    }
+    
+    return data
+  },
   (error) => {
     if (error.response?.status === 401) {
       if (!window.location.pathname.includes('/login')) {
