@@ -24,6 +24,9 @@ from app.auth import (
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["Autenticación"])
 
+# ✅ Hash bcrypt VÁLIDO para timing-safe (hash de "dummy_password_value_123")
+DUMMY_HASH = "$2b$12$LJ3m4ys3GZfnYMz8kVsKaOmLp1GpGmB0qJX3PzV3QXjKtHqKw8m5u"
+
 # ============================================================
 # 📋 MODELOS Pydantic
 # ============================================================
@@ -49,7 +52,7 @@ class LoginClienteRequest(BaseModel):
 class LoginAdminRequest(BaseModel):
     """Login para panel admin - Username + Password (JSON)"""
     username: str = Field(..., min_length=3, max_length=50)
-    password: str = Field(..., min_length=8, max_length=128)
+    password: str = Field(..., min_length=1, max_length=128)
 
 class RefreshTokenRequest(BaseModel):
     refresh_token: str = Field(..., min_length=20)
@@ -73,9 +76,10 @@ class PasswordChangeRequest(BaseModel):
 class RegistroAdminRequest(BaseModel):
     username: str = Field(..., min_length=3, max_length=50, pattern=r"^[a-zA-Z0-9_]+$")
     password: str = Field(..., min_length=12, max_length=128)
-    rol: str = Field(default="usuario", pattern=r"^(admin|cajero|usuario)$")
+    rol: str = Field(default="usuario", pattern=r"^(admin|cajero|usuario|tienda)$")
     nombre: str = Field(..., min_length=2, max_length=100)
     email: str = Field(default="", max_length=200)
+    tienda_id: int = None
 
 # ============================================================
 # 🔐 LOGIN ADMIN - JSON (RECOMENDADO PARA FRONTEND VUE)
@@ -89,7 +93,6 @@ def login_admin_json(
 ):
     """
     Login para administradores del panel web (JSON).
-    Más limpio y compatible con SPAs.
     Protegido contra brute force y timing attacks.
     """
     username = request_data.username.lower().strip()
@@ -98,43 +101,33 @@ def login_admin_json(
     client_ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "unknown")
     rate_key = f"admin:{username}:{client_ip}"
     
-    # 🚫 Rate limiting
     if not _check_rate_limit(rate_key):
-        raise HTTPException(
-            status_code=429,
-            detail="Demasiados intentos fallidos. Intente más tarde."
-        )
+        raise HTTPException(status_code=429, detail="Demasiados intentos fallidos. Intente más tarde.")
     
     logger.info(f"🔑 [Admin Login JSON] Intento: {username}")
     
     usuario = db.query(Usuario).filter(Usuario.username == username).first()
     
-    # ⚠️ Timing-safe
+    # Timing-safe: verificar contra hash dummy si usuario no existe
     if not usuario:
-        verify_password(password, "$2b$12$dummyhashfordummyuser1234567890123456789012345")
+        verify_password(password, DUMMY_HASH)
         _record_failed_attempt(rate_key)
-        logger.warning(f"❌ [Admin Login] Usuario no encontrado: {username}")
         raise HTTPException(status_code=401, detail="Credenciales incorrectas")
     
     if not verify_password(password, usuario.password):
         _record_failed_attempt(rate_key)
-        logger.warning(f"❌ [Admin Login] Contraseña incorrecta: {username}")
         raise HTTPException(status_code=401, detail="Credenciales incorrectas")
     
     if not usuario.activo:
         _record_failed_attempt(rate_key)
-        logger.warning(f"❌ [Admin Login] Usuario inactivo: {username}")
         raise HTTPException(status_code=403, detail="Usuario inactivo. Contacte al administrador.")
     
-    # ✅ Login exitoso
     _record_successful_attempt(rate_key)
     
     usuario.ultimo_acceso = datetime.now(timezone.utc)
     db.commit()
     
-    access_token = create_access_token(
-        data={"sub": usuario.username, "rol": usuario.rol}
-    )
+    access_token = create_access_token(data={"sub": usuario.username, "rol": usuario.rol})
     refresh_token = create_refresh_token(usuario.username, usuario.rol)
     
     logger.info(f"✅ [Admin Login] Exitoso: {usuario.username} (rol: {usuario.rol})")
@@ -146,11 +139,13 @@ def login_admin_json(
         "refresh_token": refresh_token,
         "rol": usuario.rol,
         "username": usuario.username,
-        "nombre": usuario.nombre
+        "nombre": usuario.nombre,
+        "tienda_id": usuario.tienda_id,
+        "tienda_nombre": usuario.tienda.nombre if usuario.tienda else None
     }
 
 # ============================================================
-# 🔐 LOGIN ADMIN - FORM (COMPATIBILIDAD - OAuth2PasswordRequestForm)
+# 🔐 LOGIN ADMIN - FORM (COMPATIBILIDAD)
 # ============================================================
 
 @router.post("/login")
@@ -159,10 +154,7 @@ def login_admin_form(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db)
 ):
-    """
-    Login para administradores del panel web (form-urlencoded).
-    Mantenido por compatibilidad con Swagger UI.
-    """
+    """Login admin con form-urlencoded (Swagger UI / compatibilidad)."""
     username = form_data.username.lower().strip()
     password = form_data.password
     
@@ -170,17 +162,12 @@ def login_admin_form(
     rate_key = f"admin:{username}:{client_ip}"
     
     if not _check_rate_limit(rate_key):
-        raise HTTPException(
-            status_code=429,
-            detail="Demasiados intentos fallidos. Intente más tarde."
-        )
-    
-    logger.info(f"🔑 [Admin Login Form] Intento: {username}")
+        raise HTTPException(status_code=429, detail="Demasiados intentos fallidos")
     
     usuario = db.query(Usuario).filter(Usuario.username == username).first()
     
     if not usuario:
-        verify_password(password, "$2b$12$dummyhashfordummyuser1234567890123456789012345")
+        verify_password(password, DUMMY_HASH)
         _record_failed_attempt(rate_key)
         raise HTTPException(status_code=401, detail="Credenciales incorrectas")
     
@@ -197,12 +184,8 @@ def login_admin_form(
     usuario.ultimo_acceso = datetime.now(timezone.utc)
     db.commit()
     
-    access_token = create_access_token(
-        data={"sub": usuario.username, "rol": usuario.rol}
-    )
+    access_token = create_access_token(data={"sub": usuario.username, "rol": usuario.rol})
     refresh_token = create_refresh_token(usuario.username, usuario.rol)
-    
-    logger.info(f"✅ [Admin Login Form] Exitoso: {usuario.username}")
     
     return {
         "access_token": access_token,
@@ -211,7 +194,9 @@ def login_admin_form(
         "refresh_token": refresh_token,
         "rol": usuario.rol,
         "username": usuario.username,
-        "nombre": usuario.nombre
+        "nombre": usuario.nombre,
+        "tienda_id": usuario.tienda_id,
+        "tienda_nombre": usuario.tienda.nombre if usuario.tienda else None
     }
 
 # ============================================================
@@ -224,10 +209,7 @@ def login_cliente(
     request: Request,
     db: Session = Depends(get_db)
 ):
-    """
-    Login para clientes de la app móvil.
-    Usa cédula + PIN con verificación bcrypt.
-    """
+    """Login para clientes de la app móvil con cédula + PIN."""
     cedula = request_data.cedula
     pin = request_data.pin
     
@@ -235,28 +217,20 @@ def login_cliente(
     rate_key = f"cliente:{cedula}:{client_ip}"
     
     if not _check_rate_limit(rate_key):
-        raise HTTPException(
-            status_code=429,
-            detail="Demasiados intentos fallidos. Intente más tarde."
-        )
-    
-    logger.info(f"🔑 [Cliente Login] Intento: cédula {cedula[:4]}****")
+        raise HTTPException(status_code=429, detail="Demasiados intentos fallidos")
     
     cliente = db.query(Cliente).filter(Cliente.cedula == cedula).first()
     
     if not cliente:
-        verify_pin(pin, "$2b$12$dummyhashfordummypin123456789012345678901234567")
+        verify_pin(pin, DUMMY_HASH)
         _record_failed_attempt(rate_key)
         raise HTTPException(status_code=401, detail="Credenciales incorrectas")
     
     if cliente.estado != "aprobado":
         _record_failed_attempt(rate_key)
-        raise HTTPException(status_code=403, detail="Tu cuenta está pendiente de aprobación")
+        raise HTTPException(status_code=403, detail="Cuenta pendiente de aprobación")
     
-    # Verificar PIN con bcrypt
     if not cliente.pin_hash:
-        # Migración automática de PIN antiguo
-        from app.utils import generar_pin
         if cliente.pin and cliente.pin == pin:
             cliente.pin_hash = hash_pin(pin)
             cliente.pin = None
@@ -274,12 +248,10 @@ def login_cliente(
     cliente.ultimo_acceso = datetime.now(timezone.utc)
     db.commit()
     
-    access_token = create_access_token(
-        data={"sub": str(cliente.id), "rol": "cliente"}
-    )
+    access_token = create_access_token(data={"sub": str(cliente.id), "rol": "cliente"})
     refresh_token = create_refresh_token(str(cliente.id), "cliente")
     
-    logger.info(f"✅ [Cliente Login] Exitoso: {cliente.nombre} (ID: {cliente.id})")
+    logger.info(f"✅ [Cliente Login] {cliente.nombre} (ID: {cliente.id})")
     
     return {
         "access_token": access_token,
@@ -301,31 +273,24 @@ def login_cliente(
 # ============================================================
 
 @router.post("/refresh")
-def refresh_token(
-    request_data: RefreshTokenRequest,
-    db: Session = Depends(get_db)
-):
-    """Obtiene nuevo access token usando refresh token válido."""
+def refresh_token(request_data: RefreshTokenRequest, db: Session = Depends(get_db)):
     from app.auth import _decode_and_validate_token
     
     try:
         payload = _decode_and_validate_token(request_data.refresh_token, db)
     except HTTPException:
-        raise HTTPException(status_code=401, detail="Refresh token inválido o revocado")
+        raise HTTPException(status_code=401, detail="Refresh token inválido")
     
     if payload.get("type") != "refresh":
-        raise HTTPException(status_code=401, detail="Token no es de tipo refresh")
+        raise HTTPException(status_code=401, detail="Token no es refresh")
     
     sub = payload.get("sub")
     rol = payload.get("rol")
     
-    # Blacklistear el refresh token actual (rotación)
     blacklist_token(payload["jti"], datetime.fromtimestamp(payload["exp"], tz=timezone.utc), db)
     
     new_access = create_access_token(data={"sub": sub, "rol": rol})
     new_refresh = create_refresh_token(sub, rol)
-    
-    logger.info(f"🔄 [Refresh] Tokens rotados para {sub}")
     
     return {
         "access_token": new_access,
@@ -335,21 +300,22 @@ def refresh_token(
     }
 
 # ============================================================
-# 🔍 VERIFICAR TOKEN (Admin)
+# 🔍 VERIFICAR TOKEN
 # ============================================================
 
 @router.get("/verificar")
 def verificar_token(current_user: Usuario = Depends(get_current_admin)):
-    """Verifica que el token del admin sea válido."""
     return {
         "valid": True,
         "username": current_user.username,
         "rol": current_user.rol,
-        "nombre": current_user.nombre
+        "nombre": current_user.nombre,
+        "tienda_id": current_user.tienda_id,
+        "tienda_nombre": current_user.tienda.nombre if current_user.tienda else None
     }
 
 # ============================================================
-# 📝 REGISTRO DE ADMIN (Solo admins existentes)
+# 📝 REGISTRO DE ADMIN
 # ============================================================
 
 @router.post("/registro")
@@ -358,22 +324,9 @@ def registrar_admin(
     current_admin: Usuario = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
-    """Registro de nuevos administradores/usuarios del panel."""
-    logger.info(f"📝 [Registro Admin] {request_data.username} por {current_admin.username}")
-    
     existe = db.query(Usuario).filter(Usuario.username == request_data.username.lower()).first()
     if existe:
         raise HTTPException(status_code=409, detail="El usuario ya existe")
-    
-    # Validar fortaleza de contraseña
-    if len(request_data.password) < 12:
-        raise HTTPException(status_code=400, detail="La contraseña debe tener al menos 12 caracteres")
-    if not re.search(r"[A-Z]", request_data.password):
-        raise HTTPException(status_code=400, detail="Debe contener al menos una mayúscula")
-    if not re.search(r"[a-z]", request_data.password):
-        raise HTTPException(status_code=400, detail="Debe contener al menos una minúscula")
-    if not re.search(r"[0-9]", request_data.password):
-        raise HTTPException(status_code=400, detail="Debe contener al menos un número")
     
     nuevo = Usuario(
         username=request_data.username.lower(),
@@ -381,6 +334,7 @@ def registrar_admin(
         rol=request_data.rol,
         nombre=request_data.nombre,
         email=request_data.email,
+        tienda_id=request_data.tienda_id,
         activo=True,
         creado_por=current_admin.username
     )
@@ -388,13 +342,12 @@ def registrar_admin(
     db.commit()
     db.refresh(nuevo)
     
-    logger.info(f"✅ [Registro Admin] Usuario creado: {request_data.username} (rol: {request_data.rol})")
-    
     return {
-        "mensaje": "Usuario creado exitosamente",
+        "mensaje": "Usuario creado",
         "username": nuevo.username,
         "rol": nuevo.rol,
-        "nombre": nuevo.nombre
+        "nombre": nuevo.nombre,
+        "tienda_id": nuevo.tienda_id
     }
 
 # ============================================================
@@ -407,7 +360,6 @@ def cambiar_password(
     current_user: Usuario = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Cambio de contraseña con verificación de la anterior."""
     if not verify_password(request_data.old_password, current_user.password):
         raise HTTPException(status_code=400, detail="Contraseña actual incorrecta")
     
@@ -417,12 +369,10 @@ def cambiar_password(
     current_user.password = hash_password(request_data.new_password)
     db.commit()
     
-    logger.info(f"🔑 [Password] Contraseña cambiada para: {current_user.username}")
-    
-    return {"mensaje": "Contraseña actualizada exitosamente"}
+    return {"mensaje": "Contraseña actualizada"}
 
 # ============================================================
-# 🚪 LOGOUT (Blacklist de token)
+# 🚪 LOGOUT
 # ============================================================
 
 @router.post("/logout")
@@ -431,26 +381,15 @@ def logout(
     current_user: Usuario = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Logout: agrega el token actual a blacklist.
-    El token no podrá ser usado nuevamente.
-    """
     auth_header = request.headers.get("Authorization", "")
     token = auth_header.replace("Bearer ", "")
     
     try:
+        from app.auth import SECRET_KEY, ALGORITHM
         from jose import jwt
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM], 
                             audience="financoop-api", issuer="financoop-backend")
-        jti = payload.get("jti")
-        exp = datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
-        
-        blacklist_token(jti, exp, db)
-        
-        logger.info(f"🚪 [Logout] Token revocado para: {current_user.username if hasattr(current_user, 'username') else current_user.id}")
-        return {"mensaje": "Sesión cerrada exitosamente"}
-    except Exception:
+        blacklist_token(payload["jti"], datetime.fromtimestamp(payload["exp"], tz=timezone.utc), db)
         return {"mensaje": "Sesión cerrada"}
-
-# Importación necesaria para el logout
-from app.auth import SECRET_KEY, ALGORITHM
+    except:
+        return {"mensaje": "Sesión cerrada"}
