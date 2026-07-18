@@ -27,8 +27,14 @@ def crear_financiamiento(
         if not cliente:
             raise HTTPException(status_code=404, detail="Cliente no encontrado")
         
+        # 🔥 VALIDACIÓN 1: Cliente debe estar aprobado
         if cliente.estado != "aprobado":
-            raise HTTPException(status_code=400, detail="Cliente no está aprobado")
+            raise HTTPException(status_code=400, detail="Cliente no está aprobado. Debe ser verificado por el administrador.")
+        
+        # 🔥 VALIDACIÓN 2: Nivel "nuevo" con 0 compras no puede comprar
+        nivel, config = calcular_nivel(cliente.score)
+        if nivel == "nuevo" and (cliente.total_compras or 0) == 0:
+            raise HTTPException(status_code=400, detail="Cliente nuevo sin historial. No puede realizar compras aún.")
         
         creditos_activos = db.query(Financiamiento).filter(
             Financiamiento.cliente_id == f.cliente_id,
@@ -53,17 +59,22 @@ def crear_financiamiento(
             raise HTTPException(status_code=400, detail="Límite de financiamiento agotado")
         
         tasa = obtener_tasa_actual(db)
-        nivel, config = calcular_nivel(cliente.score)
         monto_total_usd = f.monto_total_bs / tasa if tasa > 0 else 0
         
+        # 🔥 VALIDACIÓN 3: No exceder disponible
         if monto_total_usd > disponible["disponible_usd"]:
             raise HTTPException(status_code=400, detail=f"Monto excede disponible: ${disponible['disponible_usd']:.2f}")
         
+        # 🔥 VALIDACIÓN 4: NO exceder límite del nivel
+        logger.info(f"🔍 DEBUG: cliente={cliente.nombre}, nivel={nivel}, monto_usd={monto_total_usd:.2f}, limite={config['monto_max_usd']:.2f}")
         if monto_total_usd > config["monto_max_usd"]:
-            raise HTTPException(status_code=400, detail=f"Monto excede límite de nivel {nivel}")
+            raise HTTPException(status_code=400, detail=f"❌ Monto excede límite de nivel {nivel}: ${config['monto_max_usd']:.2f} USD (solicitado: ${monto_total_usd:.2f})")
         
         if f.cuotas_solicitadas > config["cuotas_max"]:
             raise HTTPException(status_code=400, detail=f"Cuotas exceden máximo de {config['cuotas_max']}")
+        
+        if f.cuotas_solicitadas < 1:
+            raise HTTPException(status_code=400, detail="Debe solicitar al menos 1 cuota")
         
         requiere_aprobacion = f.cuotas_solicitadas > config["cuotas_base"] and config["aprobacion_extra"]
         cuotas_aprobadas = f.cuotas_solicitadas if not requiere_aprobacion else config["cuotas_base"]
@@ -210,7 +221,6 @@ def listar_financiamientos(
     try:
         query = db.query(Financiamiento)
         
-        # 🔥 FILTRO POR TIENDA
         if tienda_id:
             query = query.filter(Financiamiento.tienda_id == tienda_id)
         
