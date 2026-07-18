@@ -30,9 +30,16 @@
               </template>
 
               <template v-slot:item.rol="{ item }">
-                <v-chip :color="item.rol === 'admin' ? 'error' : 'info'" size="small">
+                <v-chip :color="colorRol(item.rol)" size="small">
                   {{ item.rol }}
                 </v-chip>
+              </template>
+
+              <!-- 🔥 NUEVO: Mostrar tienda asignada -->
+              <template v-slot:item.tienda="{ item }">
+                <span v-if="item.tienda_nombre">{{ item.tienda_nombre }}</span>
+                <v-chip v-else-if="item.rol === 'admin'" color="error" size="small">Todas</v-chip>
+                <span v-else class="text-grey">-</span>
               </template>
 
               <template v-slot:item.acciones="{ item }">
@@ -63,7 +70,8 @@
             label="Contraseña"
             type="password"
             variant="outlined"
-            :rules="[v => !usuarioEditando ? !!v || 'Requerido' : true]"
+            :hint="usuarioEditando ? 'Dejar vacío para no cambiar' : 'Mínimo 8 caracteres'"
+            persistent-hint
           />
           <v-text-field
             v-model="formUsuario.nombre"
@@ -75,12 +83,26 @@
             label="Email"
             variant="outlined"
           />
+          
+          <!-- 🔥 ROLES ACTUALIZADOS -->
           <v-select
             v-model="formUsuario.rol"
-            :items="['admin', 'cajero', 'usuario']"
-            label="Rol"
+            :items="rolesDisponibles"
+            label="Rol *"
             variant="outlined"
           />
+          
+          <!-- 🔥 SELECTOR DE TIENDA (solo si NO es admin) -->
+          <v-select
+            v-if="formUsuario.rol !== 'admin'"
+            v-model="formUsuario.tienda_id"
+            :items="tiendas"
+            item-title="nombre"
+            item-value="id"
+            label="Asignar a Tienda/Cooperativa *"
+            variant="outlined"
+          />
+          
           <v-switch
             v-model="formUsuario.activo"
             label="Usuario activo"
@@ -117,6 +139,7 @@ import { ref, onMounted } from 'vue'
 import { api } from '@/config/api'
 
 const usuarios = ref([])
+const tiendas = ref([])  // 🔥 NUEVO
 const cargando = ref(false)
 const guardando = ref(false)
 const dialogUsuario = ref(false)
@@ -129,9 +152,17 @@ const formUsuario = ref({
   password: '',
   nombre: '',
   email: '',
-  rol: 'usuario',
+  rol: 'cajero',
+  tienda_id: null,  // 🔥 NUEVO
   activo: true
 })
+
+// 🔥 Roles disponibles
+const rolesDisponibles = [
+  { title: 'Administrador Central (ve todo)', value: 'admin' },
+  { title: 'Tienda/Cooperativa (ve solo su tienda)', value: 'tienda' },
+  { title: 'Cajero (ve solo su tienda)', value: 'cajero' }
+]
 
 const headers = [
   { title: 'ID', key: 'id' },
@@ -139,9 +170,28 @@ const headers = [
   { title: 'Nombre', key: 'nombre' },
   { title: 'Email', key: 'email' },
   { title: 'Rol', key: 'rol' },
+  { title: 'Tienda', key: 'tienda' },  // 🔥 NUEVO
   { title: 'Estado', key: 'activo' },
   { title: 'Acciones', key: 'acciones', sortable: false }
 ]
+
+// 🔥 Colores por rol
+const colorRol = (rol) => {
+  const colores = { admin: 'error', tienda: 'primary', cajero: 'warning' }
+  return colores[rol] || 'grey'
+}
+
+// ============================================================
+// ✅ CARGAR TIENDAS
+// ============================================================
+const cargarTiendas = async () => {
+  try {
+    const data = await api.get('/admin/tiendas')
+    tiendas.value = Array.isArray(data) ? data : []
+  } catch (e) {
+    console.error('Error cargando tiendas:', e)
+  }
+}
 
 // ============================================================
 // ✅ CARGAR USUARIOS
@@ -174,14 +224,39 @@ const guardarUsuario = async () => {
     alert('El nombre de usuario es obligatorio')
     return
   }
+  
+  // 🔥 Validar tienda si no es admin
+  if (formUsuario.value.rol !== 'admin' && !formUsuario.value.tienda_id) {
+    alert('Debe seleccionar una tienda/cooperativa')
+    return
+  }
 
   guardando.value = true
   try {
+    const payload = {
+      username: formUsuario.value.username,
+      nombre: formUsuario.value.nombre,
+      email: formUsuario.value.email,
+      rol: formUsuario.value.rol,
+      activo: formUsuario.value.activo,
+      tienda_id: formUsuario.value.rol === 'admin' ? null : formUsuario.value.tienda_id  // 🔥
+    }
+    
+    // Solo enviar password si se ingresó uno
+    if (formUsuario.value.password) {
+      payload.password = formUsuario.value.password
+    }
+
     if (usuarioEditando.value) {
-      await api.put(`/admin/usuarios/${usuarioEditando.value.id}`, formUsuario.value)
+      await api.put(`/admin/usuarios/${usuarioEditando.value.id}`, payload)
       alert('✅ Usuario actualizado')
     } else {
-      await api.post('/admin/usuarios', formUsuario.value)
+      if (!formUsuario.value.password) {
+        alert('La contraseña es obligatoria para nuevos usuarios')
+        guardando.value = false
+        return
+      }
+      await api.post('/admin/usuarios', payload)
       alert('✅ Usuario creado')
     }
     
@@ -220,7 +295,8 @@ const abrirDialogCrear = () => {
     password: '',
     nombre: '',
     email: '',
-    rol: 'usuario',
+    rol: 'cajero',
+    tienda_id: null,  // 🔥
     activo: true
   }
   dialogUsuario.value = true
@@ -233,7 +309,8 @@ const editarUsuario = (usuario) => {
     password: '',
     nombre: usuario.nombre || '',
     email: usuario.email || '',
-    rol: usuario.rol || 'usuario',
+    rol: usuario.rol || 'cajero',
+    tienda_id: usuario.tienda_id || null,  // 🔥
     activo: usuario.activo !== undefined ? usuario.activo : true
   }
   dialogUsuario.value = true
@@ -255,6 +332,7 @@ onMounted(() => {
     return
   }
   console.log('🔑 Token presente:', token.substring(0, 30) + '...')
+  cargarTiendas()   // 🔥 Cargar tiendas primero
   cargarUsuarios()
 })
 </script>
