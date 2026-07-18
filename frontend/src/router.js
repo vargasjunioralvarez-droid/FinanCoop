@@ -12,6 +12,7 @@ import ConfiguracionView from '@/views/ConfiguracionView.vue'
 import NivelesView from '@/views/NivelesView.vue'
 import AdminLoginView from '@/views/AdminLogin.vue'
 import UsuariosView from '@/views/UsuariosView.vue'
+import AdminTiendas from '@/views/AdminTiendas.vue'  // ← NUEVA VISTA
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -30,7 +31,7 @@ const router = createRouter({
     },
 
     // ============================================================
-    // 🔒 RUTAS PARA TODOS LOS AUTENTICADOS (admin, cajero, usuario)
+    // 🔒 RUTAS PARA TODOS LOS AUTENTICADOS
     // ============================================================
     {
       path: '/inicio',
@@ -73,6 +74,11 @@ const router = createRouter({
       meta: { requiresAuth: true, requiresAdmin: true }
     },
     {
+      path: '/tiendas',           // ← NUEVA RUTA
+      component: AdminTiendas,
+      meta: { requiresAuth: true, requiresAdmin: true }
+    },
+    {
       path: '/configuracion',
       component: ConfiguracionView,
       meta: { requiresAuth: true, requiresAdmin: true }
@@ -100,7 +106,13 @@ router.beforeEach((to, from, next) => {
   if (isPublic) {
     if (token) {
       // Ya está logueado, redirigir según rol
-      next(rol === 'admin' ? '/usuarios' : '/inicio')
+      if (rol === 'admin') {
+        next('/usuarios')
+      } else if (rol === 'tienda') {
+        next('/cajero')  // Tienda ve el panel de ventas
+      } else {
+        next('/inicio')
+      }
       return
     }
     next()
@@ -113,9 +125,9 @@ router.beforeEach((to, from, next) => {
     return
   }
 
-  // 3. REQUIERE SER ADMIN
+  // 3. REQUIERE SER ADMIN (solo admin central)
   if (requiresAdmin && rol !== 'admin') {
-    alert('⛔ No tienes permisos para acceder a esta sección')
+    alert('⛔ Solo el administrador central puede acceder a esta sección')
     next('/inicio')
     return
   }
