@@ -1,7 +1,7 @@
 """
 🔒 FinanCoop - Sistema de Autenticación Ultra-Seguro
 Soporte dual: Admin (Frontend Vue) + Cliente (App Móvil)
-Multi-tienda: Admin ve todo, Tienda ve solo lo suyo
+Multi-tienda: admin_central ve todo, admin_tienda ve su tienda, cajero ve su tienda
 """
 
 from fastapi import Depends, HTTPException, status, Request
@@ -53,6 +53,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
 
 # ─────────────────────────────────────────────────────────────
 # 🔐 UTILIDADES CRIPTOGRÁFICAS
@@ -191,7 +192,39 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     raise HTTPException(status_code=401, detail="Usuario no encontrado")
 
 # ─────────────────────────────────────────────────────────────
-# 👑 SOLO ADMINISTRADORES (admin central)
+# 👤 USUARIO OPCIONAL (no falla si no hay token)
+# ─────────────────────────────────────────────────────────────
+
+def get_current_user_optional(
+    token: str = Depends(oauth2_scheme_optional), 
+    db: Session = Depends(get_db)
+):
+    """Retorna el usuario si hay token válido, o None si no hay sesión"""
+    if not token:
+        return None
+    try:
+        payload = _decode_and_validate_token(token, db)
+        sub = payload.get("sub")
+        rol = payload.get("rol", "cliente")
+
+        if sub is None:
+            return None
+
+        if rol in ["admin", "admin_central", "admin_tienda", "tienda", "cajero"]:
+            usuario = db.query(Usuario).filter(Usuario.username == sub, Usuario.activo == True).first()
+            return usuario
+
+        try:
+            cliente_id = int(sub)
+            cliente = db.query(Cliente).filter(Cliente.id == cliente_id).first()
+            return cliente
+        except ValueError:
+            return None
+    except:
+        return None
+
+# ─────────────────────────────────────────────────────────────
+# 👑 OBTENER ADMIN (cualquier rol de staff)
 # ─────────────────────────────────────────────────────────────
 
 def get_current_admin(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
@@ -206,6 +239,7 @@ def get_current_admin(token: str = Depends(oauth2_scheme), db: Session = Depends
     if not usuario:
         raise HTTPException(status_code=403, detail="Usuario no encontrado o inactivo")
     return usuario
+
 # ─────────────────────────────────────────────────────────────
 # 📱 CLIENTES (app móvil)
 # ─────────────────────────────────────────────────────────────
@@ -228,7 +262,7 @@ def get_current_cliente(token: str = Depends(oauth2_scheme), db: Session = Depen
     return cliente
 
 # ─────────────────────────────────────────────────────────────
-# 🏪 OBTENER TIENDA DEL USUARIO ACTUAL (NUEVO)
+# 🏪 OBTENER TIENDA DEL USUARIO ACTUAL
 # ─────────────────────────────────────────────────────────────
 
 def get_current_tienda(current_user = Depends(get_current_user)):

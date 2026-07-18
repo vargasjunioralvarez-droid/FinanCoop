@@ -10,7 +10,7 @@ from app.utils import (
     calcular_usado_disponible, obtener_tasa_actual, generar_token,
     enviar_pin_cliente_completo
 )
-from app.auth import get_current_admin, get_current_user, get_current_tienda, hash_pin
+from app.auth import get_current_admin, get_current_user, get_current_user_optional, get_current_tienda, hash_pin
 from datetime import datetime, timezone
 import httpx
 import os
@@ -97,7 +97,7 @@ async def crear_cliente(
     cedula_foto: Optional[UploadFile] = File(None),
     cedula_foto_base64: Optional[str] = Form(None),
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user)
+    current_user = Depends(get_current_user_optional)
 ):
     try:
         logger.info(f"📝 Registrando cliente: {cedula}")
@@ -124,8 +124,8 @@ async def crear_cliente(
         pin_hasheado = hash_pin(pin_generado)
 
         tienda_id = None
-        if hasattr(current_user, 'tienda_id') and current_user.tienda_id:
-            tienda_id = current_user.tienda_id
+        if current_user and hasattr(current_user, 'tienda_id') and current_user.tienda_id:
+           tienda_id = current_user.tienda_id
 
         db_cliente = Cliente(
             nombre=nombre,
