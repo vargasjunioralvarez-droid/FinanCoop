@@ -1,177 +1,414 @@
 # backend/app/routers/financiamientos.py
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Cliente, Financiamiento, Cuota, Pago
 from app.schemas import FinanciamientoCreate, AprobacionExtra
 from app.utils import calcular_nivel, actualizar_score_cliente, calcular_usado_disponible, obtener_tasa_actual
-from app.auth import get_current_admin
+from app.auth import get_current_admin, get_current_user
 from datetime import datetime, timedelta, timezone
 import random
+import logging
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/financiamientos", tags=["Financiamientos"])
+
+# Límite de créditos activos por cliente
+MAX_CREDITOS_ACTIVOS = 3
 
 @router.post("")
 def crear_financiamiento(f: FinanciamientoCreate, db: Session = Depends(get_db)):
-    cliente = db.query(Cliente).filter(Cliente.id == f.cliente_id).first()
-    if not cliente:
-        return {"error": "Cliente no encontrado"}
-    
-    hoy = datetime.now(timezone.utc)
-    deudas_vencidas = db.query(Cuota).join(Financiamiento).filter(
-        Financiamiento.cliente_id == f.cliente_id,
-        Cuota.estado == "pendiente",
-        Cuota.fecha_vencimiento < hoy
-    ).count()
-    
-    if deudas_vencidas > 0:
-        return {
-            "error": "BLOQUEADO",
-            "mensaje": f"Tiene {deudas_vencidas} cuota(s) vencida(s). Debe pagar antes de comprar.",
-            "deudas_vencidas": deudas_vencidas
-        }
-    
-    disponible = calcular_usado_disponible(f.cliente_id, db)
-    if not disponible["puede_comprar"]:
-        return {
-            "error": "LÍMITE AGOTADO",
-            "mensaje": "Ha usado todo su límite de financiamiento",
-            "limite_usd": disponible["limite_usd"],
-            "usado_usd": disponible["usado_usd"]
-        }
-    
-    tasa = obtener_tasa_actual(db)
-    nivel, config = calcular_nivel(cliente.score)
-    monto_total_usd = f.monto_total_bs / tasa
-    
-    if monto_total_usd > disponible["disponible_usd"]:
-        return {"error": "Monto excede disponible", "disponible_usd": disponible["disponible_usd"], "disponible_bs": disponible["disponible_bs"]}
-    
-    if monto_total_usd > config["monto_max_usd"]:
-        return {"error": "Monto excede límite", "monto_maximo_usd": config["monto_max_usd"], "monto_maximo_bs": round(config["monto_max_usd"] * tasa, 2)}
-    
-    if f.cuotas_solicitadas > config["cuotas_max"]:
-        return {"error": "Cuotas exceden límite", "cuotas_maximas": config["cuotas_max"]}
-    
-    requiere_aprobacion = f.cuotas_solicitadas > config["cuotas_base"] and config["aprobacion_extra"]
-    cuotas_aprobadas = f.cuotas_solicitadas
-    
-    entrada_bs = f.monto_total_bs * (config["entrada_pct"] / 100)
-    financia_bs = f.monto_total_bs - entrada_bs
-    monto_cuota_bs = financia_bs / cuotas_aprobadas
-    
-    monto_total_usd_ref = f.monto_total_bs / tasa
-    entrada_usd_ref = entrada_bs / tasa
-    financia_usd_ref = financia_bs / tasa
-    monto_cuota_usd_ref = monto_cuota_bs / tasa
-    
-    codigo = f"F-{random.randint(100000, 999999)}"
-    fecha_primera = datetime.now(timezone.utc) + timedelta(days=15)
-    
-    fin = Financiamiento(
-        cliente_id=f.cliente_id, codigo=codigo, descripcion=f.descripcion,
-        monto_total_bs=f.monto_total_bs, monto_entrada_bs=entrada_bs,
-        monto_financia_bs=financia_bs, monto_cuota_bs=monto_cuota_bs,
-        monto_total_usd=monto_total_usd_ref, monto_entrada_usd=entrada_usd_ref,
-        monto_financia_usd=financia_usd_ref, monto_cuota_usd=monto_cuota_usd_ref,
-        tasa_aplicada=tasa, nivel_aplicado=nivel,
-        cuotas_solicitadas=f.cuotas_solicitadas, cuotas_aprobadas=cuotas_aprobadas,
-        requiere_aprobacion=requiere_aprobacion,
-        entrada_pct=config["entrada_pct"], financia_pct=config["financia_pct"],
-        fecha_primera_cuota=fecha_primera
-    )
-    db.add(fin)
-    db.commit()
-    db.refresh(fin)
-    
-    for i in range(1, cuotas_aprobadas + 1):
-        cuota = Cuota(
-            financiamiento_id=fin.id, numero=i,
-            monto_base_bs=monto_cuota_bs, monto_total_bs=monto_cuota_bs,
-            monto_base_usd=monto_cuota_usd_ref, monto_total_usd=monto_cuota_usd_ref,
-            fecha_vencimiento=fecha_primera + timedelta(days=15 * (i - 1))
+    """Crea un nuevo financiamiento para un cliente."""
+    try:
+        cliente = db.query(Cliente).filter(Cliente.id == f.cliente_id).first()
+        if not cliente:
+            raise HTTPException(status_code=404, detail="Cliente no encontrado")
+        
+        if cliente.estado != "aprobado":
+            raise HTTPException(status_code=400, detail="Cliente no está aprobado. Debe ser aprobado primero.")
+        
+        # Verificar límite de créditos activos
+        creditos_activos = db.query(Financiamiento).filter(
+            Financiamiento.cliente_id == f.cliente_id,
+            Financiamiento.estado == "activo"
+        ).count()
+        
+        if creditos_activos >= MAX_CREDITOS_ACTIVOS:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Límite de créditos activos alcanzado ({MAX_CREDITOS_ACTIVOS}). Debe completar uno antes de solicitar otro."
+            )
+        
+        hoy = datetime.now(timezone.utc)
+        deudas_vencidas = db.query(Cuota).join(Financiamiento).filter(
+            Financiamiento.cliente_id == f.cliente_id,
+            Cuota.estado == "pendiente",
+            Cuota.fecha_vencimiento < hoy
+        ).count()
+        
+        if deudas_vencidas > 0:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Tiene {deudas_vencidas} cuota(s) vencida(s). Debe pagar antes de solicitar un nuevo crédito."
+            )
+        
+        disponible = calcular_usado_disponible(f.cliente_id, db)
+        if not disponible["puede_comprar"]:
+            raise HTTPException(
+                status_code=400,
+                detail="Ha usado todo su límite de financiamiento. Complete pagos existentes para liberar crédito."
+            )
+        
+        tasa = obtener_tasa_actual(db)
+        nivel, config = calcular_nivel(cliente.score)
+        monto_total_usd = f.monto_total_bs / tasa if tasa > 0 else 0
+        
+        if monto_total_usd > disponible["disponible_usd"]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Monto excede su disponible. Disponible: ${disponible['disponible_usd']:.2f} USD"
+            )
+        
+        if monto_total_usd > config["monto_max_usd"]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Monto excede el límite de su nivel ({nivel}). Máximo: ${config['monto_max_usd']:.2f} USD"
+            )
+        
+        if f.cuotas_solicitadas > config["cuotas_max"]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cuotas solicitadas ({f.cuotas_solicitadas}) exceden el máximo de su nivel ({config['cuotas_max']})"
+            )
+        
+        if f.cuotas_solicitadas < 1:
+            raise HTTPException(status_code=400, detail="Debe solicitar al menos 1 cuota")
+        
+        requiere_aprobacion = f.cuotas_solicitadas > config["cuotas_base"] and config["aprobacion_extra"]
+        cuotas_aprobadas = f.cuotas_solicitadas if not requiere_aprobacion else config["cuotas_base"]
+        
+        entrada_bs = f.monto_total_bs * (config["entrada_pct"] / 100)
+        financia_bs = f.monto_total_bs - entrada_bs
+        monto_cuota_bs = financia_bs / cuotas_aprobadas if cuotas_aprobadas > 0 else 0
+        
+        entrada_usd_ref = entrada_bs / tasa if tasa > 0 else 0
+        financia_usd_ref = financia_bs / tasa if tasa > 0 else 0
+        monto_cuota_usd_ref = monto_cuota_bs / tasa if tasa > 0 else 0
+        
+        codigo = f"F-{random.randint(100000, 999999)}"
+        fecha_primera = datetime.now(timezone.utc) + timedelta(days=15)
+        
+        fin = Financiamiento(
+            cliente_id=f.cliente_id, codigo=codigo, descripcion=f.descripcion,
+            monto_total_bs=f.monto_total_bs, monto_entrada_bs=entrada_bs,
+            monto_financia_bs=financia_bs, monto_cuota_bs=monto_cuota_bs,
+            monto_total_usd=monto_total_usd, monto_entrada_usd=entrada_usd_ref,
+            monto_financia_usd=financia_usd_ref, monto_cuota_usd=monto_cuota_usd_ref,
+            tasa_aplicada=tasa, nivel_aplicado=nivel,
+            cuotas_solicitadas=f.cuotas_solicitadas, cuotas_aprobadas=cuotas_aprobadas,
+            requiere_aprobacion=requiere_aprobacion,
+            entrada_pct=config["entrada_pct"], financia_pct=config["financia_pct"],
+            fecha_primera_cuota=fecha_primera,
+            estado="activo"
         )
-        db.add(cuota)
-    db.commit()
-    
-    if hasattr(cliente, 'total_monto_comprado_usd'):
-        cliente.total_monto_comprado_usd += monto_total_usd
+        db.add(fin)
         db.commit()
-    
-    actualizar_score_cliente(cliente, db)
-    
-    return {
-        "financiamiento": {
-            "id": fin.id, "codigo": fin.codigo,
+        db.refresh(fin)
+        
+        # Crear cuotas
+        for i in range(1, cuotas_aprobadas + 1):
+            cuota = Cuota(
+                financiamiento_id=fin.id, numero=i,
+                monto_base_bs=monto_cuota_bs, monto_total_bs=monto_cuota_bs,
+                monto_base_usd=monto_cuota_usd_ref, monto_total_usd=monto_cuota_usd_ref,
+                fecha_vencimiento=fecha_primera + timedelta(days=15 * (i - 1)),
+                estado="pendiente"
+            )
+            db.add(cuota)
+        db.commit()
+        
+        # Actualizar total comprado del cliente
+        if hasattr(cliente, 'total_monto_comprado_usd'):
+            cliente.total_monto_comprado_usd = (cliente.total_monto_comprado_usd or 0) + monto_total_usd
+            db.commit()
+        
+        actualizar_score_cliente(cliente, db)
+        
+        logger.info(f"✅ Financiamiento creado: {codigo} para {cliente.nombre}")
+        
+        return {
+            "success": True,
+            "financiamiento": {
+                "id": fin.id, "codigo": fin.codigo,
+                "monto_total_bs": round(fin.monto_total_bs, 2),
+                "monto_total_usd": round(fin.monto_total_usd, 2),
+                "monto_entrada_bs": round(fin.monto_entrada_bs, 2),
+                "monto_entrada_usd": round(fin.monto_entrada_usd, 2),
+                "monto_cuota_bs": round(fin.monto_cuota_bs, 2),
+                "monto_cuota_usd": round(fin.monto_cuota_usd, 2),
+                "tasa_aplicada": fin.tasa_aplicada,
+                "cuotas_aprobadas": fin.cuotas_aprobadas,
+                "requiere_aprobacion": fin.requiere_aprobacion,
+                "estado": fin.estado
+            },
+            "score_actualizado": cliente.score,
+            "nivel_actual": cliente.nivel,
+            "mensaje": f"Entrada de Bs {entrada_bs:,.2f}. {cuotas_aprobadas} cuotas quincenales de Bs {monto_cuota_bs:,.2f}",
+            "advertencia": "Requiere aprobación adicional del establecimiento" if requiere_aprobacion else None
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error creando financiamiento: {e}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error al crear financiamiento: {str(e)}")
+
+@router.post("/{id}/aprobar")
+def aprobar_financiamiento(
+    id: int, 
+    aprobacion: AprobacionExtra, 
+    db: Session = Depends(get_db),
+    current_admin = Depends(get_current_admin)
+):
+    """Aprueba un financiamiento que requiere aprobación extra (solo admin)."""
+    try:
+        fin = db.query(Financiamiento).filter(Financiamiento.id == id).first()
+        if not fin:
+            raise HTTPException(status_code=404, detail="Financiamiento no encontrado")
+        
+        if not fin.requiere_aprobacion:
+            raise HTTPException(status_code=400, detail="Este financiamiento no requiere aprobación extra")
+        
+        if fin.estado != "activo":
+            raise HTTPException(status_code=400, detail=f"El financiamiento está en estado '{fin.estado}'")
+        
+        if aprobacion.cuotas_aprobadas < 1:
+            raise HTTPException(status_code=400, detail="Debe aprobar al menos 1 cuota")
+        
+        # Actualizar cuotas aprobadas
+        fin.cuotas_aprobadas = aprobacion.cuotas_aprobadas
+        fin.aprobado_por = aprobacion.aprobado_por
+        fin.requiere_aprobacion = False
+        db.commit()
+        
+        # Recalcular monto de cuota
+        cliente = db.query(Cliente).filter(Cliente.id == fin.cliente_id).first()
+        if cliente:
+            monto_cuota_bs = fin.monto_financia_bs / aprobacion.cuotas_aprobadas if aprobacion.cuotas_aprobadas > 0 else 0
+            monto_cuota_usd = fin.monto_financia_usd / aprobacion.cuotas_aprobadas if aprobacion.cuotas_aprobadas > 0 else 0
+            
+            # Eliminar cuotas existentes y recrear
+            db.query(Cuota).filter(Cuota.financiamiento_id == fin.id).delete()
+            
+            for i in range(1, aprobacion.cuotas_aprobadas + 1):
+                cuota = Cuota(
+                    financiamiento_id=fin.id, numero=i,
+                    monto_base_bs=monto_cuota_bs, monto_total_bs=monto_cuota_bs,
+                    monto_base_usd=monto_cuota_usd, monto_total_usd=monto_cuota_usd,
+                    fecha_vencimiento=fin.fecha_primera_cuota + timedelta(days=15 * (i - 1)),
+                    estado="pendiente"
+                )
+                db.add(cuota)
+            
+            fin.monto_cuota_bs = monto_cuota_bs
+            fin.monto_cuota_usd = monto_cuota_usd
+            db.commit()
+        
+        logger.info(f"✅ Financiamiento {fin.codigo} aprobado con {aprobacion.cuotas_aprobadas} cuotas por {aprobacion.aprobado_por}")
+        
+        return {
+            "success": True,
+            "mensaje": f"Financiamiento aprobado con {aprobacion.cuotas_aprobadas} cuotas",
+            "aprobado_por": aprobacion.aprobado_por,
+            "financiamiento_id": fin.id
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error aprobando financiamiento: {e}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("")
+def listar_financiamientos(
+    skip: int = 0,
+    limit: int = 50,
+    estado: str = None,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """Lista financiamientos con paginación y filtro opcional por estado."""
+    try:
+        query = db.query(Financiamiento)
+        
+        if estado:
+            query = query.filter(Financiamiento.estado == estado)
+        
+        total = query.count()
+        financiamientos = query.order_by(Financiamiento.id.desc()).offset(skip).limit(limit).all()
+        
+        resultado = []
+        for fin in financiamientos:
+            cliente = db.query(Cliente).filter(Cliente.id == fin.cliente_id).first()
+            resultado.append({
+                "id": fin.id,
+                "codigo": fin.codigo,
+                "cliente_id": fin.cliente_id,
+                "cliente_nombre": cliente.nombre if cliente else "Desconocido",
+                "descripcion": fin.descripcion,
+                "monto_total_bs": round(fin.monto_total_bs, 2),
+                "monto_total_usd": round(fin.monto_total_usd, 2),
+                "cuotas_aprobadas": fin.cuotas_aprobadas,
+                "estado": fin.estado,
+                "requiere_aprobacion": fin.requiere_aprobacion,
+                "fecha_primera_cuota": fin.fecha_primera_cuota.isoformat() if fin.fecha_primera_cuota else None,
+                "creado_en": fin.creado_en.isoformat() if fin.creado_en else None
+            })
+        
+        return {
+            "total": total,
+            "skip": skip,
+            "limit": limit,
+            "financiamientos": resultado
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Error listando financiamientos: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/{id}")
+def obtener_financiamiento(id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    """Obtiene detalle de un financiamiento específico."""
+    try:
+        fin = db.query(Financiamiento).filter(Financiamiento.id == id).first()
+        if not fin:
+            raise HTTPException(status_code=404, detail="Financiamiento no encontrado")
+        
+        cliente = db.query(Cliente).filter(Cliente.id == fin.cliente_id).first()
+        cuotas = db.query(Cuota).filter(Cuota.financiamiento_id == fin.id).order_by(Cuota.numero).all()
+        
+        return {
+            "id": fin.id,
+            "codigo": fin.codigo,
+            "cliente": {
+                "id": cliente.id if cliente else None,
+                "nombre": cliente.nombre if cliente else "Desconocido",
+                "cedula": cliente.cedula if cliente else "",
+                "telefono": cliente.telefono if cliente else ""
+            },
+            "descripcion": fin.descripcion,
             "monto_total_bs": round(fin.monto_total_bs, 2),
             "monto_total_usd": round(fin.monto_total_usd, 2),
             "monto_entrada_bs": round(fin.monto_entrada_bs, 2),
-            "monto_entrada_usd": round(fin.monto_entrada_usd, 2),
-            "monto_cuota_bs": round(fin.monto_cuota_bs, 2),
-            "monto_cuota_usd": round(fin.monto_cuota_usd, 2),
+            "monto_financia_bs": round(fin.monto_financia_bs, 2),
             "tasa_aplicada": fin.tasa_aplicada,
+            "nivel_aplicado": fin.nivel_aplicado,
+            "cuotas_solicitadas": fin.cuotas_solicitadas,
             "cuotas_aprobadas": fin.cuotas_aprobadas,
-            "requiere_aprobacion": fin.requiere_aprobacion
-        },
-        "score_actualizado": cliente.score,
-        "nivel_actual": cliente.nivel,
-        "mensaje": f"Entrada de BS {entrada_bs:.2f} pagada. {cuotas_aprobadas} cuotas quincenales de BS {monto_cuota_bs:.2f}",
-        "advertencia": "Requiere aprobación del establecimiento" if requiere_aprobacion else None
-    }
-
-@router.post("/{id}/aprobar")
-def aprobar_financiamiento(id: int, aprobacion: AprobacionExtra, db: Session = Depends(get_db)):
-    fin = db.query(Financiamiento).filter(Financiamiento.id == id).first()
-    if not fin:
-        return {"error": "Financiamiento no encontrado"}
-    if not fin.requiere_aprobacion:
-        return {"error": "Este financiamiento no requiere aprobación"}
-    fin.cuotas_aprobadas = aprobacion.cuotas_aprobadas
-    fin.aprobado_por = aprobacion.aprobado_por
-    db.commit()
-    return {"mensaje": f"Financiamiento aprobado con {aprobacion.cuotas_aprobadas} cuotas", "aprobado_por": aprobacion.aprobado_por}
-
-@router.get("")
-def listar_financiamientos(db: Session = Depends(get_db)):
-    return db.query(Financiamiento).all()
-
-@router.get("/{id}")
-def obtener_financiamiento(id: int, db: Session = Depends(get_db)):
-    fin = db.query(Financiamiento).filter(Financiamiento.id == id).first()
-    if not fin:
-        return {"error": "No encontrado"}
-    cliente = db.query(Cliente).filter(Cliente.id == fin.cliente_id).first()
-    return {"financiamiento": fin, "cliente": {"nombre": cliente.nombre, "telefono": cliente.telefono}}
+            "requiere_aprobacion": fin.requiere_aprobacion,
+            "aprobado_por": fin.aprobado_por,
+            "estado": fin.estado,
+            "fecha_primera_cuota": fin.fecha_primera_cuota.isoformat() if fin.fecha_primera_cuota else None,
+            "fecha_completado": fin.fecha_completado.isoformat() if fin.fecha_completado else None,
+            "creado_en": fin.creado_en.isoformat() if fin.creado_en else None,
+            "cuotas": [
+                {
+                    "id": c.id,
+                    "numero": c.numero,
+                    "monto_base_bs": round(c.monto_base_bs, 2),
+                    "monto_interes_mora_bs": round(c.monto_interes_mora_bs, 2),
+                    "monto_total_bs": round(c.monto_total_bs, 2),
+                    "fecha_vencimiento": c.fecha_vencimiento.isoformat() if c.fecha_vencimiento else None,
+                    "fecha_pago": c.fecha_pago.isoformat() if c.fecha_pago else None,
+                    "estado": c.estado
+                }
+                for c in cuotas
+            ]
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error obteniendo financiamiento: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/{id}/cuotas")
-def ver_cuotas(id: int, db: Session = Depends(get_db)):
-    cuotas = db.query(Cuota).filter(Cuota.financiamiento_id == id).all()
-    hoy = datetime.now(timezone.utc)
-    resultado = []
-    for c in cuotas:
-        data = {
-            "id": c.id, "numero": c.numero,
-            "monto_base_bs": round(c.monto_base_bs, 2),
-            "monto_interes_mora_bs": round(c.monto_interes_mora_bs, 2),
-            "monto_total_bs": round(c.monto_total_bs, 2),
-            "monto_base_usd": round(c.monto_base_usd, 2),
-            "monto_interes_mora_usd": round(c.monto_interes_mora_usd, 2),
-            "monto_total_usd": round(c.monto_total_usd, 2),
-            "fecha_vencimiento": c.fecha_vencimiento.isoformat() if c.fecha_vencimiento else None,
-            "estado": c.estado, "dias_atraso": 0
+def ver_cuotas(id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    """Ver cuotas de un financiamiento con cálculo de días de atraso."""
+    try:
+        fin = db.query(Financiamiento).filter(Financiamiento.id == id).first()
+        if not fin:
+            raise HTTPException(status_code=404, detail="Financiamiento no encontrado")
+        
+        cuotas = db.query(Cuota).filter(Cuota.financiamiento_id == id).order_by(Cuota.numero).all()
+        hoy = datetime.now(timezone.utc)
+        
+        resultado = []
+        for c in cuotas:
+            dias_atraso = 0
+            if c.estado == "pendiente" and hoy > c.fecha_vencimiento:
+                dias_atraso = (hoy - c.fecha_vencimiento).days
+            
+            resultado.append({
+                "id": c.id,
+                "numero": c.numero,
+                "monto_base_bs": round(c.monto_base_bs, 2),
+                "monto_interes_mora_bs": round(c.monto_interes_mora_bs, 2),
+                "monto_total_bs": round(c.monto_total_bs, 2),
+                "monto_base_usd": round(c.monto_base_usd, 2),
+                "monto_interes_mora_usd": round(c.monto_interes_mora_usd, 2),
+                "monto_total_usd": round(c.monto_total_usd, 2),
+                "fecha_vencimiento": c.fecha_vencimiento.isoformat() if c.fecha_vencimiento else None,
+                "estado": c.estado,
+                "dias_atraso": dias_atraso
+            })
+        
+        return {
+            "financiamiento_id": id,
+            "codigo": fin.codigo,
+            "total_cuotas": len(cuotas),
+            "cuotas": resultado
         }
-        if c.estado == "pendiente" and hoy > c.fecha_vencimiento:
-            data["dias_atraso"] = (hoy - c.fecha_vencimiento).days
-        resultado.append(data)
-    return resultado
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error viendo cuotas: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/{id}")
-def eliminar_financiamiento(id: int, db: Session = Depends(get_db), current_admin = Depends(get_current_admin)):
-    financiamiento = db.query(Financiamiento).filter(Financiamiento.id == id).first()
-    if not financiamiento:
-        raise HTTPException(status_code=404, detail="Financiamiento no encontrado")
-    db.query(Pago).filter(Pago.financiamiento_id == id).delete(synchronize_session=False)
-    db.query(Cuota).filter(Cuota.financiamiento_id == id).delete(synchronize_session=False)
-    db.delete(financiamiento)
-    db.commit()
-    return {"success": True, "mensaje": f"Financiamiento #{id} eliminado correctamente"}
+def eliminar_financiamiento(
+    id: int, 
+    db: Session = Depends(get_db), 
+    current_admin = Depends(get_current_admin)
+):
+    """Elimina un financiamiento y sus cuotas/pagos asociados (solo admin)."""
+    try:
+        financiamiento = db.query(Financiamiento).filter(Financiamiento.id == id).first()
+        if not financiamiento:
+            raise HTTPException(status_code=404, detail="Financiamiento no encontrado")
+        
+        if financiamiento.estado == "completado":
+            raise HTTPException(status_code=400, detail="No se puede eliminar un financiamiento completado")
+        
+        # Eliminar en cascada
+        db.query(Pago).filter(Pago.financiamiento_id == id).delete(synchronize_session=False)
+        db.query(Cuota).filter(Cuota.financiamiento_id == id).delete(synchronize_session=False)
+        db.delete(financiamiento)
+        db.commit()
+        
+        logger.info(f"🗑️ Financiamiento #{id} eliminado")
+        
+        return {
+            "success": True, 
+            "mensaje": f"Financiamiento #{id} eliminado correctamente"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error eliminando financiamiento: {e}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))

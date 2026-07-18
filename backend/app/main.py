@@ -1,15 +1,14 @@
 """
-🔒 FinanCash API - Configuración Principal con Seguridad Hardenizada
+🔒 FinanCoop API - Configuración Principal con Seguridad Hardenizada
 """
 
 import os
 import logging
+from app.auth import USE_REDIS
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse, HTMLResponse
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
 from app.database import engine, Base, get_db
 from app.models import NivelConfig, TasaDolar, ConfiguracionPago
 from app.config import NIVELES_CONFIG_DEFAULT
@@ -21,12 +20,12 @@ from app.routers import (
     app_mobile_router, 
     admin_router, 
     auth_router,
-    upload_router  # ← AGREGADO PARA CLOUDFLARE
+    upload_router
 )
 from datetime import datetime, timezone
 
 # ─────────────────────────────────────────────────────────────
-# 📝 LOGGING SEGURO
+# 📝 LOGGING SEGURO (sin datos sensibles)
 # ─────────────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
@@ -41,17 +40,16 @@ ENV = os.getenv("ENVIRONMENT", "development")
 IS_PROD = ENV == "production"
 
 app = FastAPI(
-    title="FinanCash API",
-    description="API segura para sistema de administración financiera",
+    title="FinanCoop API",
+    description="API segura para sistema de financiamiento cooperativo",
     version="4.0.0",
     docs_url="/docs" if not IS_PROD else None,
     redoc_url="/redoc" if not IS_PROD else None,
     openapi_url="/openapi.json" if not IS_PROD else None,
-    debug=False
 )
 
 # ─────────────────────────────────────────────────────────────
-# 🌐 CORS: Orígenes permitidos
+# 🌐 CORS RESTRICTIVO
 # ─────────────────────────────────────────────────────────────
 ALLOWED_ORIGINS = [
     "http://localhost:5173",
@@ -62,49 +60,28 @@ ALLOWED_ORIGINS = [
     "http://127.0.0.1:5174",
     "http://127.0.0.1:5175",
     "http://127.0.0.1:5176",
-    "http://192.168.10.122:5175", 
+    "http://192.168.10.122:5175",
     "capacitor://localhost",
     "ionic://localhost",
     "http://localhost",
     "https://localhost",
-    "https://financoop-frontend.onrender.com",
-    "https://financoop-backend.onrender.com",
-    "https://financoop.onrender.com",
-    "null",
-    "",
 ]
 
 if IS_PROD:
-    https_origins = [o for o in ALLOWED_ORIGINS if o.startswith("https://")]
-    ALLOWED_ORIGINS = list(set(https_origins + [
+    ALLOWED_ORIGINS = [
+        "https://financoop-frontend.onrender.com",
+        "https://financoop.onrender.com",
         "capacitor://localhost",
         "ionic://localhost",
-        "http://localhost",
-        "https://localhost",
-        "null",
-        "",
-    ]))
+    ]
     logger.info(f"🔒 CORS en producción: {ALLOWED_ORIGINS}")
 
-# ─────────────────────────────────────────────────────────────
-# ✅ CORS NATIVO DE FASTAPI (MÁS CONFIABLE)
-# ─────────────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allow_headers=[
-        "Authorization", 
-        "Content-Type", 
-        "X-Request-ID", 
-        "X-Requested-With",
-        "Accept", 
-        "Origin", 
-        "Cache-Control", 
-        "Pragma", 
-        "Expires"
-    ],
+    allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
     expose_headers=["X-Request-ID"],
     max_age=86400
 )
@@ -119,58 +96,24 @@ async def security_headers(request: Request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    
     csp = (
-        "default-src 'self' https: http://localhost:*; "
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; "
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
         "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
         "img-src 'self' data: https: blob:; "
-        "font-src 'self' data: https://cdn.jsdelivr.net; "
-        "connect-src 'self' https://*.onrender.com https: http://localhost:*; "
+        "connect-src 'self' https://*.onrender.com https:; "
         "frame-ancestors 'none'; "
         "base-uri 'self'; "
         "form-action 'self'"
     )
     response.headers["Content-Security-Policy"] = csp
-
+    
     if IS_PROD:
-        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
+    
     return response
-
-# ─────────────────────────────────────────────────────────────
-# 📚 SWAGGER UI PERSONALIZADO
-# ─────────────────────────────────────────────────────────────
-@app.get("/docs", include_in_schema=False)
-async def custom_swagger_ui_html():
-    html = """
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <title>FinanCoop API - Swagger UI</title>
-        <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css" />
-    </head>
-    <body>
-        <div id="swagger-ui"></div>
-        <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
-        <script>
-            window.onload = function() {
-                window.ui = SwaggerUIBundle({
-                    url: "/openapi.json",
-                    dom_id: "#swagger-ui",
-                    deepLinking: true,
-                    defaultModelsExpandDepth: -1,
-                    docExpansion: "none",
-                    persistAuthorization: true,
-                    validatorUrl: null,
-                });
-            };
-        </script>
-    </body>
-    </html>
-    """
-    return HTMLResponse(content=html)
 
 # ─────────────────────────────────────────────────────────────
 # 🏠 TRUSTED HOST
@@ -180,10 +123,10 @@ if IS_PROD:
         TrustedHostMiddleware,
         allowed_hosts=[
             "financoop.onrender.com",
-            "financash-backend.onrender.com",
-            "financash-frontend.onrender.com",
+            "financoop-backend.onrender.com",
+            "financoop-frontend.onrender.com",
             "localhost",
-            "*"
+            "*.onrender.com"
         ]
     )
 
@@ -193,16 +136,10 @@ if IS_PROD:
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     request_id = request.headers.get("X-Request-ID", "unknown")
-    logger.error(
-        f"❌ [Error {request_id}] {type(exc).__name__}: {str(exc)}",
-        exc_info=True
-    )
+    logger.error(f"❌ [Error {request_id}] {type(exc).__name__}: {str(exc)}")
     return JSONResponse(
         status_code=500,
-        content={
-            "detail": "Error interno del servidor",
-            "request_id": request_id
-        }
+        content={"detail": "Error interno del servidor", "request_id": request_id}
     )
 
 # ─────────────────────────────────────────────────────────────
@@ -255,14 +192,6 @@ def init_db():
         db.commit()
         logger.info("🚀 Base de datos inicializada correctamente")
         
-        # Verificar Cloudflare
-        cloudflare_account_id = os.getenv("CLOUDFLARE_ACCOUNT_ID")
-        cloudflare_api_token = os.getenv("CLOUDFLARE_API_TOKEN")
-        if cloudflare_account_id and cloudflare_api_token:
-            logger.info("✅ Cloudflare Images configurado correctamente")
-        else:
-            logger.warning("⚠️ Cloudflare Images NO configurado")
-            
     except Exception as e:
         db.rollback()
         logger.error(f"❌ Error inicializando BD: {e}")
@@ -271,24 +200,26 @@ def init_db():
         db.close()
 
 # ─────────────────────────────────────────────────────────────
-# 🔌 ROUTERS
+# 🔌 ROUTERS CON PREFIJO /api/v1
 # ─────────────────────────────────────────────────────────────
-app.include_router(clientes_router)
-app.include_router(financiamientos_router)
-app.include_router(pagos_router)
-app.include_router(config_router)
-app.include_router(app_mobile_router)
-app.include_router(admin_router)
-app.include_router(auth_router)
-app.include_router(upload_router)  # ← AGREGADO PARA CLOUDFLARE
+API_PREFIX = "/api/v1"
+
+app.include_router(auth_router, prefix=API_PREFIX)
+app.include_router(clientes_router, prefix=API_PREFIX)
+app.include_router(financiamientos_router, prefix=API_PREFIX)
+app.include_router(pagos_router, prefix=API_PREFIX)
+app.include_router(config_router, prefix=API_PREFIX)
+app.include_router(app_mobile_router, prefix=API_PREFIX)
+app.include_router(admin_router, prefix=API_PREFIX)
+app.include_router(upload_router, prefix=API_PREFIX)
 
 # ─────────────────────────────────────────────────────────────
 # 🚀 STARTUP
 # ─────────────────────────────────────────────────────────────
 @app.on_event("startup")
 def startup():
-    logger.info(f"🚀 FinanCash API iniciando | Entorno: {ENV}")
-    logger.info(f"🌐 CORS orígenes permitidos: {ALLOWED_ORIGINS}")
+    logger.info(f"🚀 FinanCoop API iniciando | Entorno: {ENV}")
+    logger.info(f"🔒 Rate limiting: {'Redis' if USE_REDIS else 'Memoria'}")
     init_db()
 
 # ─────────────────────────────────────────────────────────────

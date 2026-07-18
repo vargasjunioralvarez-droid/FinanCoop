@@ -1,11 +1,10 @@
 # backend/app/routers/app_mobile.py
-from fastapi import APIRouter, Depends, Response, Header, HTTPException
+from fastapi import APIRouter, Depends, Response, Header, HTTPException, status
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Cliente, Financiamiento, Cuota, ConfiguracionPago, NivelConfig
-from app.schemas import LoginApp
 from app.utils import generar_token, obtener_tasa_actual, calcular_usado_disponible, actualizar_score_cliente, calcular_nivel
-from app.auth import create_access_token, get_current_user  # ← IMPORTAR JWT
+from app.auth import get_current_user, get_current_cliente
 from datetime import datetime, timezone
 import logging
 
@@ -14,7 +13,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/app", tags=["App Móvil"])
 
 def obtener_token(token_query: str = None, authorization: str = Header(None)):
-    """Extraer token de query param O header Authorization"""
+    """Extraer token de query param O header Authorization."""
     if authorization and isinstance(authorization, str) and authorization.startswith("Bearer "):
         return authorization.replace("Bearer ", "").strip()
     if authorization and isinstance(authorization, str) and len(authorization) > 10:
@@ -23,92 +22,34 @@ def obtener_token(token_query: str = None, authorization: str = Header(None)):
         return token_query.strip()
     return None
 
+# ============================================================
+# NOTA: El login de la app móvil ahora está en /auth/login-cliente
+# Este endpoint se mantiene por compatibilidad pero redirige
+# ============================================================
+
 @router.options("/login")
 def options_login():
     return Response(status_code=200)
 
 # ============================================================
-# ✅ LOGIN - GENERA JWT
-# ============================================================
-@router.post("/login")
-def login_app(login: LoginApp, db: Session = Depends(get_db)):
-    try:
-        print(f"🔑 [login] Intentando login para cédula: {login.cedula}")
-        
-        cliente = db.query(Cliente).filter(Cliente.cedula == login.cedula).first()
-        if not cliente:
-            print(f"❌ [login] Cliente no encontrado: {login.cedula}")
-            return {"error": "Cliente no encontrado"}
-
-        if cliente.pin != login.pin:
-            print(f"❌ [login] PIN incorrecto para: {login.cedula}")
-            return {"error": "PIN incorrecto"}
-
-        if cliente.estado != "aprobado":
-            print(f"❌ [login] Cliente no aprobado: {login.cedula}")
-            return {"error": "Tu cuenta está pendiente de aprobación. Contacta a la cooperativa."}
-
-        # ✅ RECALCULAR NIVEL Y SCORE
-        actualizar_score_cliente(cliente, db)
-        db.refresh(cliente)
-        print(f"🔄 [login] Cliente {cliente.nombre} - Nivel: {cliente.nivel}")
-
-        # ✅ GENERAR JWT (NO UUID)
-        token_data = {
-            "sub": str(cliente.id),  # ID del cliente como subject
-            "rol": "cliente",
-            "nombre": cliente.nombre,
-            "cedula": cliente.cedula
-        }
-        
-        # Usar create_access_token de auth.py
-        token = create_access_token(token_data)
-        print(f"✅ [login] JWT generado para {cliente.nombre} (ID: {cliente.id})")
-        print(f"✅ [login] Token: {token[:50]}...")
-
-        # Actualizar último acceso
-        cliente.ultimo_acceso = datetime.now(timezone.utc)
-        db.commit()
-
-        return {
-            "token": token,
-            "cliente": {
-                "id": cliente.id,
-                "nombre": cliente.nombre,
-                "cedula": cliente.cedula,
-                "nivel": cliente.nivel,
-                "score": cliente.score,
-                "telefono": cliente.telefono
-            }
-        }
-        
-    except Exception as e:
-        print(f"❌ [login] Error: {e}")
-        import traceback
-        traceback.print_exc()
-        return {"error": str(e)}
-
-# ============================================================
-# ✅ MI PERFIL - USANDO get_current_user
+# MI PERFIL
 # ============================================================
 @router.get("/mi-perfil")
 def mi_perfil(
     current_user = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Obtener perfil del cliente logueado (para app móvil)"""
+    """Obtener perfil del cliente logueado."""
     try:
-        # Verificar que sea un cliente (no admin)
         if hasattr(current_user, 'rol') and current_user.rol == "admin":
-            return {"error": "Endpoint solo para clientes"}
+            raise HTTPException(status_code=403, detail="Endpoint solo para clientes")
         
         cliente_id = current_user.id
         
         cliente = db.query(Cliente).filter(Cliente.id == cliente_id).first()
         if not cliente:
-            return {"error": "Cliente no encontrado"}
+            raise HTTPException(status_code=404, detail="Cliente no encontrado")
 
-        # ✅ RECALCULAR AL OBTENER PERFIL
         actualizar_score_cliente(cliente, db)
         db.refresh(cliente)
 
@@ -126,33 +67,33 @@ def mi_perfil(
             "nivel": cliente.nivel,
             "total_compras": cliente.total_compras,
             "url_cedula": cliente.url_cedula,
-            "estado": cliente.estado or "pendiente",
-            "pin": cliente.pin
+            "estado": cliente.estado or "pendiente"
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        print(f"❌ [mi-perfil] Error: {e}")
-        return {"error": str(e)}
+        logger.error(f"❌ [mi-perfil] Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ============================================================
-# ✅ MIS DATOS - USANDO get_current_user
+# MIS DATOS (Dashboard principal de la app)
 # ============================================================
 @router.get("/mis-datos")
 def mis_datos(
     current_user = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    """Obtener todos los datos del cliente para el dashboard."""
     try:
-        # Verificar que sea un cliente (no admin)
         if hasattr(current_user, 'rol') and current_user.rol == "admin":
-            return {"error": "Endpoint solo para clientes"}
+            raise HTTPException(status_code=403, detail="Endpoint solo para clientes")
         
         cliente_id = current_user.id
         
         cliente = db.query(Cliente).filter(Cliente.id == cliente_id).first()
         if not cliente:
-            return {"error": "Cliente no encontrado"}
+            raise HTTPException(status_code=404, detail="Cliente no encontrado")
 
-        # ✅ RECALCULAR NIVEL Y SCORE
         actualizar_score_cliente(cliente, db)
         db.refresh(cliente)
 
@@ -168,7 +109,7 @@ def mis_datos(
 
         financiamientos_data = []
         for fin in activos:
-            cuotas = db.query(Cuota).filter(Cuota.financiamiento_id == fin.id).all()
+            cuotas = db.query(Cuota).filter(Cuota.financiamiento_id == fin.id).order_by(Cuota.numero).all()
 
             cuotas_pendientes = [c for c in cuotas if c.estado in ["pendiente", "conciliando"]]
             cuotas_atrasadas = [c for c in cuotas if c.estado == "pendiente" and hoy > c.fecha_vencimiento]
@@ -235,30 +176,30 @@ def mis_datos(
                 "binance": getattr(config, 'correo_binance', None) if config else None
             }
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        print(f"❌ [mis-datos] Error: {e}")
-        import traceback
-        traceback.print_exc()
-        return {"error": str(e)}
+        logger.error(f"❌ [mis-datos] Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ============================================================
-# ✅ MIS CUOTAS - USANDO get_current_user
+# MIS CUOTAS
 # ============================================================
 @router.get("/mis-cuotas")
 def mis_cuotas(
     current_user = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    """Obtener todas las cuotas del cliente."""
     try:
-        # Verificar que sea un cliente (no admin)
         if hasattr(current_user, 'rol') and current_user.rol == "admin":
-            return {"error": "Endpoint solo para clientes"}
+            raise HTTPException(status_code=403, detail="Endpoint solo para clientes")
         
         cliente_id = current_user.id
         
         cliente = db.query(Cliente).filter(Cliente.id == cliente_id).first()
         if not cliente:
-            return {"error": "Cliente no encontrado"}
+            raise HTTPException(status_code=404, detail="Cliente no encontrado")
 
         tasa = obtener_tasa_actual(db)
 
@@ -270,7 +211,9 @@ def mis_cuotas(
 
         todas_cuotas = []
         for fin in financiamientos:
-            cuotas = db.query(Cuota).filter(Cuota.financiamiento_id == fin.id).order_by(Cuota.numero).all()
+            cuotas = db.query(Cuota).filter(
+                Cuota.financiamiento_id == fin.id
+            ).order_by(Cuota.numero).all()
 
             for c in cuotas:
                 dias_atraso = 0
@@ -300,29 +243,38 @@ def mis_cuotas(
             "tasa_actual": tasa,
             "cuotas": todas_cuotas
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        print(f"❌ [mis-cuotas] Error: {e}")
-        return {"error": str(e)}
+        logger.error(f"❌ [mis-cuotas] Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ============================================================
-# ✅ CONFIGURACIÓN DE PAGOS (PÚBLICA)
+# CONFIGURACIÓN DE PAGOS (PÚBLICA)
 # ============================================================
 @router.get("/configuracion-pagos")
 def configuracion_pagos_publica(db: Session = Depends(get_db)):
-    config = db.query(ConfiguracionPago).first()
-    if not config:
-        return {"error": "Configuración no encontrada"}
+    """Obtener métodos de pago configurados (público)."""
+    try:
+        config = db.query(ConfiguracionPago).first()
+        if not config:
+            raise HTTPException(status_code=404, detail="Configuración no encontrada")
 
-    return {
-        "pago_movil": {
-            "banco": config.banco_pago_movil,
-            "telefono": config.telefono_pago_movil,
-            "cedula": config.cedula_pago_movil
-        },
-        "transferencia": {
-            "banco": config.banco_transferencia,
-            "cuenta": config.cuenta_transferencia
-        },
-        "zelle": getattr(config, 'correo_zelle', None),
-        "binance": getattr(config, 'correo_binance', None)
-    }
+        return {
+            "pago_movil": {
+                "banco": config.banco_pago_movil,
+                "telefono": config.telefono_pago_movil,
+                "cedula": config.cedula_pago_movil
+            },
+            "transferencia": {
+                "banco": config.banco_transferencia,
+                "cuenta": config.cuenta_transferencia
+            },
+            "zelle": getattr(config, 'correo_zelle', None),
+            "binance": getattr(config, 'correo_binance', None)
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ [configuracion-pagos] Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

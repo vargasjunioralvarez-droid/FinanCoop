@@ -1,16 +1,17 @@
 // frontend/src/config/api.js
 import axios from 'axios'
 
-// 🔥 FORZAR A USAR /api EN DESARROLLO
+// 🔥 URL dinámica con /api/v1 para desarrollo y producción
 const isDevelopment = import.meta.env.MODE === 'development'
-const API_URL = isDevelopment ? '/api' : (import.meta.env.VITE_API_URL || 'https://financoop.onrender.com')
+const API_URL = isDevelopment 
+  ? '/api/v1' 
+  : (import.meta.env.VITE_API_URL || 'https://financoop-backend.onrender.com/api/v1')
 
 console.log('🌐 Modo:', import.meta.env.MODE)
 console.log('🔗 API_URL:', API_URL)
 
 const api = axios.create({
   baseURL: API_URL
-  // ❌ ELIMINADO: No setear Content-Type global aquí
 })
 
 // Interceptor para agregar token
@@ -20,18 +21,12 @@ api.interceptors.request.use(
     
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
-      console.log('🔑 [API] Token enviado a:', config.url)
-    } else {
-      console.log('⚠️ [API] Sin token para:', config.url)
     }
     
-    // ✅ CORREGIDO: Solo setear Content-Type si no fue definido manualmente
+    // Solo setear Content-Type si no fue definido manualmente
     if (!config.headers['Content-Type']) {
       config.headers['Content-Type'] = 'application/json'
     }
-    
-    console.log('📡 [API] URL completa:', config.baseURL + config.url)
-    console.log('📡 [API] Content-Type:', config.headers['Content-Type'])
     
     return config
   },
@@ -41,16 +36,18 @@ api.interceptors.request.use(
 // Interceptor para manejar respuestas
 api.interceptors.response.use(
   (response) => {
-    console.log('✅ [API] OK:', response.config.url, response.status)
     return response.data
   },
   (error) => {
     if (error.response?.status === 401) {
-      console.warn('⚠️ [API] 401:', error.config?.url)
+      console.warn('⚠️ [API] 401 - Token expirado o inválido')
       if (!window.location.pathname.includes('/login')) {
         localStorage.clear()
         window.location.href = '/login'
       }
+    }
+    if (error.response?.status === 429) {
+      console.warn('⚠️ [API] 429 - Demasiados intentos')
     }
     return Promise.reject(error)
   }
