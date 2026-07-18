@@ -3,10 +3,10 @@ import axios from 'axios'
 
 const isDevelopment = import.meta.env.MODE === 'development'
 
-// ✅ FORZAR URL CORRECTA en producción
+// ✅ URL CORRECTA de tu backend
 const API_URL = isDevelopment 
   ? '/api/v1' 
-  : 'https://financoop-backend.onrender.com/api/v1'  // ← CAMBIADO
+  : 'https://financoop.onrender.com/api/v1'
 
 console.log('🌐 Modo:', import.meta.env.MODE)
 console.log('🔗 API_URL:', API_URL)
