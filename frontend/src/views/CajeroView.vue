@@ -1,5 +1,5 @@
 <template>
-  <v-container v-if="esAdminCentral">
+  <v-container>
     <v-row>
       <v-col cols="12">
         <h1 class="text-h4 mb-4">🛒 Nueva Venta - Financiamiento</h1>
@@ -98,7 +98,6 @@
               Equivalente: ~${{ (parseFloat(montoTotalBS) / tasaDolar).toFixed(2) }} USD (referencia)
             </div>
 
-            <!-- 🔥 ALERTA INMEDIATA cuando excede el límite -->
             <v-alert v-if="excedeLimite" type="error" class="mt-3" border="start" prominent>
               <v-icon start>mdi-cancel</v-icon>
               <strong>Monto excede el límite de crédito</strong>
@@ -145,7 +144,6 @@
               </div>
             </v-alert>
             
-            <!-- Selector de cuotas -->
             <div v-if="propuesta && !excedeLimite" class="mt-3">
               <label class="text-subtitle-2 font-weight-bold">Seleccionar cuotas:</label>
               <v-radio-group v-model="cuotasSeleccionadas" class="mt-2">
@@ -236,13 +234,6 @@
       </v-col>
     </v-row>
   </v-container>
-  
-  <v-container v-else>
-    <v-alert type="error" class="mt-10">
-      <v-icon start>mdi-shield-lock</v-icon>
-      Solo el administrador central puede crear nuevas ventas.
-    </v-alert>
-  </v-container>
 </template>
 
 <script setup>
@@ -262,8 +253,6 @@ const resultado = ref({})
 const tasaDolar = ref(40.0)
 const requiereAprobacion = ref(false)
 const excedeLimite = ref(false)
-
-const esAdminCentral = computed(() => localStorage.getItem('admin_rol') === 'admin_central')
 
 const opcionesCuotas = computed(() => {
   if (!propuesta.value) return []
@@ -320,13 +309,11 @@ const registrarCliente = async () => {
   } catch (e) { alert('Error registrando cliente') }
 }
 
-// 🔥 CALCULAR PROPUESTA CON BLOQUEO INMEDIATO
 const calcularPropuesta = async () => {
   if (!montoTotalBS.value || parseFloat(montoTotalBS.value) <= 0 || !clienteEncontrado.value) {
     propuesta.value = null; cuotasSeleccionadas.value = null; excedeLimite.value = false; return
   }
   
-  // Verificar inmediatamente si excede el límite (sin esperar API)
   const tasa = tasaDolar.value || 40
   const montoUSD = parseFloat(montoTotalBS.value) / tasa
   const limiteUSD = clienteEncontrado.value?.nivel_config?.monto_max_usd || 100
