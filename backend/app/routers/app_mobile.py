@@ -278,3 +278,34 @@ def configuracion_pagos_publica(db: Session = Depends(get_db)):
     except Exception as e:
         logger.error(f"❌ [configuracion-pagos] Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# ============================================================
+# CAMBIAR PIN (NUEVO)
+# ============================================================
+@router.post("/cambiar-pin")
+def cambiar_pin(
+    data: dict,
+    current_user = Depends(get_current_cliente),
+    db: Session = Depends(get_db)
+):
+    """Permite al cliente cambiar su PIN de acceso."""
+    from app.auth import verify_pin, hash_pin
+    
+    pin_actual = data.get("pin_actual")
+    pin_nuevo = data.get("pin_nuevo")
+    
+    if not pin_actual or not pin_nuevo:
+        raise HTTPException(status_code=400, detail="PIN actual y nuevo son requeridos")
+    
+    if len(pin_nuevo) < 4:
+        raise HTTPException(status_code=400, detail="El PIN debe tener al menos 4 dígitos")
+    
+    if not verify_pin(pin_actual, current_user.pin_hash):
+        raise HTTPException(status_code=400, detail="PIN actual incorrecto")
+    
+    current_user.pin_hash = hash_pin(pin_nuevo)
+    db.commit()
+    
+    logger.info(f"🔑 PIN cambiado para cliente {current_user.nombre}")
+    
+    return {"success": True, "mensaje": "PIN actualizado correctamente"}
