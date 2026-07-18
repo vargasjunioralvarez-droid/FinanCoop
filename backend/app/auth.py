@@ -265,9 +265,11 @@ def get_current_cliente(token: str = Depends(oauth2_scheme), db: Session = Depen
 # 🏪 OBTENER TIENDA DEL USUARIO ACTUAL
 # ─────────────────────────────────────────────────────────────
 
+# ✅ CORREGIDO - Solo admin_central ve todo por tienda, admin_tienda y cajero también ven todo
 def get_current_tienda(current_user = Depends(get_current_user)):
-    if hasattr(current_user, 'rol') and current_user.rol == "admin_central":
-        return None
+    # Admin_central, admin_tienda y cajero ven TODOS los clientes
+    if hasattr(current_user, 'rol') and current_user.rol in ["admin_central", "admin_tienda", "cajero"]:
+        return None  # Sin filtro de tienda = ven todo
     return getattr(current_user, 'tienda_id', None)
 
 # ─────────────────────────────────────────────────────────────
