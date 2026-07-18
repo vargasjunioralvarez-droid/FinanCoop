@@ -1,4 +1,3 @@
-// frontend/src/config/api.js
 import axios from 'axios'
 
 const isDevelopment = import.meta.env.MODE === 'development'
@@ -13,25 +12,29 @@ const api = axios.create({
   baseURL: API_URL
 })
 
+// 🔐 INTERCEPTOR DE REQUEST - Agregar token SIEMPRE
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('admin_token') || localStorage.getItem('financoop_token')
+    
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
+    
     if (!config.headers['Content-Type']) {
       config.headers['Content-Type'] = 'application/json'
     }
+    
     return config
   },
   (error) => Promise.reject(error)
 )
 
+// 📦 INTERCEPTOR DE RESPONSE - Extraer arrays y manejar errores
 api.interceptors.response.use(
   (response) => {
     const data = response.data
     
-    // ✅ Extraer array de respuestas paginadas automáticamente
     if (data && typeof data === 'object') {
       if (Array.isArray(data.usuarios)) return data.usuarios
       if (Array.isArray(data.clientes)) return data.clientes
