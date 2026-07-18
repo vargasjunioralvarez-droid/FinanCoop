@@ -3,8 +3,7 @@ import { ref, computed } from 'vue'
 import { CapacitorHttp } from '@capacitor/core'
 
 // ✅ URL con /api/v1
-const API_URL = import.meta.env.VITE_API_URL || 'https://financoop-backend.onrender.com/api/v1'
-
+const API_URL = import.meta.env.VITE_API_URL || 'https://financoop.onrender.com/api/v1'
 // ============ TIMEOUT DE INACTIVIDAD ============
 const INACTIVITY_TIMEOUT = 15 * 60 * 1000
 let inactivityTimer = null
