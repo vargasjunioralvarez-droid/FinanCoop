@@ -7,6 +7,7 @@ from .app_mobile import router as app_mobile_router
 from .admin import router as admin_router
 from .auth import router as auth_router
 from .upload import router as upload_router  # ← AGREGADO
+from .bancos import router as bancos_router
 
 __all__ = [
     "clientes_router",
