@@ -4,7 +4,6 @@
 
 import os
 import logging
-from app.auth import USE_REDIS
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
@@ -25,7 +24,7 @@ from app.routers import (
 from datetime import datetime, timezone
 
 # ─────────────────────────────────────────────────────────────
-# 📝 LOGGING SEGURO (sin datos sensibles)
+# 📝 LOGGING SEGURO
 # ─────────────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
@@ -49,7 +48,7 @@ app = FastAPI(
 )
 
 # ─────────────────────────────────────────────────────────────
-# 🌐 CORS RESTRICTIVO
+# 🌐 CORS: SIEMPRE PERMITIR ORÍGENES DE RENDER Y LOCAL
 # ─────────────────────────────────────────────────────────────
 ALLOWED_ORIGINS = [
     "http://localhost:5173",
@@ -65,27 +64,22 @@ ALLOWED_ORIGINS = [
     "ionic://localhost",
     "http://localhost",
     "https://localhost",
+    "https://financoop.onrender.com",
+    "https://financoop-frontend.onrender.com",
+    "https://financoop-backend.onrender.com",
 ]
-
-if IS_PROD:
-    ALLOWED_ORIGINS = [
-        "https://financoop-frontend.onrender.com",  # ← Frontend
-        "https://financoop-backend.onrender.com",   # ← Backend
-        "https://financoop.onrender.com",           # ← Por si acaso
-        "capacitor://localhost",
-        "ionic://localhost",
-    ]
-    logger.info(f"🔒 CORS en producción: {ALLOWED_ORIGINS}")
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
+    allow_headers=["Authorization", "Content-Type", "X-Request-ID", "X-Requested-With", "Accept", "Origin", "Cache-Control", "Pragma", "Expires"],
     expose_headers=["X-Request-ID"],
     max_age=86400
 )
+
+logger.info(f"🌐 CORS orígenes permitidos: {ALLOWED_ORIGINS}")
 
 # ─────────────────────────────────────────────────────────────
 # 🛡️ SECURITY HEADERS
@@ -104,7 +98,7 @@ async def security_headers(request: Request, call_next):
         "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
         "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
         "img-src 'self' data: https: blob:; "
-        "connect-src 'self' https://*.onrender.com https:; "
+        "connect-src 'self' https://*.onrender.com https: http://localhost:*; "
         "frame-ancestors 'none'; "
         "base-uri 'self'; "
         "form-action 'self'"
@@ -112,9 +106,43 @@ async def security_headers(request: Request, call_next):
     response.headers["Content-Security-Policy"] = csp
     
     if IS_PROD:
-        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     
     return response
+
+# ─────────────────────────────────────────────────────────────
+# 📚 SWAGGER UI PERSONALIZADO
+# ─────────────────────────────────────────────────────────────
+@app.get("/docs", include_in_schema=False)
+async def custom_swagger_ui_html():
+    html = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <title>FinanCoop API - Swagger UI</title>
+        <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css" />
+    </head>
+    <body>
+        <div id="swagger-ui"></div>
+        <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+        <script>
+            window.onload = function() {
+                window.ui = SwaggerUIBundle({
+                    url: "/openapi.json",
+                    dom_id: "#swagger-ui",
+                    deepLinking: true,
+                    defaultModelsExpandDepth: -1,
+                    docExpansion: "none",
+                    persistAuthorization: true,
+                    validatorUrl: null,
+                });
+            };
+        </script>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html)
 
 # ─────────────────────────────────────────────────────────────
 # 🏠 TRUSTED HOST
@@ -220,7 +248,6 @@ app.include_router(upload_router, prefix=API_PREFIX)
 @app.on_event("startup")
 def startup():
     logger.info(f"🚀 FinanCoop API iniciando | Entorno: {ENV}")
-    logger.info(f"🔒 Rate limiting: {'Redis' if USE_REDIS else 'Memoria'}")
     init_db()
 
 # ─────────────────────────────────────────────────────────────
