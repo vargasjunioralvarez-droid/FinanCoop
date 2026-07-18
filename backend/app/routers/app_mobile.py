@@ -22,11 +22,6 @@ def obtener_token(token_query: str = None, authorization: str = Header(None)):
         return token_query.strip()
     return None
 
-# ============================================================
-# NOTA: El login de la app móvil ahora está en /auth/login-cliente
-# Este endpoint se mantiene por compatibilidad pero redirige
-# ============================================================
-
 @router.options("/login")
 def options_login():
     return Response(status_code=200)
@@ -155,7 +150,14 @@ def mis_datos(
                 "cedula": cliente.cedula,
                 "nivel": cliente.nivel,
                 "score": cliente.score,
-                "telefono": cliente.telefono
+                "telefono": cliente.telefono,
+                "email": cliente.email,
+                "direccion": cliente.direccion,
+                "url_cedula": cliente.url_cedula,
+                "referencia_nombre": cliente.referencia_nombre,
+                "referencia_telefono": cliente.referencia_telefono,
+                "referencia_parentesco": cliente.referencia_parentesco,
+                "estado": cliente.estado
             },
             "limite": disponible,
             "tasa_actual": tasa,
@@ -280,7 +282,7 @@ def configuracion_pagos_publica(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 # ============================================================
-# CAMBIAR PIN (NUEVO)
+# CAMBIAR PIN
 # ============================================================
 @router.post("/cambiar-pin")
 def cambiar_pin(
