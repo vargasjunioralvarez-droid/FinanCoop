@@ -10,7 +10,7 @@
     >
       <v-app-bar-title class="font-weight-bold">
         <v-icon size="28" class="mr-2" color="white">mdi-wallet</v-icon>
-        FinanCash
+        FinanCoop
       </v-app-bar-title>
       
       <v-spacer></v-spacer>
@@ -68,7 +68,7 @@
         Conciliación
       </v-btn>
       
-      <!-- ✅ SOLO ADMIN: Configuración -->
+      <!-- ✅ SOLO ADMIN: Menú Configuración -->
       <v-menu v-if="esAdmin">
         <template v-slot:activator="{ props }">
           <v-btn 
@@ -78,11 +78,24 @@
             class="nav-btn mx-1"
           >
             <v-icon start>mdi-cog</v-icon>
-            Config
+            Admin
             <v-icon end size="14">mdi-chevron-down</v-icon>
           </v-btn>
         </template>
         <v-list elevation="4" rounded="lg">
+          <v-list-item to="/tiendas">
+            <template v-slot:prepend>
+              <v-icon color="green">mdi-store</v-icon>
+            </template>
+            <v-list-item-title>Tiendas</v-list-item-title>
+          </v-list-item>
+          <v-list-item to="/usuarios">
+            <template v-slot:prepend>
+              <v-icon color="error">mdi-shield-account</v-icon>
+            </template>
+            <v-list-item-title>Usuarios</v-list-item-title>
+          </v-list-item>
+          <v-divider></v-divider>
           <v-list-item to="/configuracion">
             <template v-slot:prepend>
               <v-icon color="primary">mdi-currency-usd</v-icon>
@@ -97,19 +110,6 @@
           </v-list-item>
         </v-list>
       </v-menu>
-      
-      <!-- ✅ SOLO ADMIN: Usuarios -->
-      <v-btn 
-        v-if="esAdmin"
-        to="/usuarios" 
-        color="error" 
-        variant="elevated"
-        class="nav-btn mx-1"
-        :class="{ 'nav-btn-active': $route.path === '/usuarios' }"
-      >
-        <v-icon start>mdi-shield-account</v-icon>
-        Usuarios
-      </v-btn>
       
       <!-- Tasa en la barra -->
       <v-chip 
@@ -149,10 +149,7 @@ const router = useRouter()
 const route = useRoute()
 const tasaActual = ref(40.0)
 
-// ✅ Mostrar navbar solo si no estamos en login
 const mostrarNav = computed(() => route.path !== '/login')
-
-// ✅ VERIFICAR SI ES ADMIN (reactivo)
 const esAdmin = computed(() => localStorage.getItem('admin_rol') === 'admin')
 
 const cargarTasa = async () => {
