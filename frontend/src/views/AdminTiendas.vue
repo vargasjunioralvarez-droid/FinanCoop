@@ -29,7 +29,7 @@
                 <v-icon color="#4caf50" class="mr-2">mdi-store</v-icon>
                 Tiendas
                 <v-spacer></v-spacer>
-                <v-btn color="#4caf50" size="small" rounded="pill" @click="dialogTienda = true; tiendaEdit = null" elevation="0">
+                <v-btn v-if="esAdmin" color="#4caf50" size="small" rounded="pill" @click="abrirDialogTienda()" elevation="0">
                   <v-icon start>mdi-plus</v-icon>Nueva
                 </v-btn>
               </v-card-title>
@@ -43,6 +43,7 @@
                         <th class="text-center">Clientes</th>
                         <th class="text-center">Créditos</th>
                         <th class="text-center">Estado</th>
+                        <th v-if="esAdmin" class="text-center">Acciones</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -63,6 +64,12 @@
                             {{ t.activo ? 'Activa' : 'Inactiva' }}
                           </v-chip>
                         </td>
+                        <td v-if="esAdmin" class="text-center">
+                          <div class="d-flex gap-1 justify-center">
+                            <v-btn icon="mdi-pencil" size="x-small" color="primary" variant="tonal" @click="editarTienda(t)" />
+                            <v-btn icon="mdi-delete" size="x-small" color="error" variant="tonal" @click="eliminarTienda(t)" />
+                          </div>
+                        </td>
                       </tr>
                     </tbody>
                   </v-table>
@@ -82,7 +89,7 @@
                 <v-icon color="#4facfe" class="mr-2">mdi-account-group</v-icon>
                 Usuarios
                 <v-spacer></v-spacer>
-                <v-btn color="#4facfe" size="small" rounded="pill" @click="abrirCrearUsuario" elevation="0">
+                <v-btn v-if="esAdmin" color="#4facfe" size="small" rounded="pill" @click="abrirCrearUsuario" elevation="0">
                   <v-icon start>mdi-plus</v-icon>Nuevo
                 </v-btn>
               </v-card-title>
@@ -95,6 +102,7 @@
                         <th>Rol</th>
                         <th>Tienda</th>
                         <th class="text-center">Activo</th>
+                        <th v-if="esAdmin" class="text-center">Acciones</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -111,6 +119,12 @@
                           <v-chip :color="u.activo ? 'success' : 'grey'" size="x-small" variant="flat">
                             {{ u.activo ? 'Sí' : 'No' }}
                           </v-chip>
+                        </td>
+                        <td v-if="esAdmin" class="text-center">
+                          <div class="d-flex gap-1 justify-center">
+                            <v-btn icon="mdi-pencil" size="x-small" color="primary" variant="tonal" @click="editarUsuario(u)" />
+                            <v-btn icon="mdi-delete" size="x-small" color="error" variant="tonal" @click="confirmarEliminarUsuario(u)" />
+                          </div>
                         </td>
                       </tr>
                     </tbody>
@@ -130,8 +144,9 @@
     <!-- DIALOG TIENDA -->
     <v-dialog v-model="dialogTienda" max-width="500">
       <v-card class="glass-card">
-        <v-card-title class="text-white pa-4" style="background: linear-gradient(135deg, #4caf50, #2e7d32);">
-          <v-icon start>mdi-store</v-icon>{{ tiendaEdit ? 'Editar' : 'Nueva' }} Tienda
+        <v-card-title class="text-white pa-4" :style="`background: linear-gradient(135deg, ${tiendaEdit ? '#ffd54f, #f9a825' : '#4caf50, #2e7d32'});`">
+          <v-icon start>{{ tiendaEdit ? 'mdi-pencil' : 'mdi-store' }}</v-icon>
+          {{ tiendaEdit ? 'Editar' : 'Nueva' }} Tienda
         </v-card-title>
         <v-card-text class="pa-4">
           <v-text-field v-model="tiendaForm.nombre" label="Nombre de la tienda/cooperativa *" variant="outlined" density="comfortable" dark class="custom-input mb-2" placeholder="Ej: Cecosesola Barquisimeto" />
@@ -142,7 +157,7 @@
         <v-card-actions class="pa-4">
           <v-btn @click="dialogTienda = false" variant="text" color="grey">Cancelar</v-btn>
           <v-spacer></v-spacer>
-          <v-btn color="#4caf50" rounded="pill" @click="guardarTienda" :loading="cargando" elevation="0">Guardar</v-btn>
+          <v-btn :color="tiendaEdit ? '#ffd54f' : '#4caf50'" rounded="pill" @click="guardarTienda" :loading="cargando" elevation="0">Guardar</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -150,12 +165,13 @@
     <!-- DIALOG USUARIO -->
     <v-dialog v-model="dialogUsuario" max-width="500">
       <v-card class="glass-card">
-        <v-card-title class="text-white pa-4" style="background: linear-gradient(135deg, #4facfe, #6366f1);">
-          <v-icon start>mdi-account-plus</v-icon>Nuevo Usuario
+        <v-card-title class="text-white pa-4" :style="`background: linear-gradient(135deg, ${usuarioEditando ? '#ffd54f, #f9a825' : '#4facfe, #6366f1'});`">
+          <v-icon start>{{ usuarioEditando ? 'mdi-pencil' : 'mdi-account-plus' }}</v-icon>
+          {{ usuarioEditando ? 'Editar Usuario' : 'Nuevo Usuario' }}
         </v-card-title>
         <v-card-text class="pa-4">
-          <v-text-field v-model="usuarioForm.username" label="Usuario *" variant="outlined" density="comfortable" dark class="custom-input mb-2" placeholder="Ej: ana" />
-          <v-text-field v-model="usuarioForm.password" label="Contraseña *" type="password" variant="outlined" density="comfortable" dark class="custom-input mb-2" placeholder="Mínimo 8 caracteres" />
+          <v-text-field v-model="usuarioForm.username" label="Usuario *" :disabled="!!usuarioEditando" variant="outlined" density="comfortable" dark class="custom-input mb-2" placeholder="Ej: ana" />
+          <v-text-field v-model="usuarioForm.password" label="Contraseña" type="password" variant="outlined" density="comfortable" dark class="custom-input mb-2" :placeholder="usuarioEditando ? '••••••••' : 'Mínimo 8 caracteres'" />
           <v-text-field v-model="usuarioForm.nombre" label="Nombre completo" variant="outlined" density="comfortable" dark class="custom-input mb-2" placeholder="Ej: Ana García" />
           <v-text-field v-model="usuarioForm.email" label="Email" variant="outlined" density="comfortable" dark class="custom-input mb-2" placeholder="Ej: ana@coop.com" />
           <v-select v-model="usuarioForm.rol" :items="rolesDisponibles" label="Rol *" variant="outlined" density="comfortable" dark class="custom-input mb-2" />
@@ -164,7 +180,27 @@
         <v-card-actions class="pa-4">
           <v-btn @click="dialogUsuario = false" variant="text" color="grey">Cancelar</v-btn>
           <v-spacer></v-spacer>
-          <v-btn color="#4facfe" rounded="pill" @click="guardarUsuario" :loading="cargando" elevation="0">Crear Usuario</v-btn>
+          <v-btn :color="usuarioEditando ? '#ffd54f' : '#4facfe'" rounded="pill" @click="guardarUsuario" :loading="cargando" elevation="0">
+            {{ usuarioEditando ? 'Actualizar' : 'Crear Usuario' }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- DIALOG ELIMINAR -->
+    <v-dialog v-model="dialogEliminar" max-width="400">
+      <v-card class="glass-card">
+        <v-card-title class="text-white pa-4" style="background: linear-gradient(135deg, #f44336, #c62828);">
+          <v-icon start>mdi-delete</v-icon>¿Eliminar?
+        </v-card-title>
+        <v-card-text class="pa-4">
+          <p class="text-white">¿Estás seguro de eliminar <strong>{{ eliminandoNombre }}</strong>?</p>
+          <p class="text-caption" style="color: rgba(255,255,255,0.3);">Esta acción no se puede deshacer.</p>
+        </v-card-text>
+        <v-card-actions class="pa-4">
+          <v-btn @click="dialogEliminar = false" variant="text" color="grey">Cancelar</v-btn>
+          <v-spacer></v-spacer>
+          <v-btn color="#f44336" rounded="pill" @click="ejecutarEliminar" :loading="cargando" elevation="0">Eliminar</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -184,11 +220,22 @@ const usuarios = ref([])
 const cargando = ref(false)
 const dialogTienda = ref(false)
 const dialogUsuario = ref(false)
+const dialogEliminar = ref(false)
 const tiendaEdit = ref(null)
+const usuarioEditando = ref(null)
+const eliminandoId = ref(null)
+const eliminandoNombre = ref('')
+const eliminandoTipo = ref('') // 'tienda' o 'usuario'
 
 const tiendaForm = ref({ nombre: '', codigo: '', direccion: '', telefono: '' })
 const usuarioForm = ref({ username: '', password: '', nombre: '', email: '', rol: 'cajero', tienda_id: null })
 const snackbar = ref({ show: false, text: '', color: 'success' })
+
+// ✅ Solo admin_central
+const esAdmin = computed(() => {
+  const rol = localStorage.getItem('admin_rol')
+  return rol === 'admin_central' || rol === 'admin'
+})
 
 const rolesDisponibles = [
   { title: 'Administrador Central (ve todo)', value: 'admin' },
@@ -206,31 +253,77 @@ const cargarUsuarios = async () => {
   try { const d = await api.get('/admin/usuarios'); usuarios.value = Array.isArray(d) ? d : [] } catch (e) {}
 }
 
+// ============ TIENDAS ============
+const abrirDialogTienda = (t = null) => {
+  if (t) { tiendaEdit.value = t; tiendaForm.value = { nombre: t.nombre, codigo: t.codigo, direccion: t.direccion || '', telefono: t.telefono || '' } }
+  else { tiendaEdit.value = null; tiendaForm.value = { nombre: '', codigo: '', direccion: '', telefono: '' } }
+  dialogTienda.value = true
+}
+const editarTienda = (t) => abrirDialogTienda(t)
+
 const guardarTienda = async () => {
   if (!tiendaForm.value.nombre || !tiendaForm.value.codigo) { snackbar.value = { show: true, text: 'Nombre y código requeridos', color: 'error' }; return }
   cargando.value = true
   try {
     if (tiendaEdit.value) { await api.put(`/admin/tiendas/${tiendaEdit.value.id}`, tiendaForm.value); snackbar.value = { show: true, text: 'Tienda actualizada', color: 'success' } }
     else { await api.post('/admin/tiendas', tiendaForm.value); snackbar.value = { show: true, text: 'Tienda creada', color: 'success' } }
-    dialogTienda.value = false; tiendaForm.value = { nombre: '', codigo: '', direccion: '', telefono: '' }; tiendaEdit.value = null
+    dialogTienda.value = false; tiendaEdit.value = null; tiendaForm.value = { nombre: '', codigo: '', direccion: '', telefono: '' }
     await cargarTiendas()
   } catch (e) { snackbar.value = { show: true, text: e.response?.data?.detail || 'Error', color: 'error' } }
   finally { cargando.value = false }
 }
 
+const eliminarTienda = (t) => {
+  eliminandoId.value = t.id; eliminandoNombre.value = t.nombre; eliminandoTipo.value = 'tienda'
+  dialogEliminar.value = true
+}
+
+// ============ USUARIOS ============
 const abrirCrearUsuario = () => {
+  usuarioEditando.value = null
   usuarioForm.value = { username: '', password: '', nombre: '', email: '', rol: 'cajero', tienda_id: null }
+  dialogUsuario.value = true
+}
+const editarUsuario = (u) => {
+  usuarioEditando.value = u
+  usuarioForm.value = { username: u.username, password: '', nombre: u.nombre || '', email: u.email || '', rol: u.rol || 'cajero', tienda_id: u.tienda_id || null }
   dialogUsuario.value = true
 }
 
 const guardarUsuario = async () => {
-  if (!usuarioForm.value.username || !usuarioForm.value.password) { snackbar.value = { show: true, text: 'Usuario y contraseña requeridos', color: 'error' }; return }
-  if (usuarioForm.value.rol !== 'admin' && !usuarioForm.value.tienda_id) { snackbar.value = { show: true, text: 'Debe seleccionar una tienda', color: 'error' }; return }
+  if (!usuarioForm.value.username) { snackbar.value = { show: true, text: 'Usuario requerido', color: 'error' }; return }
+  if (usuarioForm.value.rol !== 'admin' && !usuarioForm.value.tienda_id) { snackbar.value = { show: true, text: 'Seleccione una tienda', color: 'error' }; return }
   cargando.value = true
   try {
-    await api.post('/admin/usuarios', { username: usuarioForm.value.username, password: usuarioForm.value.password, nombre: usuarioForm.value.nombre, email: usuarioForm.value.email, rol: usuarioForm.value.rol, tienda_id: usuarioForm.value.rol === 'admin' ? null : usuarioForm.value.tienda_id, activo: true })
-    snackbar.value = { show: true, text: 'Usuario creado', color: 'success' }; dialogUsuario.value = false
+    const payload = { username: usuarioForm.value.username, nombre: usuarioForm.value.nombre, email: usuarioForm.value.email, rol: usuarioForm.value.rol, tienda_id: usuarioForm.value.rol === 'admin' ? null : usuarioForm.value.tienda_id, activo: true }
+    if (usuarioForm.value.password) payload.password = usuarioForm.value.password
+    if (usuarioEditando.value) { await api.put(`/admin/usuarios/${usuarioEditando.value.id}`, payload); snackbar.value = { show: true, text: 'Usuario actualizado', color: 'success' } }
+    else { if (!usuarioForm.value.password) { snackbar.value = { show: true, text: 'Contraseña requerida', color: 'error' }; cargando.value = false; return }; await api.post('/admin/usuarios', payload); snackbar.value = { show: true, text: 'Usuario creado', color: 'success' } }
+    dialogUsuario.value = false; usuarioEditando.value = null
     await cargarUsuarios()
+  } catch (e) { snackbar.value = { show: true, text: e.response?.data?.detail || 'Error', color: 'error' } }
+  finally { cargando.value = false }
+}
+
+const confirmarEliminarUsuario = (u) => {
+  eliminandoId.value = u.id; eliminandoNombre.value = u.username; eliminandoTipo.value = 'usuario'
+  dialogEliminar.value = true
+}
+
+// ============ ELIMINAR ============
+const ejecutarEliminar = async () => {
+  cargando.value = true
+  try {
+    if (eliminandoTipo.value === 'tienda') {
+      await api.delete(`/admin/tiendas/${eliminandoId.value}`)
+      snackbar.value = { show: true, text: 'Tienda eliminada', color: 'success' }
+      await cargarTiendas()
+    } else {
+      await api.delete(`/admin/usuarios/${eliminandoId.value}`)
+      snackbar.value = { show: true, text: 'Usuario eliminado', color: 'success' }
+      await cargarUsuarios()
+    }
+    dialogEliminar.value = false
   } catch (e) { snackbar.value = { show: true, text: e.response?.data?.detail || 'Error', color: 'error' } }
   finally { cargando.value = false }
 }
@@ -257,8 +350,8 @@ onMounted(() => { cargarTiendas(); cargarUsuarios() })
 .custom-input :deep(.v-label) { color: rgba(255,255,255,0.5) !important; }
 .custom-input :deep(.v-field__input) { color: white !important; }
 .custom-input :deep(.v-field__input::placeholder) { color: rgba(255,255,255,0.6) !important; font-weight: 500 !important; opacity: 1 !important; }
-.custom-input :deep(.v-field__append-inner) { color: rgba(255,255,255,0.4) !important; }
 .empty-state { padding: 24px; text-align: center; border: 1px dashed rgba(255,255,255,0.08); }
+.gap-1 { gap: 4px; }
 .fade-in { animation: fadeIn 0.4s ease; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 @media (max-width: 600px) { .header-premium { flex-direction: column; gap: 12px; align-items: stretch !important; } }
