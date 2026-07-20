@@ -84,7 +84,6 @@ def actualizar_tasa(
         )
         db.add(nueva_tasa)
         
-        # Recalcular cuotas pendientes
         financiamientos_afectados = 0
         cuotas_recalculadas = 0
         
@@ -190,8 +189,12 @@ def actualizar_nivel(
         if not config:
             raise HTTPException(status_code=404, detail=f"Nivel '{nivel}' no encontrado")
         
-        if request.entrada_pct + request.financia_pct > 1:
-            raise HTTPException(status_code=400, detail="La suma de entrada + financiamiento no puede superar 100%")
+        # ✅ CORREGIDO: validar suma = 100% (enteros, no decimales)
+        if request.entrada_pct + request.financia_pct != 100:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"La suma de entrada ({request.entrada_pct}%) + financiamiento ({request.financia_pct}%) debe ser 100%"
+            )
         
         config.monto_max_usd = request.monto_max_usd
         config.entrada_pct = request.entrada_pct
