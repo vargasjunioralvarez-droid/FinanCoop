@@ -1,11 +1,10 @@
 <template>
   <v-container fluid class="pa-0">
-    <!-- ✅ FONDO MODERNO -->
     <div class="background-gradient"></div>
 
     <v-row class="ma-0">
       <v-col cols="12" class="pa-4">
-        <!-- ✅ HEADER PREMIUM -->
+        <!-- HEADER -->
         <div class="header-premium d-flex align-center justify-space-between flex-wrap">
           <div class="d-flex align-center">
             <div class="icon-wrapper pulse-animation">
@@ -28,7 +27,7 @@
           </v-btn>
         </div>
 
-        <!-- ✅ ALERTAS -->
+        <!-- ALERTAS -->
         <div class="mt-4">
           <v-alert v-if="errorMsg" type="error" class="rounded-xl" dismissible @click:close="errorMsg = ''">
             <v-icon start>mdi-alert-circle</v-icon>
@@ -40,7 +39,7 @@
           </v-alert>
         </div>
 
-        <!-- ✅ TABLA DE NIVELES CON SUBTÍTULOS -->
+        <!-- TABLA -->
         <v-row class="mt-4">
           <v-col cols="12">
             <v-card class="glass-card rounded-xl" elevation="0">
@@ -212,7 +211,7 @@
           </v-col>
         </v-row>
 
-        <!-- ✅ RESUMEN VISUAL CON SUBTÍTULOS -->
+        <!-- RESUMEN VISUAL -->
         <v-row class="mt-4">
           <v-col cols="12">
             <v-card class="glass-card rounded-xl" elevation="0">
@@ -235,12 +234,8 @@
                         <v-icon :color="nivelColor(nivel)">{{ nivelIcono(nivel) }}</v-icon>
                       </div>
                       <div class="level-summary-name" :style="{ color: nivelColor(nivel) }">{{ nivel.toUpperCase() }}</div>
-                      
-                      <!-- LÍMITE -->
                       <div class="level-summary-amount text-white">${{ config.monto_max_usd }}</div>
                       <div class="level-summary-label" style="color: rgba(255,255,255,0.3); font-size: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px;">Límite máximo</div>
-                      
-                      <!-- ENTRADA Y FINANCIAMIENTO -->
                       <div class="level-summary-details" style="color: rgba(255,255,255,0.6); margin-top: 8px;">
                         <div>
                           <span style="color: #4caf50; font-weight: 600;">{{ config.entrada_pct }}%</span>
@@ -251,8 +246,6 @@
                           <span style="color: rgba(255,255,255,0.3); font-size: 0.5rem; display: block;">FINANCIA</span>
                         </div>
                       </div>
-                      
-                      <!-- CUOTAS -->
                       <div class="level-summary-details" style="color: rgba(255,255,255,0.4); font-size: 0.6rem; margin-top: 6px;">
                         <span>{{ config.cuotas_base }}-{{ config.cuotas_max }} cuotas</span>
                         <span style="color: rgba(255,255,255,0.2); font-size: 0.5rem; display: block;">MORA: {{ config.mora_diaria }}%</span>
@@ -351,14 +344,14 @@ const guardarNivel = async (nivel) => {
       return
     }
     
-    // ✅ ENVIAR COMO DECIMALES (el backend espera 0.50, 0.50)
+    // ✅ ENVIAR COMO ENTEROS (el backend espera 50, 50)
     const payload = {
       monto_max_usd: parseFloat(config.monto_max_usd) || 100,
-      entrada_pct: entrada / 100,
-      financia_pct: financia / 100,
+      entrada_pct: parseInt(entrada),   // ✅ ENTERO
+      financia_pct: parseInt(financia), // ✅ ENTERO
       cuotas_base: parseInt(config.cuotas_base) || 3,
       cuotas_max: parseInt(config.cuotas_max) || 6,
-      mora_diaria: parseFloat(config.mora_diaria) / 100 || 0.02,
+      mora_diaria: parseFloat(config.mora_diaria) || 2,
       aprobacion_extra: config.aprobacion_extra || false
     }
     
