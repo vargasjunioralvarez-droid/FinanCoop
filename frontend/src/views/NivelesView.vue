@@ -10,23 +10,32 @@
       
       <!-- Tabla de Niveles -->
       <v-col cols="12">
-        <v-card>
-          <v-card-title class="d-flex align-center">
-            <span>Configuración por Nivel</span>
+        <v-card class="rounded-xl" elevation="2">
+          <v-card-title class="d-flex align-center pa-4 bg-primary-lighten-5">
+            <span class="text-h6">Configuración por Nivel</span>
             <v-spacer></v-spacer>
             <v-btn 
               color="warning" 
               size="small"
               @click="resetNiveles"
               :loading="cargandoReset"
+              class="rounded-xl"
             >
               <v-icon start>mdi-refresh</v-icon>
               Restaurar Default
             </v-btn>
           </v-card-title>
           
-          <v-card-text>
-            <v-table>
+          <v-card-text class="pa-4">
+            <!-- ✅ MOSTRAR ERRORES -->
+            <v-alert v-if="errorMsg" type="error" class="mb-3" dismissible @click:close="errorMsg = ''">
+              {{ errorMsg }}
+            </v-alert>
+            <v-alert v-if="successMsg" type="success" class="mb-3" dismissible @click:close="successMsg = ''">
+              {{ successMsg }}
+            </v-alert>
+
+            <v-table class="rounded-lg">
               <thead>
                 <tr>
                   <th class="text-left">Nivel</th>
@@ -42,10 +51,9 @@
                 </tr>
               </thead>
               <tbody>
-                <!-- 🔥 nivelesOrdenados asegura el orden correcto -->
-                <tr v-for="([nivel, config], index) in nivelesOrdenados" :key="nivel">
+                <tr v-for="([nivel, config]) in nivelesOrdenados" :key="nivel">
                   <td>
-                    <v-chip :color="colorNivel(nivel)" size="small">
+                    <v-chip :color="nivelColor(nivel)" size="small" class="font-weight-bold">
                       {{ nivel.toUpperCase() }}
                     </v-chip>
                   </td>
@@ -129,8 +137,9 @@
                       size="small"
                       @click="guardarNivel(nivel)"
                       :loading="cargandoNivel === nivel"
+                      class="rounded-xl"
                     >
-                      <v-icon>mdi-content-save</v-icon>
+                      <v-icon size="18">mdi-content-save</v-icon>
                     </v-btn>
                   </td>
                 </tr>
@@ -142,9 +151,9 @@
       
       <!-- Resumen Visual -->
       <v-col cols="12" class="mt-4">
-        <v-card color="primary" dark>
-          <v-card-title>📊 Resumen de Límites</v-card-title>
-          <v-card-text>
+        <v-card class="rounded-xl" color="primary" dark>
+          <v-card-title class="pa-4">📊 Resumen de Límites</v-card-title>
+          <v-card-text class="pa-4">
             <v-row>
               <v-col 
                 v-for="([nivel, config]) in nivelesOrdenados" 
@@ -154,12 +163,17 @@
                 md="4" 
                 lg="2"
               >
-                <v-card :color="colorNivel(nivel)" dark class="text-center">
-                  <v-card-text>
-                    <div class="text-h6">{{ nivel.toUpperCase() }}</div>
+                <v-card 
+                  :color="nivelColor(nivel)" 
+                  dark 
+                  class="text-center rounded-xl"
+                  elevation="2"
+                >
+                  <v-card-text class="pa-3">
+                    <div class="text-h6 font-weight-bold">{{ nivel.toUpperCase() }}</div>
                     <div class="text-h4">${{ config.monto_max_usd }}</div>
-                    <div class="text-caption">Límite máximo</div>
-                    <v-divider class="my-2"></v-divider>
+                    <div class="text-caption" style="opacity: 0.8;">Límite máximo</div>
+                    <v-divider class="my-2" style="border-color: rgba(255,255,255,0.2);"></v-divider>
                     <div class="text-body-2">
                       Entrada: {{ config.entrada_pct }}%<br>
                       Cuotas: {{ config.cuotas_base }}-{{ config.cuotas_max }}
@@ -182,24 +196,22 @@ import { api } from '@/config/api'
 const niveles = ref({})
 const cargandoNivel = ref('')
 const cargandoReset = ref(false)
+const errorMsg = ref('')
+const successMsg = ref('')
 
 // 🔥 ORDENAR: "nuevo" primero, luego por min_score
 const nivelesOrdenados = computed(() => {
   const entries = Object.entries(niveles.value)
-  
-  // Ordenar por min_score (ascendente)
-  return entries.sort((a, b) => {
-    return a[1].min_score - b[1].min_score
-  })
+  return entries.sort((a, b) => a[1].min_score - b[1].min_score)
 })
 
-const colorNivel = (nivel) => {
+const nivelColor = (nivel) => {
   const colores = { 
-    nuevo: 'grey', 
-    bronce: 'brown', 
-    plata: 'blue', 
-    oro: 'amber', 
-    platino: 'purple' 
+    nuevo: 'grey darken-2', 
+    bronce: 'brown darken-2', 
+    plata: 'blue-grey darken-2', 
+    oro: 'amber darken-2', 
+    platino: 'deep-purple darken-2' 
   }
   return colores[nivel] || 'grey'
 }
@@ -208,29 +220,66 @@ const cargarNiveles = async () => {
   try {
     const data = await api.get('/config/niveles')
     niveles.value = data.niveles
+    console.log('📥 Niveles cargados:', niveles.value)
   } catch (e) {
     console.error('Error cargando niveles:', e)
-    alert('Error cargando configuración de niveles')
+    errorMsg.value = 'Error cargando configuración de niveles'
   }
 }
 
 const guardarNivel = async (nivel) => {
   cargandoNivel.value = nivel
+  errorMsg.value = ''
+  successMsg.value = ''
+  
   try {
     const config = niveles.value[nivel]
-    await api.put(`/config/niveles/${nivel}`, {
-      monto_max_usd: parseFloat(config.monto_max_usd),
-      entrada_pct: parseFloat(config.entrada_pct),
-      financia_pct: parseFloat(config.financia_pct),
-      cuotas_base: parseInt(config.cuotas_base),
-      cuotas_max: parseInt(config.cuotas_max),
-      mora_diaria: parseFloat(config.mora_diaria),
-      aprobacion_extra: config.aprobacion_extra
-    })
-    alert(`✅ Nivel ${nivel.toUpperCase()} actualizado correctamente`)
+    
+    // ✅ FORMATO CORRECTO - SOLO los campos que espera el backend
+    // El backend solo espera estos campos (NO min_score, NO max_score)
+    const payload = {
+      monto_max_usd: parseFloat(config.monto_max_usd) || 100,
+      entrada_pct: parseFloat(config.entrada_pct) || 0.30,
+      financia_pct: parseFloat(config.financia_pct) || 0.70,
+      cuotas_base: parseInt(config.cuotas_base) || 3,
+      cuotas_max: parseInt(config.cuotas_max) || 6,
+      mora_diaria: parseFloat(config.mora_diaria) || 0.02,
+      aprobacion_extra: config.aprobacion_extra || false
+    }
+    
+    console.log(`📤 Guardando ${nivel}:`, payload)
+    
+    // ✅ Usar PUT para actualizar
+    const response = await api.put(`/config/niveles/${nivel}`, payload)
+    
+    console.log(`✅ Respuesta para ${nivel}:`, response)
+    successMsg.value = `✅ Nivel ${nivel.toUpperCase()} actualizado correctamente`
+    
+    // Recargar datos para asegurar consistencia
+    await cargarNiveles()
+    
   } catch (e) {
-    console.error('Error guardando nivel:', e)
-    alert('Error guardando nivel')
+    console.error(`❌ Error guardando ${nivel}:`, e)
+    
+    // Mostrar mensaje de error más detallado
+    let errorDetail = 'Error guardando nivel'
+    if (e.response) {
+      console.error('❌ Response status:', e.response.status)
+      console.error('❌ Response data:', e.response.data)
+      
+      if (e.response.data?.detail) {
+        errorDetail = e.response.data.detail
+      } else if (e.response.data?.message) {
+        errorDetail = e.response.data.message
+      } else {
+        errorDetail = `Error ${e.response.status}: ${JSON.stringify(e.response.data)}`
+      }
+    } else if (e.message) {
+      errorDetail = e.message
+    }
+    
+    errorMsg.value = `❌ ${errorDetail}`
+    
   } finally {
     cargandoNivel.value = ''
   }
@@ -242,13 +291,16 @@ const resetNiveles = async () => {
   }
   
   cargandoReset.value = true
+  errorMsg.value = ''
+  successMsg.value = ''
+  
   try {
     await api.post('/config/niveles/reset')
-    alert('✅ Niveles restaurados a valores por defecto')
+    successMsg.value = '✅ Niveles restaurados a valores por defecto'
     await cargarNiveles()
   } catch (e) {
     console.error('Error restaurando niveles:', e)
-    alert('Error restaurando niveles')
+    errorMsg.value = 'Error restaurando niveles'
   } finally {
     cargandoReset.value = false
   }
@@ -256,3 +308,29 @@ const resetNiveles = async () => {
 
 onMounted(cargarNiveles)
 </script>
+
+<style scoped>
+.rounded-xl {
+  border-radius: 16px !important;
+  overflow: hidden;
+}
+
+.v-table {
+  border-radius: 12px !important;
+  overflow: hidden;
+}
+
+.v-table thead th {
+  background: rgba(0, 0, 0, 0.03) !important;
+  font-weight: 600 !important;
+  font-size: 0.75rem !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.5px !important;
+  color: rgba(0,0,0,0.6) !important;
+}
+
+/* ✅ Estilos para alerts */
+.v-alert {
+  border-radius: 12px !important;
+}
+</style>
