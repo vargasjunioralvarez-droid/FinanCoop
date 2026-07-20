@@ -176,20 +176,40 @@
               </v-alert>
               
               <!-- ✅ PROPUESTA CON COLORES MEJORADOS -->
-              <v-alert v-if="propuesta && !excedeLimite" type="info" class="mt-3 rounded-xl" border="start">
+                            <v-alert v-if="propuesta && !excedeLimite" type="info" class="mt-3 rounded-xl" border="start">
                 <h3 class="text-h6 mb-2">📋 Propuesta de Financiamiento</h3>
                 <v-divider class="my-2"></v-divider>
+                
                 <v-row>
                   <v-col cols="12" md="6">
-                    <div class="d-flex justify-space-between pa-2 rounded-lg" style="background: rgba(255,255,255,0.05);"><span class="text-white" style="opacity: 0.9;">Monto Total:</span><strong class="text-white">BS {{ formatearNumero(propuesta.propuesta?.monto_solicitado_bs || propuesta.monto_total_bs) }}</strong></div>
-                    <div class="d-flex justify-space-between pa-2 mt-1" style="background: rgba(255,255,255,0.03);"><span class="text-white" style="opacity: 0.9;">Monto en USD:</span><strong class="text-white">${{ formatearNumero(propuesta.propuesta?.monto_solicitado_usd || propuesta.monto_total_usd) }}</strong></div>
+                    <div class="d-flex justify-space-between pa-2 rounded-lg" style="background: rgba(255,255,255,0.05);">
+                      <span class="text-white" style="opacity: 0.7;">Monto Total:</span>
+                      <strong class="text-white">BS {{ formatearNumero(propuesta.propuesta?.monto_solicitado_bs || propuesta.monto_total_bs) }}</strong>
+                    </div>
+                    <div class="d-flex justify-space-between pa-2 mt-1" style="background: rgba(255,255,255,0.03);">
+                      <span class="text-white" style="opacity: 0.7;">Monto en USD:</span>
+                      <strong class="text-white">${{ formatearNumero(propuesta.propuesta?.monto_solicitado_usd || propuesta.monto_total_usd) }}</strong>
+                    </div>
                   </v-col>
                   <v-col cols="12" md="6">
-                    <div class="d-flex justify-space-between pa-2 rounded-lg" style="background: rgba(0,0,0,0.3);"><span class="text-white" style="opacity: 0.9;">💳 Entrada HOY ({{ propuesta.propuesta?.entrada_pct || propuesta.entrada_pct }}%):</span><strong style="color: #4facfe;">BS {{ formatearNumero(propuesta.propuesta?.entrada_bs || propuesta.monto_entrada_bs) }}</strong></div>
-                    <div class="d-flex justify-space-between pa-2 mt-1 rounded-lg" style="background: rgba(0,0,0,0.3);"><span class="text-white" style="opacity: 0.9;">📊 A financiar ({{ propuesta.propuesta?.financia_pct || propuesta.financia_pct }}%):</span><strong style="color: #ffffff;">BS {{ formatearNumero(propuesta.propuesta?.financia_bs || propuesta.monto_financia_bs) }}</strong></div>
+                    <!-- ✅ CAMBIO 1: Esta línea -->
+                    <div class="d-flex justify-space-between pa-2 rounded-lg" style="background: rgba(0,0,0,0.3);">
+                      <span class="text-white" style="opacity: 0.9;">💳 Entrada HOY ({{ propuesta.propuesta?.entrada_pct || propuesta.entrada_pct }}%):</span>
+                      <strong class="text-error">BS {{ formatearNumero(propuesta.propuesta?.entrada_bs || propuesta.monto_entrada_bs) }}</strong>
+                    </div>
+                    <!-- ✅ CAMBIO 2: Esta línea -->
+                    <div class="d-flex justify-space-between pa-2 mt-1 rounded-lg" style="background: rgba(0,0,0,0.3);">
+                      <span class="text-white" style="opacity: 0.9;">📊 A financiar ({{ propuesta.propuesta?.financia_pct || propuesta.financia_pct }}%):</span>
+                      <strong class="text-success">BS {{ formatearNumero(propuesta.propuesta?.financia_bs || propuesta.monto_financia_bs) }}</strong>
+                    </div>
                   </v-col>
                 </v-row>
-                <div class="d-flex justify-space-between pa-2 mt-2 rounded-lg" style="background: rgba(0,0,0,0.3);"><span class="text-white" style="opacity: 0.9;">💰 Disponible después:</span><strong style="color: #2196f3;">${{ formatearNumero(clienteEncontrado?.limite_disponible?.disponible_usd - (propuesta.propuesta?.monto_solicitado_usd || 0)) }}</strong></div>
+                
+                <!-- ✅ CAMBIO 3: Esta línea -->
+                <div class="d-flex justify-space-between pa-2 mt-2 rounded-lg" style="background: rgba(0,0,0,0.3);">
+                  <span class="text-white" style="opacity: 0.9;">💰 Disponible después:</span>
+                  <strong class="text-primary">${{ formatearNumero(clienteEncontrado?.limite_disponible?.disponible_usd - (propuesta.propuesta?.monto_solicitado_usd || 0)) }}</strong>
+                </div>
               </v-alert>
               
               <div v-if="propuesta && !excedeLimite" class="mt-3">
