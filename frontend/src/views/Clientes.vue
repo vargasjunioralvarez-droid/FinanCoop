@@ -1,166 +1,305 @@
 <template>
-  <v-container>
-    <v-row>
-      <v-col cols="12">
-        <h1 class="text-h4 mb-4">👥 Gestión de Clientes</h1>
-      </v-col>
+  <v-container fluid class="pa-0">
+    <div class="background-gradient"></div>
+    
+    <v-row class="ma-0">
+      <v-col cols="12" class="pa-4">
+        <!-- HEADER PREMIUM -->
+        <div class="header-premium d-flex align-center justify-space-between flex-wrap">
+          <div class="d-flex align-center">
+            <div class="icon-wrapper pulse-animation">
+              <v-icon size="32" color="white">mdi-account-group</v-icon>
+            </div>
+            <div class="ml-3">
+              <h1 class="text-h4 font-weight-bold text-white">Gestión de Clientes</h1>
+              <p class="text-subtitle-2 text-white" style="opacity: 0.7;">Administración de clientes y solicitudes</p>
+            </div>
+          </div>
+          <div class="d-flex align-center" style="gap: 12px;">
+            <v-chip class="step-chip" color="transparent" size="large">
+              <span class="text-white font-weight-bold">{{ clientes.length }} Clientes</span>
+            </v-chip>
+          </div>
+        </div>
 
-      <v-col cols="12">
-        <v-tabs v-model="tabActiva" color="primary" grow>
-          <v-tab value="verificados"><v-icon start>mdi-check-circle</v-icon>Verificados ({{ clientesVerificados.length }})</v-tab>
-          <v-tab value="pendientes"><v-icon start>mdi-clock-outline</v-icon>Por Verificar ({{ clientesPendientes.length }})</v-tab>
-        </v-tabs>
+        <!-- TABS PREMIUM -->
+        <div class="mt-4">
+          <v-tabs v-model="tabActiva" color="#4facfe" grow class="premium-tabs">
+            <v-tab value="verificados">
+              <v-icon start size="20">mdi-check-circle</v-icon>
+              <span class="font-weight-bold">Verificados ({{ clientesVerificados.length }})</span>
+            </v-tab>
+            <v-tab value="pendientes">
+              <v-icon start size="20">mdi-clock-outline</v-icon>
+              <span class="font-weight-bold">Por Verificar ({{ clientesPendientes.length }})</span>
+            </v-tab>
+          </v-tabs>
 
-        <v-window v-model="tabActiva" class="mt-4">
-          
-          <v-window-item value="verificados">
-            <v-card>
-              <v-card-title class="d-flex align-center">
-                <v-icon color="success" class="mr-2">mdi-check-circle</v-icon>Clientes Verificados
-                <v-spacer></v-spacer>
-                <v-text-field v-model="busquedaVerificados" label="Buscar..." prepend-inner-icon="mdi-magnify" density="compact" hide-details variant="outlined" style="max-width: 300px;" />
-              </v-card-title>
-              <v-data-table :items="clientesVerificadosFiltrados" :headers="headersVerificados" :items-per-page="10">
-                <template v-slot:item.estado="{ item }"><v-chip color="success" size="small">✅ Aprobado</v-chip></template>
-                <template v-slot:item.pin="{ item }"><v-chip color="primary" size="small" v-if="item.pin">{{ item.pin }}</v-chip><span v-else class="text-grey">Sin PIN</span></template>
-                <template v-slot:item.nivel="{ item }"><v-chip :color="colorNivel(item.nivel)" size="small">{{ item.nivel }}</v-chip></template>
-                <template v-slot:item.acciones="{ item }">
-                  <div class="d-flex gap-1">
-                    <v-btn icon="mdi-eye" size="small" color="info" @click="verDetalle(item)"></v-btn>
-                    <v-btn v-if="esAdminCentral" icon="mdi-pencil" size="small" color="primary" @click="editarCliente(item)"></v-btn>
-                    <v-btn v-if="esAdminCentral" icon="mdi-delete" size="small" color="error" @click="eliminarCliente(item)"></v-btn>
+          <v-window v-model="tabActiva" class="mt-4">
+            
+            <!-- PESTAÑA: VERIFICADOS -->
+            <v-window-item value="verificados">
+              <v-card class="glass-card rounded-xl" elevation="0">
+                <v-card-text class="pa-4">
+                  <div class="d-flex align-center mb-3 flex-wrap" style="gap: 12px;">
+                    <div class="search-wrapper flex-grow-1">
+                      <v-text-field 
+                        v-model="busquedaVerificados" 
+                        label="Buscar cliente..." 
+                        prepend-inner-icon="mdi-magnify" 
+                        density="compact" 
+                        hide-details 
+                        variant="outlined"
+                        dark
+                        class="custom-input"
+                      />
+                    </div>
+                    <v-chip color="success" variant="tonal" size="small">
+                      <v-icon start size="16">mdi-check-circle</v-icon>
+                      {{ clientesVerificados.length }} verificados
+                    </v-chip>
                   </div>
-                </template>
-              </v-data-table>
-            </v-card>
-          </v-window-item>
 
-          <v-window-item value="pendientes">
-            <v-card>
-              <v-card-title class="d-flex align-center">
-                <v-icon color="warning" class="mr-2">mdi-clock-outline</v-icon>Clientes por Verificar
-                <v-spacer></v-spacer>
-                <v-text-field v-model="busquedaPendientes" label="Buscar..." prepend-inner-icon="mdi-magnify" density="compact" hide-details variant="outlined" style="max-width: 300px;" />
-              </v-card-title>
-              <v-data-table :items="clientesPendientesFiltrados" :headers="headersPendientes" :items-per-page="10">
-                <template v-slot:item.estado="{ item }"><v-chip color="warning" size="small">⏳ Pendiente</v-chip></template>
-                <template v-slot:item.foto="{ item }">
-                  <div class="d-flex align-center">
-                    <v-avatar v-if="tieneFotoReal(item)" size="40" class="mr-2 cursor-pointer" @click="verFotoAmpliada(item)"><v-img :src="item.url_cedula" cover><template v-slot:placeholder><v-icon color="grey">mdi-image</v-icon></template></v-img></v-avatar>
-                    <v-icon v-else :color="item.url_cedula ? 'success' : 'grey'" size="24" class="mr-2">{{ item.url_cedula ? 'mdi-check-circle' : 'mdi-image-off' }}</v-icon>
-                    <v-btn v-if="tieneFotoReal(item)" icon="mdi-magnify" size="x-small" color="primary" variant="text" @click="verFotoAmpliada(item)" title="Ver foto"></v-btn>
-                    <span v-else class="text-caption text-grey">{{ item.url_cedula ? 'Sí (sin URL)' : 'No' }}</span>
-                  </div>
-                </template>
-                <template v-slot:item.acciones="{ item }">
-                  <div class="d-flex gap-1">
-                    <v-btn icon="mdi-eye" size="small" color="info" @click="verDetalle(item)"></v-btn>
-                    <v-btn v-if="esAdminCentral" icon="mdi-check-circle" size="small" color="success" @click="aprobarCliente(item)" :loading="aprobandoId === item.id" title="Aprobar y enviar PIN"></v-btn>
-                    <v-btn v-if="esAdminCentral" icon="mdi-delete" size="small" color="error" @click="eliminarCliente(item)"></v-btn>
-                  </div>
-                </template>
-              </v-data-table>
-              <v-alert v-if="clientesPendientes.length === 0" type="info" class="ma-4">🎉 No hay clientes pendientes por verificar.</v-alert>
-            </v-card>
-          </v-window-item>
+                  <v-data-table 
+                    :items="clientesVerificadosFiltrados" 
+                    :headers="headersVerificados" 
+                    :items-per-page="10"
+                    class="premium-table"
+                  >
+                    <template v-slot:item.estado="{ item }">
+                      <v-chip color="success" size="small" variant="flat">✅ Aprobado</v-chip>
+                    </template>
+                    <template v-slot:item.pin="{ item }">
+                      <v-chip v-if="item.pin" color="primary" size="small" variant="tonal">{{ item.pin }}</v-chip>
+                      <span v-else class="text-caption" style="color: rgba(255,255,255,0.3);">Sin PIN</span>
+                    </template>
+                    <template v-slot:item.nivel="{ item }">
+                      <div class="d-flex align-center">
+                        <div class="level-dot" :style="`background: ${nivelColor2(item.nivel)}`"></div>
+                        <v-chip :color="nivelColor2(item.nivel)" size="x-small" variant="tonal">{{ item.nivel }}</v-chip>
+                      </div>
+                    </template>
+                    <template v-slot:item.acciones="{ item }">
+                      <div class="d-flex gap-1">
+                        <v-btn icon="mdi-eye" size="x-small" color="info" variant="tonal" @click="verDetalle(item)" />
+                        <v-btn v-if="esAdminCentral" icon="mdi-pencil" size="x-small" color="primary" variant="tonal" @click="editarCliente(item)" />
+                        <v-btn v-if="esAdminCentral" icon="mdi-delete" size="x-small" color="error" variant="tonal" @click="eliminarCliente(item)" />
+                      </div>
+                    </template>
+                  </v-data-table>
+                </v-card-text>
+              </v-card>
+            </v-window-item>
 
-        </v-window>
+            <!-- PESTAÑA: POR VERIFICAR -->
+            <v-window-item value="pendientes">
+              <v-card class="glass-card rounded-xl" elevation="0">
+                <v-card-text class="pa-4">
+                  <div class="d-flex align-center mb-3 flex-wrap" style="gap: 12px;">
+                    <div class="search-wrapper flex-grow-1">
+                      <v-text-field 
+                        v-model="busquedaPendientes" 
+                        label="Buscar cliente..." 
+                        prepend-inner-icon="mdi-magnify" 
+                        density="compact" 
+                        hide-details 
+                        variant="outlined"
+                        dark
+                        class="custom-input"
+                      />
+                    </div>
+                    <v-chip color="warning" variant="tonal" size="small">
+                      <v-icon start size="16">mdi-clock-outline</v-icon>
+                      {{ clientesPendientes.length }} pendientes
+                    </v-chip>
+                  </div>
+
+                  <v-data-table 
+                    :items="clientesPendientesFiltrados" 
+                    :headers="headersPendientes" 
+                    :items-per-page="10"
+                    class="premium-table"
+                  >
+                    <template v-slot:item.estado="{ item }">
+                      <v-chip color="warning" size="small" variant="flat">⏳ Pendiente</v-chip>
+                    </template>
+                    <template v-slot:item.foto="{ item }">
+                      <div class="d-flex align-center">
+                        <v-avatar v-if="tieneFotoReal(item)" size="36" class="cursor-pointer" @click="verFotoAmpliada(item)">
+                          <v-img :src="item.url_cedula" cover>
+                            <template v-slot:placeholder><v-icon color="grey" size="20">mdi-image</v-icon></template>
+                          </v-img>
+                        </v-avatar>
+                        <v-icon v-else :color="item.url_cedula ? 'success' : 'grey'" size="20" class="mr-2">
+                          {{ item.url_cedula ? 'mdi-check-circle' : 'mdi-image-off' }}
+                        </v-icon>
+                        <v-btn v-if="tieneFotoReal(item)" icon="mdi-magnify" size="x-small" color="primary" variant="text" @click="verFotoAmpliada(item)" title="Ver foto" />
+                        <span v-else class="text-caption" style="color: rgba(255,255,255,0.3);">{{ item.url_cedula ? 'Sí' : 'No' }}</span>
+                      </div>
+                    </template>
+                    <template v-slot:item.acciones="{ item }">
+                      <div class="d-flex gap-1">
+                        <v-btn icon="mdi-eye" size="x-small" color="info" variant="tonal" @click="verDetalle(item)" />
+                        <v-btn v-if="esAdminCentral" icon="mdi-check-circle" size="x-small" color="success" variant="tonal" @click="aprobarCliente(item)" :loading="aprobandoId === item.id" title="Aprobar" />
+                        <v-btn v-if="esAdminCentral" icon="mdi-delete" size="x-small" color="error" variant="tonal" @click="eliminarCliente(item)" />
+                      </div>
+                    </template>
+                  </v-data-table>
+
+                  <v-alert v-if="clientesPendientes.length === 0" type="success" variant="tonal" class="mt-4 rounded-xl">
+                    <div class="d-flex align-center"><v-icon size="28" class="mr-2">mdi-check-circle</v-icon><div><strong>Todo al día</strong><div class="text-caption">No hay clientes pendientes por verificar</div></div></div>
+                  </v-alert>
+                </v-card-text>
+              </v-card>
+            </v-window-item>
+
+          </v-window>
+        </div>
       </v-col>
     </v-row>
 
-    <!-- DIALOG: Ver Foto -->
+    <!-- DIALOGS (se mantienen igual) -->
     <v-dialog v-model="dialogFoto" max-width="800">
-      <v-card v-if="fotoCliente">
-        <v-card-title class="d-flex align-center"><v-icon class="mr-2">mdi-card-account-details</v-icon>Foto de Cédula - {{ fotoCliente.nombre }}<v-spacer></v-spacer><v-btn icon="mdi-close" variant="text" @click="dialogFoto = false"></v-btn></v-card-title>
+      <v-card v-if="fotoCliente" class="glass-card">
+        <v-card-title class="d-flex align-center text-white">
+          <v-icon class="mr-2">mdi-card-account-details</v-icon>Foto de Cédula - {{ fotoCliente.nombre }}
+          <v-spacer></v-spacer>
+          <v-btn icon="mdi-close" variant="text" @click="dialogFoto = false" color="white" />
+        </v-card-title>
         <v-card-text class="text-center pa-4">
-          <v-img :src="fotoCliente.url_cedula" max-height="70vh" contain class="rounded-lg elevation-2 bg-grey-darken-3"><template v-slot:placeholder><v-row align="center" justify="center" class="fill-height"><v-progress-circular indeterminate color="primary"></v-progress-circular></v-row></template></v-img>
-          <div class="mt-4 d-flex justify-center gap-2"><v-btn :href="fotoCliente.url_cedula" target="_blank" color="primary" prepend-icon="mdi-open-in-new">Abrir</v-btn><v-btn color="secondary" prepend-icon="mdi-download" @click="descargarFoto(fotoCliente)">Descargar</v-btn></div>
+          <v-img :src="fotoCliente.url_cedula" max-height="70vh" contain class="rounded-lg">
+            <template v-slot:placeholder><v-row align="center" justify="center" class="fill-height"><v-progress-circular indeterminate color="primary" /></v-row></template>
+          </v-img>
+          <div class="mt-4 d-flex justify-center gap-2">
+            <v-btn :href="fotoCliente.url_cedula" target="_blank" color="#4facfe" rounded="pill" prepend-icon="mdi-open-in-new">Abrir</v-btn>
+            <v-btn color="#6366f1" rounded="pill" prepend-icon="mdi-download" @click="descargarFoto(fotoCliente)">Descargar</v-btn>
+          </div>
         </v-card-text>
       </v-card>
     </v-dialog>
 
-    <!-- DIALOG: Aprobar Cliente (CON PIN VISIBLE) -->
     <v-dialog v-model="dialogAprobar" max-width="450">
-      <v-card>
-        <v-card-title class="text-h5 bg-success text-white"><v-icon start>mdi-check-circle</v-icon>Aprobar Cliente</v-card-title>
+      <v-card class="glass-card">
+        <v-card-title class="text-h5 text-white pa-4" style="background: linear-gradient(135deg, #4caf50, #2e7d32);">
+          <v-icon start>mdi-check-circle</v-icon>Aprobar Cliente
+        </v-card-title>
         <v-card-text class="pt-4" v-if="clienteAprobar">
-          <p class="text-body-1">¿Aprobar a <strong>{{ clienteAprobar.nombre }}</strong>?</p>
+          <p class="text-white">¿Aprobar a <strong>{{ clienteAprobar.nombre }}</strong>?</p>
           <div v-if="tieneFotoReal(clienteAprobar)" class="mt-3 text-center">
-            <p class="text-caption text-grey mb-2">Foto de cédula:</p>
-            <v-img :src="clienteAprobar.url_cedula" max-height="150" contain class="rounded" @click="verFotoAmpliada(clienteAprobar)"></v-img>
+            <v-img :src="clienteAprobar.url_cedula" max-height="150" contain class="rounded-lg" />
           </div>
-          <v-list density="compact" class="bg-grey-lighten-4 rounded mt-2">
-            <v-list-item><v-list-item-title>Cédula</v-list-item-title><v-list-item-subtitle>{{ clienteAprobar.cedula }}</v-list-item-subtitle></v-list-item>
-            <v-list-item><v-list-item-title>Teléfono</v-list-item-title><v-list-item-subtitle>{{ clienteAprobar.telefono }}</v-list-item-subtitle></v-list-item>
-          </v-list>
+          <div class="glass-effect pa-3 mt-3 rounded-lg">
+            <div class="d-flex justify-space-between"><span style="color: rgba(255,255,255,0.5);">Cédula</span><span class="text-white">{{ clienteAprobar.cedula }}</span></div>
+            <div class="d-flex justify-space-between mt-1"><span style="color: rgba(255,255,255,0.5);">Teléfono</span><span class="text-white">{{ clienteAprobar.telefono }}</span></div>
+          </div>
           
-          <!-- 🔥 MOSTRAR PIN DESPUÉS DE APROBAR -->
-          <v-alert v-if="pinGenerado" type="info" variant="tonal" class="mt-3" density="compact">
+          <v-alert v-if="pinGenerado" type="info" variant="tonal" class="mt-3 rounded-xl" density="compact">
             <div class="text-center">
               <div class="text-caption">PIN generado:</div>
               <div class="text-h4 font-weight-bold" style="letter-spacing: 8px;">{{ pinGenerado }}</div>
-              <div class="text-caption mt-1">Entrega este PIN al cliente para iniciar sesión</div>
+              <div class="text-caption mt-1">Entrega este PIN al cliente</div>
             </div>
           </v-alert>
-          
-          <p class="text-caption text-grey mt-3" v-if="!pinGenerado">Se enviará un SMS/WhatsApp con el PIN de acceso al número registrado.</p>
+          <p class="text-caption mt-3" style="color: rgba(255,255,255,0.3);" v-if="!pinGenerado">Se enviará SMS/WhatsApp con el PIN</p>
         </v-card-text>
-        <v-card-actions>
+        <v-card-actions class="pa-4">
           <v-spacer></v-spacer>
-          <v-btn v-if="!pinGenerado" @click="dialogAprobar = false">Cancelar</v-btn>
-          <v-btn v-if="!pinGenerado" color="success" @click="confirmarAprobar" :loading="aprobando"><v-icon start>mdi-send</v-icon>Aprobar y Enviar PIN</v-btn>
-          <v-btn v-else color="primary" @click="dialogAprobar = false; pinGenerado = null">Cerrar</v-btn>
+          <v-btn v-if="!pinGenerado" @click="dialogAprobar = false" variant="text" color="grey">Cancelar</v-btn>
+          <v-btn v-if="!pinGenerado" color="#4caf50" rounded="pill" @click="confirmarAprobar" :loading="aprobando">
+            <v-icon start>mdi-send</v-icon>Aprobar
+          </v-btn>
+          <v-btn v-else color="#4facfe" rounded="pill" @click="dialogAprobar = false; pinGenerado = null">Cerrar</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
 
-    <!-- DIALOG: Detalle del Cliente -->
     <v-dialog v-model="dialogDetalle" max-width="700">
-      <v-card v-if="clienteSeleccionado">
-        <v-card-title class="text-h5">{{ clienteSeleccionado.nombre }}<v-chip :color="clienteSeleccionado.estado === 'aprobado' ? 'success' : 'warning'" class="ml-2">{{ clienteSeleccionado.estado === 'aprobado' ? '✅ Aprobado' : '⏳ Pendiente' }}</v-chip></v-card-title>
-        <v-card-text>
+      <v-card v-if="clienteSeleccionado" class="glass-card">
+        <v-card-title class="text-h5 text-white pa-4">
+          {{ clienteSeleccionado.nombre }}
+          <v-chip :color="clienteSeleccionado.estado === 'aprobado' ? 'success' : 'warning'" class="ml-2" size="small">
+            {{ clienteSeleccionado.estado === 'aprobado' ? '✅ Aprobado' : '⏳ Pendiente' }}
+          </v-chip>
+        </v-card-title>
+        <v-card-text class="pa-4">
           <v-row>
-            <v-col cols="12" md="6"><p><strong>Cédula:</strong> {{ clienteSeleccionado.cedula }}</p><p><strong>Teléfono:</strong> {{ clienteSeleccionado.telefono }}</p><p><strong>Email:</strong> {{ clienteSeleccionado.email || 'N/A' }}</p><p><strong>Dirección:</strong> {{ clienteSeleccionado.direccion || 'N/A' }}</p></v-col>
-            <v-col cols="12" md="6"><p><strong>Score:</strong> {{ clienteSeleccionado.score }} pts</p><p><strong>Total Compras:</strong> {{ clienteSeleccionado.total_compras }}</p><p><strong>Nivel:</strong> <v-chip :color="colorNivel(clienteSeleccionado.nivel)" size="small">{{ clienteSeleccionado.nivel }}</v-chip></p><p><strong>PIN:</strong> <v-chip color="primary" size="small" v-if="clienteSeleccionado.pin">{{ clienteSeleccionado.pin }}</v-chip><span v-else class="text-grey">Sin PIN</span></p></v-col>
+            <v-col cols="12" md="6">
+              <div class="glass-effect pa-3 rounded-lg mb-2">
+                <p class="text-white"><strong>Cédula:</strong> {{ clienteSeleccionado.cedula }}</p>
+                <p class="text-white"><strong>Teléfono:</strong> {{ clienteSeleccionado.telefono }}</p>
+                <p class="text-white"><strong>Email:</strong> {{ clienteSeleccionado.email || 'N/A' }}</p>
+                <p class="text-white"><strong>Dirección:</strong> {{ clienteSeleccionado.direccion || 'N/A' }}</p>
+              </div>
+            </v-col>
+            <v-col cols="12" md="6">
+              <div class="glass-effect pa-3 rounded-lg mb-2">
+                <p class="text-white"><strong>Score:</strong> {{ clienteSeleccionado.score }} pts</p>
+                <p class="text-white"><strong>Compras:</strong> {{ clienteSeleccionado.total_compras }}</p>
+                <p class="text-white"><strong>Nivel:</strong> <v-chip :color="colorNivel(clienteSeleccionado.nivel)" size="x-small">{{ clienteSeleccionado.nivel }}</v-chip></p>
+                <p class="text-white"><strong>PIN:</strong> <v-chip v-if="clienteSeleccionado.pin" color="primary" size="x-small">{{ clienteSeleccionado.pin }}</v-chip><span v-else style="color: rgba(255,255,255,0.3);">Sin PIN</span></p>
+              </div>
+            </v-col>
           </v-row>
-          <v-divider class="my-3"></v-divider>
-          <h3 class="text-h6 mb-2">Referencia</h3>
-          <p><strong>Nombre:</strong> {{ clienteSeleccionado.referencia_nombre || 'N/A' }}</p><p><strong>Teléfono:</strong> {{ clienteSeleccionado.referencia_telefono || 'N/A' }}</p><p><strong>Parentesco:</strong> {{ clienteSeleccionado.referencia_parentesco || 'N/A' }}</p>
-          <v-divider class="my-3"></v-divider>
-          <h3 class="text-h6 mb-2">Foto de Cédula</h3>
-          <div v-if="tieneFotoReal(clienteSeleccionado)" class="text-center"><v-img :src="clienteSeleccionado.url_cedula" max-height="250" contain class="rounded-lg elevation-2 cursor-pointer bg-grey-darken-3" @click="verFotoAmpliada(clienteSeleccionado)"><template v-slot:placeholder><v-row align="center" justify="center" class="fill-height"><v-progress-circular indeterminate color="primary"></v-progress-circular></v-row></template></v-img><div class="mt-2"><v-btn color="primary" size="small" prepend-icon="mdi-magnify" @click="verFotoAmpliada(clienteSeleccionado)" class="mr-2">Ver ampliada</v-btn><v-btn :href="clienteSeleccionado.url_cedula" target="_blank" color="secondary" size="small" prepend-icon="mdi-open-in-new">Abrir original</v-btn></div></div>
-          <div v-else-if="esClienteLocal(clienteSeleccionado)" class="text-center py-4 bg-grey-lighten-4 rounded"><v-icon size="48" color="grey">mdi-image-off</v-icon><p class="text-body-2 text-grey mt-2">Cliente registrado localmente</p></div>
-          <v-alert v-else type="warning" density="compact" class="mt-2"><v-icon start>mdi-image-off</v-icon>No hay foto de cédula registrada</v-alert>
-          <v-divider class="my-3"></v-divider>
-          <h3 class="text-h6 mb-2">Financiamientos</h3>
-          <v-alert v-if="!financiamientosCliente.length" type="info" density="compact">Sin financiamientos</v-alert>
-          <v-expansion-panels v-else>
-            <v-expansion-panel v-for="fin in financiamientosCliente" :key="fin.id">
-              <v-expansion-panel-title><div class="d-flex align-center w-100"><v-icon :color="fin.estado === 'activo' ? 'success' : 'grey'" class="mr-2">{{ fin.estado === 'activo' ? 'mdi-clock-outline' : 'mdi-check-circle' }}</v-icon><span class="flex-grow-1">{{ fin.codigo }}</span><v-chip :color="fin.estado === 'activo' ? 'warning' : 'success'" size="small">{{ fin.estado }}</v-chip></div></v-expansion-panel-title>
-              <v-expansion-panel-text><p><strong>Descripción:</strong> {{ fin.descripcion }}</p><p><strong>Total:</strong> BS {{ formatearBS(fin.monto_total_bs) }}</p><p><strong>Entrada:</strong> BS {{ formatearBS(fin.monto_entrada_bs) }}</p><p><strong>Cuotas:</strong> {{ fin.cuotas_aprobadas }}</p><p><strong>Cuota mensual:</strong> BS {{ formatearBS(fin.monto_cuota_bs) }}</p><v-btn color="primary" size="small" class="mt-2" @click="verCuotas(fin.id)">Ver Cuotas</v-btn></v-expansion-panel-text>
-            </v-expansion-panel>
-          </v-expansion-panels>
+          <div class="glass-effect pa-3 rounded-lg mt-2">
+            <h4 class="text-white mb-2">Referencia</h4>
+            <p class="text-white"><strong>Nombre:</strong> {{ clienteSeleccionado.referencia_nombre || 'N/A' }}</p>
+            <p class="text-white"><strong>Teléfono:</strong> {{ clienteSeleccionado.referencia_telefono || 'N/A' }}</p>
+            <p class="text-white"><strong>Parentesco:</strong> {{ clienteSeleccionado.referencia_parentesco || 'N/A' }}</p>
+          </div>
+          <div class="glass-effect pa-3 rounded-lg mt-2">
+            <h4 class="text-white mb-2">Foto de Cédula</h4>
+            <div v-if="tieneFotoReal(clienteSeleccionado)" class="text-center">
+              <v-img :src="clienteSeleccionado.url_cedula" max-height="250" contain class="rounded-lg cursor-pointer" @click="verFotoAmpliada(clienteSeleccionado)" />
+            </div>
+            <p v-else class="text-caption" style="color: rgba(255,255,255,0.3);">No hay foto registrada</p>
+          </div>
+          <div class="glass-effect pa-3 rounded-lg mt-2">
+            <h4 class="text-white mb-2">Financiamientos</h4>
+            <v-alert v-if="!financiamientosCliente.length" type="info" variant="tonal" density="compact" class="rounded-lg">Sin financiamientos</v-alert>
+            <v-expansion-panels v-else>
+              <v-expansion-panel v-for="fin in financiamientosCliente" :key="fin.id" class="glass-effect mb-1 rounded-lg">
+                <v-expansion-panel-title>
+                  <div class="d-flex align-center w-100">
+                    <v-icon :color="fin.estado === 'activo' ? 'success' : 'grey'" class="mr-2">{{ fin.estado === 'activo' ? 'mdi-clock-outline' : 'mdi-check-circle' }}</v-icon>
+                    <span class="text-white flex-grow-1">{{ fin.codigo }}</span>
+                    <v-chip :color="fin.estado === 'activo' ? 'warning' : 'success'" size="x-small">{{ fin.estado }}</v-chip>
+                  </div>
+                </v-expansion-panel-title>
+                <v-expansion-panel-text>
+                  <p class="text-white"><strong>Descripción:</strong> {{ fin.descripcion }}</p>
+                  <p class="text-white"><strong>Total:</strong> BS {{ formatearBS(fin.monto_total_bs) }}</p>
+                  <p class="text-white"><strong>Cuotas:</strong> {{ fin.cuotas_aprobadas }}</p>
+                </v-expansion-panel-text>
+              </v-expansion-panel>
+            </v-expansion-panels>
+          </div>
         </v-card-text>
-        <v-card-actions><v-btn @click="dialogDetalle = false">Cerrar</v-btn><v-btn v-if="esAdminCentral && clienteSeleccionado.estado !== 'aprobado'" color="success" @click="dialogDetalle = false; aprobarCliente(clienteSeleccionado)">Aprobar</v-btn></v-card-actions>
+        <v-card-actions class="pa-4">
+          <v-btn @click="dialogDetalle = false" variant="text" color="grey">Cerrar</v-btn>
+          <v-btn v-if="esAdminCentral && clienteSeleccionado.estado !== 'aprobado'" color="#4caf50" rounded="pill" @click="dialogDetalle = false; aprobarCliente(clienteSeleccionado)">Aprobar</v-btn>
+        </v-card-actions>
       </v-card>
     </v-dialog>
 
-    <!-- Dialog: Editar -->
     <v-dialog v-model="dialogEditar" max-width="500">
-      <v-card><v-card-title>✏️ Editar Cliente</v-card-title>
-        <v-card-text><v-text-field v-model="clienteEditando.nombre" label="Nombre" variant="outlined" /><v-text-field v-model="clienteEditando.telefono" label="Teléfono" variant="outlined" /><v-text-field v-model="clienteEditando.email" label="Email" variant="outlined" /><v-textarea v-model="clienteEditando.direccion" label="Dirección" variant="outlined" rows="2" /></v-card-text>
-        <v-card-actions><v-btn @click="dialogEditar = false">Cancelar</v-btn><v-btn color="primary" @click="guardarEdicion" :loading="guardando">Guardar</v-btn></v-card-actions>
+      <v-card class="glass-card">
+        <v-card-title class="text-white pa-4">✏️ Editar Cliente</v-card-title>
+        <v-card-text class="pa-4">
+          <v-text-field v-model="clienteEditando.nombre" label="Nombre" variant="outlined" dark class="custom-input mb-2" />
+          <v-text-field v-model="clienteEditando.telefono" label="Teléfono" variant="outlined" dark class="custom-input mb-2" />
+          <v-text-field v-model="clienteEditando.email" label="Email" variant="outlined" dark class="custom-input mb-2" />
+          <v-textarea v-model="clienteEditando.direccion" label="Dirección" variant="outlined" dark class="custom-input" rows="2" />
+        </v-card-text>
+        <v-card-actions class="pa-4">
+          <v-btn @click="dialogEditar = false" variant="text" color="grey">Cancelar</v-btn>
+          <v-btn color="#4facfe" rounded="pill" @click="guardarEdicion" :loading="guardando">Guardar</v-btn>
+        </v-card-actions>
       </v-card>
     </v-dialog>
 
-    <!-- Dialog: Cuotas -->
-    <v-dialog v-model="dialogCuotas" max-width="500">
-      <v-card><v-card-title><v-btn icon @click="dialogCuotas = false" class="mr-2"><v-icon>mdi-arrow-left</v-icon></v-btn>Cuotas</v-card-title>
-        <v-card-text><v-list><v-list-item v-for="c in cuotas" :key="c.id" :class="{ 'bg-success-lighten-4': c.estado === 'pagada', 'bg-error-lighten-4': c.dias_atraso > 0 }" class="mb-2 rounded"><v-list-item-title><v-icon :color="c.estado === 'pagada' ? 'success' : 'error'" class="mr-2">{{ c.estado === 'pagada' ? 'mdi-check-circle' : 'mdi-alert-circle' }}</v-icon>Cuota #{{ c.numero }}</v-list-item-title><v-list-item-subtitle><v-chip :color="c.estado === 'pagada' ? 'success' : 'warning'" size="small">{{ c.estado }}</v-chip></v-list-item-subtitle><template v-slot:append><div class="text-right"><div class="text-h6">BS {{ formatearBS(c.monto_total_bs) }}</div><div class="text-caption">{{ formatearFecha(c.fecha_vencimiento) }}</div></div></template></v-list-item></v-list></v-card-text>
-      </v-card>
-    </v-dialog>
-
-    <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="5000" multi-line>{{ snackbar.text }}<template v-slot:actions><v-btn variant="text" @click="snackbar.show = false">Cerrar</v-btn></template></v-snackbar>
+    <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="5000" rounded="pill">
+      {{ snackbar.text }}
+    </v-snackbar>
   </v-container>
 </template>
 
@@ -188,7 +327,7 @@ const fotoCliente = ref(null)
 const financiamientosCliente = ref([])
 const cuotas = ref([])
 const snackbar = ref({ show: false, text: '', color: 'success' })
-const pinGenerado = ref(null)  // 🔥 NUEVO
+const pinGenerado = ref(null)
 
 const esAdminCentral = computed(() => localStorage.getItem('admin_rol') === 'admin_central')
 
@@ -221,6 +360,7 @@ const clientesPendientesFiltrados = computed(() => {
 const tieneFotoReal = (c) => c?.url_cedula?.startsWith('http') || false
 const esClienteLocal = (c) => c?._esLocal || c?.id?.toString().startsWith('local_') || false
 const colorNivel = (n) => ({ nuevo: 'grey', bronce: 'brown', plata: 'blue', oro: 'amber', platino: 'purple' })[n] || 'grey'
+const nivelColor2 = (n) => ({ nuevo: '#78909C', bronce: '#A1887F', plata: '#90A4AE', oro: '#FFD54F', platino: '#7E57C2' })[n] || '#78909C'
 const formatearBS = (m) => m ? Number(m).toLocaleString('es-VE', { minimumFractionDigits: 2 }) : '0,00'
 const formatearFecha = (f) => f ? new Date(f).toLocaleDateString('es-VE', { day: '2-digit', month: '2-digit', year: 'numeric' }) : ''
 const mostrarMensaje = (t, c = 'success') => { snackbar.value = { show: true, text: t, color: c } }
@@ -241,7 +381,7 @@ const verDetalle = async (c) => {
   try { const f = await api.get('/financiamientos'); financiamientosCliente.value = f.filter(x => x.cliente_id === c.id) } catch (e) { financiamientosCliente.value = [] }
 }
 
-const verCuotas = async (id) => { try { cuotas.value = await api.get(`/financiamientos/${id}/cuotas`); dialogCuotas.value = true } catch (e) {} }
+const verCuotas = async (id) => { try { cuotas.value = await api.get(`/financiamientos/${id}/cuotas`) } catch (e) {} }
 
 const aprobarCliente = (c) => { clienteAprobar.value = c; pinGenerado.value = null; dialogAprobar.value = true }
 
@@ -255,9 +395,7 @@ const confirmarAprobar = async () => {
       body: JSON.stringify({ cliente_id: clienteAprobar.value.id })
     })
     const d = await r.json()
-    if (d.success && d.cliente?.pin) {
-      pinGenerado.value = d.cliente.pin  // 🔥 MOSTRAR PIN
-    }
+    if (d.success && d.cliente?.pin) pinGenerado.value = d.cliente.pin
     mostrarMensaje(`✅ ${clienteAprobar.value.nombre} aprobado`, 'success')
     await cargarTodos(); tabActiva.value = 'verificados'
   } catch (e) { mostrarMensaje(e.message || 'Error', 'error') }
@@ -280,7 +418,41 @@ onMounted(() => { cargarTodos() })
 </script>
 
 <style scoped>
+.background-gradient {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: radial-gradient(ellipse at 20% 50%, rgba(79,172,254,0.12), transparent 70%),
+              radial-gradient(ellipse at 80% 50%, rgba(99,102,241,0.08), transparent 70%), #0a0e1a;
+  z-index: 0;
+}
+.header-premium {
+  position: relative; z-index: 1; padding: 16px 24px;
+  background: rgba(255,255,255,0.05); backdrop-filter: blur(20px);
+  border-radius: 20px; border: 1px solid rgba(255,255,255,0.06);
+}
+.icon-wrapper {
+  width: 48px; height: 48px; background: linear-gradient(135deg, #4facfe, #6366f1);
+  border-radius: 14px; display: flex; align-items: center; justify-content: center;
+}
+.pulse-animation { animation: pulse 2s infinite; }
+@keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+.step-chip { background: rgba(255,255,255,0.08) !important; padding: 8px 16px !important; border-radius: 50px !important; }
+.glass-effect { background: rgba(255,255,255,0.05) !important; backdrop-filter: blur(16px) !important; border: 1px solid rgba(255,255,255,0.08) !important; border-radius: 12px !important; }
+.glass-card { background: rgba(255,255,255,0.03) !important; backdrop-filter: blur(24px) !important; border: 1px solid rgba(255,255,255,0.06) !important; border-radius: 24px !important; }
+.premium-tabs :deep(.v-tab) { color: rgba(255,255,255,0.5) !important; }
+.premium-tabs :deep(.v-tab--selected) { color: #4facfe !important; }
+.premium-table { background: transparent !important; }
+.premium-table :deep(th) { color: rgba(255,255,255,0.7) !important; font-weight: 700 !important; }
+.premium-table :deep(td) { color: rgba(255,255,255,0.9) !important; border-bottom: 1px solid rgba(255,255,255,0.04) !important; }
+.premium-table :deep(tr:hover) { background: rgba(255,255,255,0.03) !important; }
+.level-dot { width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; }
+.custom-input :deep(.v-field) { background: rgba(255,255,255,0.05) !important; border-radius: 12px !important; border: 1px solid rgba(255,255,255,0.08) !important; }
+.custom-input :deep(.v-field--focused) { border-color: #4facfe !important; }
+.custom-input :deep(.v-label) { color: rgba(255,255,255,0.5) !important; }
+.custom-input :deep(.v-field__input) { color: white !important; }
 .cursor-pointer { cursor: pointer; }
 .gap-1 { gap: 4px; }
 .gap-2 { gap: 8px; }
+.fade-in { animation: fadeIn 0.5s ease; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+@media (max-width: 600px) { .header-premium { flex-direction: column; gap: 12px; align-items: stretch !important; } }
 </style>
