@@ -31,11 +31,10 @@ def crear_financiamiento(
         if cliente.estado != "aprobado":
             raise HTTPException(status_code=400, detail="Cliente no está aprobado. Debe ser verificado por el administrador.")
         
-        # 🔥 VALIDACIÓN 2: Nivel "nuevo" con 0 compras no puede comprar
+        # ✅ VALIDACIÓN 2: Calcular nivel (puede ser "nuevo" con score 0)
         nivel, config = calcular_nivel(cliente.score)
-        if nivel == "nuevo" and (cliente.total_compras or 0) == 0:
-            raise HTTPException(status_code=400, detail="Cliente nuevo sin historial. No puede realizar compras aún.")
         
+        # ✅ VALIDACIÓN 3: Límite de créditos activos
         creditos_activos = db.query(Financiamiento).filter(
             Financiamiento.cliente_id == f.cliente_id,
             Financiamiento.estado == "activo"
@@ -44,6 +43,7 @@ def crear_financiamiento(
         if creditos_activos >= MAX_CREDITOS_ACTIVOS:
             raise HTTPException(status_code=400, detail=f"Límite de {MAX_CREDITOS_ACTIVOS} créditos activos alcanzado")
         
+        # ✅ VALIDACIÓN 4: Verificar cuotas vencidas
         hoy = datetime.now(timezone.utc)
         deudas_vencidas = db.query(Cuota).join(Financiamiento).filter(
             Financiamiento.cliente_id == f.cliente_id,
@@ -54,31 +54,36 @@ def crear_financiamiento(
         if deudas_vencidas > 0:
             raise HTTPException(status_code=400, detail=f"Tiene {deudas_vencidas} cuota(s) vencida(s)")
         
+        # ✅ VALIDACIÓN 5: Calcular disponible global
         disponible = calcular_usado_disponible(f.cliente_id, db)
         if not disponible["puede_comprar"]:
             raise HTTPException(status_code=400, detail="Límite de financiamiento agotado")
         
+        # ✅ VALIDACIÓN 6: Verificar tasa y monto
         tasa = obtener_tasa_actual(db)
         monto_total_usd = f.monto_total_bs / tasa if tasa > 0 else 0
         
-        # 🔥 VALIDACIÓN 3: No exceder disponible
+        # ✅ VALIDACIÓN 7: No exceder disponible
         if monto_total_usd > disponible["disponible_usd"]:
             raise HTTPException(status_code=400, detail=f"Monto excede disponible: ${disponible['disponible_usd']:.2f}")
         
-        # 🔥 VALIDACIÓN 4: NO exceder límite del nivel
+        # ✅ VALIDACIÓN 8: No exceder límite del nivel
         logger.info(f"🔍 DEBUG: cliente={cliente.nombre}, nivel={nivel}, monto_usd={monto_total_usd:.2f}, limite={config['monto_max_usd']:.2f}")
         if monto_total_usd > config["monto_max_usd"]:
             raise HTTPException(status_code=400, detail=f"❌ Monto excede límite de nivel {nivel}: ${config['monto_max_usd']:.2f} USD (solicitado: ${monto_total_usd:.2f})")
         
+        # ✅ VALIDACIÓN 9: Validar cuotas
         if f.cuotas_solicitadas > config["cuotas_max"]:
             raise HTTPException(status_code=400, detail=f"Cuotas exceden máximo de {config['cuotas_max']}")
         
         if f.cuotas_solicitadas < 1:
             raise HTTPException(status_code=400, detail="Debe solicitar al menos 1 cuota")
         
+        # ✅ CALCULAR APROBACIÓN EXTRA
         requiere_aprobacion = f.cuotas_solicitadas > config["cuotas_base"] and config["aprobacion_extra"]
         cuotas_aprobadas = f.cuotas_solicitadas if not requiere_aprobacion else config["cuotas_base"]
         
+        # ✅ CALCULAR MONTOS
         entrada_bs = f.monto_total_bs * (config["entrada_pct"] / 100)
         financia_bs = f.monto_total_bs - entrada_bs
         monto_cuota_bs = financia_bs / cuotas_aprobadas if cuotas_aprobadas > 0 else 0
@@ -87,24 +92,35 @@ def crear_financiamiento(
         financia_usd_ref = financia_bs / tasa if tasa > 0 else 0
         monto_cuota_usd_ref = monto_cuota_bs / tasa if tasa > 0 else 0
         
+        # ✅ GENERAR CÓDIGO
         codigo = f"F-{random.randint(100000, 999999)}"
         fecha_primera = datetime.now(timezone.utc) + timedelta(days=15)
         
-        # 🔥 ASIGNAR TIENDA DEL USUARIO ACTUAL
+        # ✅ ASIGNAR TIENDA DEL USUARIO ACTUAL (quien vende)
         tienda_id = None
         if hasattr(current_user, 'tienda_id') and current_user.tienda_id:
             tienda_id = current_user.tienda_id
         
+        # ✅ CREAR FINANCIAMIENTO
         fin = Financiamiento(
-            cliente_id=f.cliente_id, codigo=codigo, descripcion=f.descripcion,
-            monto_total_bs=f.monto_total_bs, monto_entrada_bs=entrada_bs,
-            monto_financia_bs=financia_bs, monto_cuota_bs=monto_cuota_bs,
-            monto_total_usd=monto_total_usd, monto_entrada_usd=entrada_usd_ref,
-            monto_financia_usd=financia_usd_ref, monto_cuota_usd=monto_cuota_usd_ref,
-            tasa_aplicada=tasa, nivel_aplicado=nivel,
-            cuotas_solicitadas=f.cuotas_solicitadas, cuotas_aprobadas=cuotas_aprobadas,
+            cliente_id=f.cliente_id, 
+            codigo=codigo, 
+            descripcion=f.descripcion,
+            monto_total_bs=f.monto_total_bs, 
+            monto_entrada_bs=entrada_bs,
+            monto_financia_bs=financia_bs, 
+            monto_cuota_bs=monto_cuota_bs,
+            monto_total_usd=monto_total_usd, 
+            monto_entrada_usd=entrada_usd_ref,
+            monto_financia_usd=financia_usd_ref, 
+            monto_cuota_usd=monto_cuota_usd_ref,
+            tasa_aplicada=tasa, 
+            nivel_aplicado=nivel,
+            cuotas_solicitadas=f.cuotas_solicitadas, 
+            cuotas_aprobadas=cuotas_aprobadas,
             requiere_aprobacion=requiere_aprobacion,
-            entrada_pct=config["entrada_pct"], financia_pct=config["financia_pct"],
+            entrada_pct=config["entrada_pct"], 
+            financia_pct=config["financia_pct"],
             fecha_primera_cuota=fecha_primera,
             estado="activo",
             tienda_id=tienda_id
@@ -113,21 +129,27 @@ def crear_financiamiento(
         db.commit()
         db.refresh(fin)
         
+        # ✅ CREAR CUOTAS
         for i in range(1, cuotas_aprobadas + 1):
             cuota = Cuota(
-                financiamiento_id=fin.id, numero=i,
-                monto_base_bs=monto_cuota_bs, monto_total_bs=monto_cuota_bs,
-                monto_base_usd=monto_cuota_usd_ref, monto_total_usd=monto_cuota_usd_ref,
+                financiamiento_id=fin.id, 
+                numero=i,
+                monto_base_bs=monto_cuota_bs, 
+                monto_total_bs=monto_cuota_bs,
+                monto_base_usd=monto_cuota_usd_ref, 
+                monto_total_usd=monto_cuota_usd_ref,
                 fecha_vencimiento=fecha_primera + timedelta(days=15 * (i - 1)),
                 estado="pendiente"
             )
             db.add(cuota)
         db.commit()
         
+        # ✅ ACTUALIZAR ESTADÍSTICAS DEL CLIENTE
         if hasattr(cliente, 'total_monto_comprado_usd'):
             cliente.total_monto_comprado_usd = (cliente.total_monto_comprado_usd or 0) + monto_total_usd
             db.commit()
         
+        # ✅ ACTUALIZAR SCORE DEL CLIENTE
         actualizar_score_cliente(cliente, db)
         
         logger.info(f"✅ Financiamiento creado: {codigo} - Tienda: {tienda_id}")
@@ -135,7 +157,8 @@ def crear_financiamiento(
         return {
             "success": True,
             "financiamiento": {
-                "id": fin.id, "codigo": fin.codigo,
+                "id": fin.id, 
+                "codigo": fin.codigo,
                 "monto_total_bs": round(fin.monto_total_bs, 2),
                 "monto_total_usd": round(fin.monto_total_usd, 2),
                 "monto_entrada_bs": round(fin.monto_entrada_bs, 2),
@@ -158,6 +181,7 @@ def crear_financiamiento(
         logger.error(f"❌ Error: {e}")
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.post("/{id}/aprobar")
 def aprobar_financiamiento(
@@ -185,9 +209,12 @@ def aprobar_financiamiento(
         
         for i in range(1, aprobacion.cuotas_aprobadas + 1):
             cuota = Cuota(
-                financiamiento_id=fin.id, numero=i,
-                monto_base_bs=monto_cuota_bs, monto_total_bs=monto_cuota_bs,
-                monto_base_usd=monto_cuota_usd, monto_total_usd=monto_cuota_usd,
+                financiamiento_id=fin.id, 
+                numero=i,
+                monto_base_bs=monto_cuota_bs, 
+                monto_total_bs=monto_cuota_bs,
+                monto_base_usd=monto_cuota_usd, 
+                monto_total_usd=monto_cuota_usd,
                 fecha_vencimiento=fin.fecha_primera_cuota + timedelta(days=15 * (i - 1)),
                 estado="pendiente"
             )
@@ -208,6 +235,7 @@ def aprobar_financiamiento(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("")
 def listar_financiamientos(
@@ -260,8 +288,13 @@ def listar_financiamientos(
         logger.error(f"❌ Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @router.get("/{id}")
-def obtener_financiamiento(id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+def obtener_financiamiento(
+    id: int, 
+    db: Session = Depends(get_db), 
+    current_user = Depends(get_current_user)
+):
     try:
         fin = db.query(Financiamiento).filter(Financiamiento.id == id).first()
         if not fin:
@@ -300,8 +333,13 @@ def obtener_financiamiento(id: int, db: Session = Depends(get_db), current_user 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @router.get("/{id}/cuotas")
-def ver_cuotas(id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+def ver_cuotas(
+    id: int, 
+    db: Session = Depends(get_db), 
+    current_user = Depends(get_current_user)
+):
     try:
         fin = db.query(Financiamiento).filter(Financiamiento.id == id).first()
         if not fin:
@@ -331,6 +369,7 @@ def ver_cuotas(id: int, db: Session = Depends(get_db), current_user = Depends(ge
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.delete("/{id}")
 def eliminar_financiamiento(
