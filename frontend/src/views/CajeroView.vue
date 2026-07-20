@@ -23,6 +23,7 @@
               density="comfortable"
             ></v-text-field>
             
+            <!-- ✅ CLIENTE ENCONTRADO - CON SUS COMPRAS -->
             <v-alert v-if="clienteEncontrado" type="success" class="mt-3" border="start">
               <div>
                 <strong class="text-h6">{{ clienteEncontrado.nombre }}</strong><br>
@@ -39,12 +40,78 @@
                   Ref: {{ clienteEncontrado.referencia_nombre }} ({{ clienteEncontrado.referencia_parentesco }}) - {{ clienteEncontrado.referencia_telefono }}
                 </div>
                 
-                <span v-if="clienteEncontrado.nivel_config" class="text-caption">
-                  Límite: ${{ clienteEncontrado.nivel_config.monto_max_usd }} USD 
-                  (BS {{ formatearNumero(clienteEncontrado.nivel_config.monto_max_bs) }}) | 
-                  Entrada: {{ clienteEncontrado.nivel_config.entrada_pct }}% | 
-                  Cuotas: {{ clienteEncontrado.nivel_config.cuotas_base }}-{{ clienteEncontrado.nivel_config.cuotas_max }}
-                </span>
+                <!-- ✅ LÍMITE Y DISPONIBLE -->
+                <v-divider class="my-2"></v-divider>
+                <div class="d-flex justify-space-between align-center flex-wrap">
+                  <div>
+                    <span class="text-caption">Límite: </span>
+                    <strong>${{ clienteEncontrado.limite_disponible?.limite_usd || 0 }}</strong>
+                    <span class="text-caption"> (BS {{ formatearNumero((clienteEncontrado.limite_disponible?.limite_usd || 0) * (tasaDolar || 40)) }})</span>
+                  </div>
+                  <div>
+                    <span class="text-caption">Usado: </span>
+                    <strong class="text-error">${{ clienteEncontrado.limite_disponible?.usado_usd || 0 }}</strong>
+                  </div>
+                  <div>
+                    <span class="text-caption">Disponible: </span>
+                    <strong class="text-success">${{ clienteEncontrado.limite_disponible?.disponible_usd || 0 }}</strong>
+                  </div>
+                  <v-chip :color="clienteEncontrado.limite_disponible?.puede_comprar ? 'success' : 'error'" size="small">
+                    {{ clienteEncontrado.limite_disponible?.puede_comprar ? '✅ Puede comprar' : '❌ Sin saldo' }}
+                  </v-chip>
+                </div>
+                
+                <!-- ✅ FINANCIAMIENTOS ACTIVOS (COMPRAS ACTUALES) -->
+                <div v-if="clienteEncontrado.financiamientos_activos && clienteEncontrado.financiamientos_activos.length > 0" class="mt-3">
+                  <v-divider class="my-2"></v-divider>
+                  <h4 class="text-subtitle-1 font-weight-bold">
+                    <v-icon size="small" color="warning">mdi-clock-outline</v-icon>
+                    Compras Activas ({{ clienteEncontrado.financiamientos_activos.length }})
+                  </h4>
+                  
+                  <v-table density="compact" class="mt-2">
+                    <thead>
+                      <tr>
+                        <th>Tienda</th>
+                        <th class="text-right">Monto</th>
+                        <th class="text-right">Cuotas</th>
+                        <th class="text-center">Estado</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="fin in clienteEncontrado.financiamientos_activos" :key="fin.id">
+                        <td>
+                          <v-chip size="x-small" color="info">
+                            {{ fin.tienda_nombre || 'N/A' }}
+                          </v-chip>
+                        </td>
+                        <td class="text-right">
+                          ${{ formatearNumero(fin.monto_total_usd) }}
+                          <span class="text-caption text-grey">(BS {{ formatearNumero(fin.monto_total_bs) }})</span>
+                        </td>
+                        <td class="text-right">
+                          {{ fin.cuotas_pagadas || 0 }}/{{ fin.cuotas_aprobadas }}
+                        </td>
+                        <td class="text-center">
+                          <v-chip :color="fin.estado === 'activo' ? 'success' : 'warning'" size="x-small">
+                            {{ fin.estado }}
+                          </v-chip>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </v-table>
+                  
+                  <!-- Resumen de deuda por tienda -->
+                  <div class="mt-2">
+                    <span class="text-caption text-grey">Deuda por tienda:</span>
+                    <div v-for="(deuda, tienda) in clienteEncontrado.deuda_por_tienda" :key="tienda" class="text-caption">
+                      • {{ tienda }}: ${{ formatearNumero(deuda.monto_usd) }} ({{ deuda.cuotas_restantes }} cuotas restantes)
+                    </div>
+                  </div>
+                </div>
+                <div v-else class="text-caption text-grey mt-2">
+                  <v-icon size="small">mdi-check</v-icon> No tiene compras activas
+                </div>
               </div>
             </v-alert>
             
@@ -69,8 +136,26 @@
               </v-btn>
             </v-alert>
             
-            <v-btn v-if="clienteEncontrado && !clienteEncontrado.bloqueado" color="primary" @click="paso = 2" class="mt-3" block size="large">
+            <v-btn 
+              v-if="clienteEncontrado && clienteEncontrado.limite_disponible?.puede_comprar" 
+              color="primary" 
+              @click="paso = 2" 
+              class="mt-3" 
+              block 
+              size="large"
+            >
               Continuar →
+            </v-btn>
+            
+            <v-btn 
+              v-if="clienteEncontrado && !clienteEncontrado.limite_disponible?.puede_comprar" 
+              color="error" 
+              class="mt-3" 
+              block 
+              size="large"
+              disabled
+            >
+              ❌ Cliente sin saldo disponible
             </v-btn>
           </v-card-text>
         </v-card>
@@ -81,6 +166,16 @@
         <v-card>
           <v-card-title class="text-h5">2. Monto de la Compra (BS)</v-card-title>
           <v-card-text>
+            <!-- ✅ Resumen rápido del cliente -->
+            <v-alert type="info" density="compact" class="mb-3">
+              <div class="d-flex justify-space-between flex-wrap">
+                <span><strong>Cliente:</strong> {{ clienteEncontrado?.nombre }}</span>
+                <span><strong>Nivel:</strong> {{ clienteEncontrado?.nivel?.toUpperCase() }}</span>
+                <span><strong>Disponible:</strong> ${{ clienteEncontrado?.limite_disponible?.disponible_usd || 0 }}</span>
+                <span><strong>Límite:</strong> ${{ clienteEncontrado?.limite_disponible?.limite_usd || 0 }}</span>
+              </div>
+            </v-alert>
+            
             <v-text-field
               v-model="montoTotalBS"
               label="Monto Total en Bolívares"
@@ -100,13 +195,13 @@
 
             <v-alert v-if="excedeLimite" type="error" class="mt-3" border="start" prominent>
               <v-icon start>mdi-cancel</v-icon>
-              <strong>Monto excede el límite de crédito</strong>
+              <strong>Monto excede el límite disponible</strong>
               <div class="text-caption mt-1">
-                Límite máximo: <strong>${{ clienteEncontrado?.nivel_config?.monto_max_usd || 100 }} USD</strong> | 
+                Límite disponible: <strong>${{ clienteEncontrado?.limite_disponible?.disponible_usd || 0 }} USD</strong> | 
                 Solicitado: <strong>~${{ ((parseFloat(montoTotalBS) || 0) / (tasaDolar || 40)).toFixed(2) }} USD</strong>
               </div>
               <div class="text-caption mt-1">
-                Por favor, ingrese un monto menor o igual al límite disponible.
+                Por favor, ingrese un monto menor o igual al disponible.
               </div>
             </v-alert>
             
@@ -135,8 +230,8 @@
               </div>
               
               <div class="d-flex justify-space-between mb-1">
-                <span>Límite disponible:</span>
-                <strong>BS {{ formatearNumero(propuesta.propuesta?.disponible_bs || propuesta.disponible_bs) }}</strong>
+                <span>Disponible después de esta compra:</span>
+                <strong class="text-success">${{ formatearNumero(clienteEncontrado?.limite_disponible?.disponible_usd - (propuesta.propuesta?.monto_solicitado_usd || 0)) }}</strong>
               </div>
               
               <div class="text-caption mt-2">
@@ -253,6 +348,7 @@ const resultado = ref({})
 const tasaDolar = ref(40.0)
 const requiereAprobacion = ref(false)
 const excedeLimite = ref(false)
+const cargando = ref(false)
 
 const opcionesCuotas = computed(() => {
   if (!propuesta.value) return []
@@ -289,36 +385,82 @@ onMounted(async () => {
 
 const buscarCliente = async () => {
   if (!busquedaCedula.value) return
+  cargando.value = true
   try {
     const data = await api.get(`/clientes/buscar/${busquedaCedula.value}`)
     if (data.error || !data.encontrado) {
-      clienteEncontrado.value = null; clienteNoEncontrado.value = true; nuevoCliente.value.cedula = busquedaCedula.value
+      clienteEncontrado.value = null
+      clienteNoEncontrado.value = true
+      nuevoCliente.value.cedula = busquedaCedula.value
     } else {
-      clienteEncontrado.value = { ...data, bloqueado: false }; clienteNoEncontrado.value = false
+      // ✅ Obtener financiamientos activos del cliente
+      const financiamientos = await api.get(`/financiamientos?cliente_id=${data.id}&estado=activo`)
+      
+      // ✅ Calcular deuda por tienda
+      const deudaPorTienda = {}
+      if (financiamientos.financiamientos) {
+        financiamientos.financiamientos.forEach(fin => {
+          const tienda = fin.tienda_nombre || 'Sin tienda'
+          if (!deudaPorTienda[tienda]) {
+            deudaPorTienda[tienda] = { monto_usd: 0, cuotas_restantes: 0 }
+          }
+          deudaPorTienda[tienda].monto_usd += fin.monto_total_usd
+          deudaPorTienda[tienda].cuotas_restantes += fin.cuotas_aprobadas
+        })
+      }
+      
+      clienteEncontrado.value = { 
+        ...data, 
+        bloqueado: false,
+        financiamientos_activos: financiamientos.financiamientos || [],
+        deuda_por_tienda: deudaPorTienda
+      }
+      clienteNoEncontrado.value = false
     }
   } catch (e) {
-    clienteEncontrado.value = null; clienteNoEncontrado.value = true; nuevoCliente.value.cedula = busquedaCedula.value
+    console.error('Error buscando cliente:', e)
+    clienteEncontrado.value = null
+    clienteNoEncontrado.value = true
+    nuevoCliente.value.cedula = busquedaCedula.value
+  } finally {
+    cargando.value = false
   }
 }
 
 const registrarCliente = async () => {
   if (!registroValido.value) { alert('Complete todos los campos obligatorios'); return }
   try {
-    await api.post('/clientes', { nombre: nuevoCliente.value.nombre, cedula: busquedaCedula.value, telefono: nuevoCliente.value.telefono, email: nuevoCliente.value.email || '', direccion: nuevoCliente.value.direccion, referencia_nombre: nuevoCliente.value.referencia_nombre, referencia_telefono: nuevoCliente.value.referencia_telefono, referencia_parentesco: nuevoCliente.value.referencia_parentesco })
-    alert('✅ Cliente registrado exitosamente'); await buscarCliente()
-  } catch (e) { alert('Error registrando cliente') }
+    await api.post('/clientes', { 
+      nombre: nuevoCliente.value.nombre, 
+      cedula: busquedaCedula.value, 
+      telefono: nuevoCliente.value.telefono, 
+      email: nuevoCliente.value.email || '', 
+      direccion: nuevoCliente.value.direccion, 
+      referencia_nombre: nuevoCliente.value.referencia_nombre, 
+      referencia_telefono: nuevoCliente.value.referencia_telefono, 
+      referencia_parentesco: nuevoCliente.value.referencia_parentesco 
+    })
+    alert('✅ Cliente registrado exitosamente')
+    await buscarCliente()
+  } catch (e) { 
+    console.error('Error registrando cliente:', e)
+    alert('Error registrando cliente') 
+  }
 }
 
 const calcularPropuesta = async () => {
   if (!montoTotalBS.value || parseFloat(montoTotalBS.value) <= 0 || !clienteEncontrado.value) {
-    propuesta.value = null; cuotasSeleccionadas.value = null; excedeLimite.value = false; return
+    propuesta.value = null
+    cuotasSeleccionadas.value = null
+    excedeLimite.value = false
+    return
   }
   
   const tasa = tasaDolar.value || 40
   const montoUSD = parseFloat(montoTotalBS.value) / tasa
-  const limiteUSD = clienteEncontrado.value?.nivel_config?.monto_max_usd || 100
+  const disponibleUSD = clienteEncontrado.value?.limite_disponible?.disponible_usd || 0
   
-  if (montoUSD > limiteUSD) {
+  if (montoUSD > disponibleUSD) {
     excedeLimite.value = true
     propuesta.value = null
     cuotasSeleccionadas.value = null
@@ -332,24 +474,52 @@ const calcularPropuesta = async () => {
     propuesta.value = data
     cuotasSeleccionadas.value = data.propuesta?.cuotas_base || data.configuracion_nivel?.cuotas_base || 4
     requiereAprobacion.value = data.propuesta?.requiere_aprobacion_extra || false
-    if (data.propuesta?.excede_limite) excedeLimite.value = true
-  } catch (e) { propuesta.value = null }
+  } catch (e) { 
+    console.error('Error calculando propuesta:', e)
+    propuesta.value = null 
+  }
 }
 
 const fechaCuota = (n) => new Date(Date.now() + (15 * n * 24 * 60 * 60 * 1000)).toLocaleDateString('es-VE')
 
 const crearFinanciamiento = async () => {
   try {
-    const data = await api.post('/financiamientos', { cliente_id: clienteEncontrado.value.id, descripcion: descripcion.value || 'Compra', monto_total_bs: parseFloat(montoTotalBS.value), cuotas_solicitadas: cuotasSeleccionadas.value })
+    const data = await api.post('/financiamientos', { 
+      cliente_id: clienteEncontrado.value.id, 
+      descripcion: descripcion.value || 'Compra', 
+      monto_total_bs: parseFloat(montoTotalBS.value), 
+      cuotas_solicitadas: cuotasSeleccionadas.value 
+    })
     if (data.error) { alert('Error: ' + data.error); return }
-    resultado.value = data; paso.value = 4
-  } catch (e) { alert('Error creando financiamiento') }
+    resultado.value = data
+    paso.value = 4
+  } catch (e) { 
+    console.error('Error creando financiamiento:', e)
+    alert('Error creando financiamiento') 
+  }
 }
 
 const resetear = () => {
-  paso.value = 1; busquedaCedula.value = ''; clienteEncontrado.value = null; clienteNoEncontrado.value = false
+  paso.value = 1
+  busquedaCedula.value = ''
+  clienteEncontrado.value = null
+  clienteNoEncontrado.value = false
   nuevoCliente.value = { nombre: '', telefono: '', email: '', cedula: '', direccion: '', referencia_nombre: '', referencia_telefono: '', referencia_parentesco: '' }
-  montoTotalBS.value = ''; propuesta.value = null; cuotasSeleccionadas.value = null; descripcion.value = ''
-  resultado.value = {}; requiereAprobacion.value = false; excedeLimite.value = false
+  montoTotalBS.value = ''
+  propuesta.value = null
+  cuotasSeleccionadas.value = null
+  descripcion.value = ''
+  resultado.value = {}
+  requiereAprobacion.value = false
+  excedeLimite.value = false
 }
 </script>
+
+<style scoped>
+.mt-2 { margin-top: 8px; }
+.mt-3 { margin-top: 12px; }
+.mb-1 { margin-bottom: 4px; }
+.mb-2 { margin-bottom: 8px; }
+.ml-2 { margin-left: 8px; }
+.flex-wrap { flex-wrap: wrap; }
+</style>
