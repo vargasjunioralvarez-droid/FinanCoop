@@ -80,7 +80,6 @@
                       variant="outlined"
                       suffix="%"
                       class="mt-2"
-                      step="0.5"
                     ></v-text-field>
                   </td>
                   <td>
@@ -92,7 +91,6 @@
                       variant="outlined"
                       suffix="%"
                       class="mt-2"
-                      step="0.5"
                     ></v-text-field>
                   </td>
                   <td>
@@ -124,7 +122,6 @@
                       variant="outlined"
                       suffix="%"
                       class="mt-2"
-                      step="0.1"
                     ></v-text-field>
                   </td>
                   <td class="text-center">
@@ -238,14 +235,15 @@ const guardarNivel = async (nivel) => {
   try {
     const config = niveles.value[nivel]
     
-    // ✅ ENVIAR PORCENTAJES COMO ENTEROS (30, 70, etc.)
+    // ✅ SOLO ENVIAR LOS CAMPOS QUE ESPERA EL BACKEND
+    // NO incluir min_score, max_score, creado_en, actualizado_en, id
     const payload = {
       monto_max_usd: parseFloat(config.monto_max_usd) || 100,
-      entrada_pct: parseFloat(config.entrada_pct) || 30,    // ✅ 30% como 30
-      financia_pct: parseFloat(config.financia_pct) || 70,   // ✅ 70% como 70
+      entrada_pct: parseFloat(config.entrada_pct) || 30,
+      financia_pct: parseFloat(config.financia_pct) || 70,
       cuotas_base: parseInt(config.cuotas_base) || 3,
       cuotas_max: parseInt(config.cuotas_max) || 6,
-      mora_diaria: parseFloat(config.mora_diaria) || 2,      // ✅ 2% como 2
+      mora_diaria: parseFloat(config.mora_diaria) || 2,
       aprobacion_extra: config.aprobacion_extra || false
     }
     
@@ -256,11 +254,13 @@ const guardarNivel = async (nivel) => {
     console.log(`✅ Respuesta para ${nivel}:`, response)
     successMsg.value = `✅ Nivel ${nivel.toUpperCase()} actualizado correctamente`
     
+    // Recargar datos para asegurar consistencia
     await cargarNiveles()
     
   } catch (e) {
     console.error(`❌ Error guardando ${nivel}:`, e)
     
+    // Mostrar mensaje de error más detallado
     let errorDetail = 'Error guardando nivel'
     if (e.response) {
       console.error('❌ Response status:', e.response.status)
