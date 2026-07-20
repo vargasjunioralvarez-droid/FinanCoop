@@ -15,9 +15,14 @@
               <p class="text-subtitle-2 text-white" style="opacity: 0.7;">{{ fechaHoy }} | 🏪 {{ tiendaNombre || 'Cargando...' }}</p>
             </div>
           </div>
-          <v-chip class="step-chip" color="transparent" size="large">
-            <span class="text-white font-weight-bold">{{ ventasHoy.length }} Ventas Hoy</span>
-          </v-chip>
+          <div class="d-flex align-center" style="gap: 8px;">
+            <v-btn v-if="ventasHoy.length > 0" color="#4facfe" size="small" rounded="pill" @click="imprimirReporte" elevation="0">
+              <v-icon start>mdi-printer</v-icon>Imprimir
+            </v-btn>
+            <v-chip class="step-chip" color="transparent" size="large">
+              <span class="text-white font-weight-bold">{{ ventasHoy.length }} Ventas Hoy</span>
+            </v-chip>
+          </div>
         </div>
 
         <!-- KPIs PREMIUM -->
@@ -60,7 +65,7 @@
         <!-- TABLA DE VENTAS -->
         <v-row class="mt-4">
           <v-col cols="12">
-            <v-card class="glass-card rounded-xl" elevation="0">
+            <v-card id="reporte-ventas" class="glass-card rounded-xl" elevation="0">
               <v-card-title class="text-h6 font-weight-bold text-white pa-4">
                 <v-icon color="#4facfe" class="mr-2">mdi-clipboard-text</v-icon>
                 Ventas de Hoy
@@ -69,7 +74,6 @@
               </v-card-title>
               
               <v-card-text class="pa-4 pt-0">
-                <!-- Tabla premium -->
                 <div class="table-wrapper">
                   <v-table class="premium-table">
                     <thead>
@@ -112,7 +116,6 @@
                   </v-table>
                 </div>
 
-                <!-- Empty state -->
                 <div v-if="ventasHoy.length === 0" class="empty-state glass-effect mt-2 rounded-xl">
                   <v-icon size="48" color="rgba(255,255,255,0.1)">mdi-cart-off</v-icon>
                   <div class="text-body-1 mt-2" style="color: rgba(255,255,255,0.4);">No hay ventas registradas hoy</div>
@@ -156,68 +159,102 @@ const cargarUsuario = async () => {
   } catch (e) {}
 }
 
+// 🔥 FUNCIÓN PARA IMPRIMIR REPORTE
+const imprimirReporte = () => {
+  const ventana = window.open('', '_blank', 'width=900,height=700')
+  if (!ventana) { alert('Permite las ventanas emergentes para imprimir'); return }
+  
+  let filas = ''
+  ventasHoy.value.forEach(v => {
+    filas += `<tr>
+      <td>${v.codigo || '-'}</td>
+      <td>${v.cliente_nombre || '-'}</td>
+      <td style="text-align:right;">BS ${formatearBS(v.monto_total_bs)}</td>
+      <td style="text-align:right;">BS ${formatearBS(v.monto_entrada_bs)}</td>
+      <td style="text-align:center;">${v.cuotas_aprobadas || 0}</td>
+      <td style="text-align:right;">${formatearHora(v.creado_en)}</td>
+    </tr>`
+  })
+  
+  ventana.document.write(`
+    <html>
+      <head>
+        <title>Reporte de Ventas - ${fechaHoy}</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 20px; color: #333; }
+          .header { text-align: center; margin-bottom: 20px; }
+          .header h1 { margin: 0; font-size: 22px; }
+          .header p { margin: 2px 0; font-size: 14px; color: #666; }
+          .resumen { display: flex; justify-content: space-around; margin-bottom: 20px; }
+          .resumen div { text-align: center; padding: 10px 20px; background: #f5f5f5; border-radius: 8px; }
+          .resumen strong { font-size: 20px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+          th { background: #1a237e; color: white; padding: 10px; font-size: 12px; text-transform: uppercase; }
+          td { padding: 8px; border-bottom: 1px solid #eee; font-size: 13px; }
+          tr:hover { background: #f9f9f9; }
+          .footer { text-align: center; margin-top: 30px; font-size: 11px; color: #999; }
+          @media print {
+            body { margin: 0; }
+            .no-print { display: none; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>🏪 FinanCoop - Reporte de Ventas</h1>
+          <p>${fechaHoy} | Tienda: ${tiendaNombre.value || 'Todas'}</p>
+          <p>Generado: ${new Date().toLocaleString('es-VE')}</p>
+        </div>
+        <div class="resumen">
+          <div><div style="color:#4caf50;">Total Ventas</div><strong>${ventasHoy.value.length}</strong></div>
+          <div><div style="color:#4facfe;">Total Financiado</div><strong>BS ${formatearBS(totalHoy.value)}</strong></div>
+          <div><div style="color:#ffd54f;">Entradas Cobradas</div><strong>BS ${formatearBS(totalEntrada.value)}</strong></div>
+        </div>
+        <table>
+          <thead><tr><th>Código</th><th>Cliente</th><th>Monto</th><th>Entrada</th><th>Cuotas</th><th>Hora</th></tr></thead>
+          <tbody>${filas}</tbody>
+        </table>
+        <div class="footer">
+          <p>FinanCoop © ${new Date().getFullYear()} - Sistema de Financiamiento</p>
+        </div>
+        <div class="no-print" style="text-align:center; margin-top:20px;">
+          <button onclick="window.print()" style="padding:10px 30px; font-size:16px; background:#4facfe; color:white; border:none; border-radius:25px; cursor:pointer;">
+            🖨️ Imprimir Reporte
+          </button>
+        </div>
+      </body>
+    </html>
+  `)
+  ventana.document.close()
+}
+
 onMounted(() => { cargarVentas(); cargarUsuario() })
 </script>
 
 <style scoped>
-.background-gradient {
-  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-  background: radial-gradient(ellipse at 20% 50%, rgba(79,172,254,0.12), transparent 70%),
-              radial-gradient(ellipse at 80% 50%, rgba(99,102,241,0.08), transparent 70%), #0a0e1a;
-  z-index: 0;
-}
-.header-premium {
-  position: relative; z-index: 1; padding: 16px 24px;
-  background: rgba(255,255,255,0.05); backdrop-filter: blur(20px);
-  border-radius: 20px; border: 1px solid rgba(255,255,255,0.06);
-}
-.icon-wrapper {
-  width: 48px; height: 48px; background: linear-gradient(135deg, #4facfe, #6366f1);
-  border-radius: 14px; display: flex; align-items: center; justify-content: center;
-}
+.background-gradient { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: radial-gradient(ellipse at 20% 50%, rgba(79,172,254,0.12), transparent 70%), radial-gradient(ellipse at 80% 50%, rgba(99,102,241,0.08), transparent 70%), #0a0e1a; z-index: 0; }
+.header-premium { position: relative; z-index: 1; padding: 16px 24px; background: rgba(255,255,255,0.05); backdrop-filter: blur(20px); border-radius: 20px; border: 1px solid rgba(255,255,255,0.06); }
+.icon-wrapper { width: 48px; height: 48px; background: linear-gradient(135deg, #4facfe, #6366f1); border-radius: 14px; display: flex; align-items: center; justify-content: center; }
 .pulse-animation { animation: pulse 2s infinite; }
 @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
 .step-chip { background: rgba(255,255,255,0.08) !important; padding: 8px 16px !important; border-radius: 50px !important; }
 .glass-effect { background: rgba(255,255,255,0.05) !important; backdrop-filter: blur(16px) !important; border: 1px solid rgba(255,255,255,0.08) !important; border-radius: 12px !important; }
 .glass-card { background: rgba(255,255,255,0.03) !important; backdrop-filter: blur(24px) !important; border: 1px solid rgba(255,255,255,0.06) !important; border-radius: 24px !important; }
-
-/* KPIs */
 .kpi-card { transition: transform 0.3s ease; }
 .kpi-card:hover { transform: translateY(-4px); }
-.kpi-icon-wrapper {
-  width: 56px; height: 56px; border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  margin: 0 auto;
-}
+.kpi-icon-wrapper { width: 56px; height: 56px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto; }
 .kpi-number { font-size: 2rem; font-weight: 800; }
 .kpi-label { font-size: 0.75rem; color: rgba(255,255,255,0.4); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
 .text-success { color: #4caf50 !important; }
 .text-primary { color: #4facfe !important; }
 .text-warning { color: #ffd54f !important; }
-
-/* Tabla */
 .table-wrapper { overflow-x: auto; }
 .premium-table { background: transparent !important; }
-.premium-table :deep(th) {
-  color: rgba(255,255,255,0.7) !important; font-weight: 700 !important;
-  font-size: 0.75rem !important; text-transform: uppercase; letter-spacing: 0.5px;
-  padding: 12px 8px !important; border-bottom: 1px solid rgba(255,255,255,0.06) !important;
-}
-.premium-table :deep(td) {
-  color: rgba(255,255,255,0.9) !important; padding: 10px 8px !important;
-  border-bottom: 1px solid rgba(255,255,255,0.03) !important;
-}
+.premium-table :deep(th) { color: rgba(255,255,255,0.7) !important; font-weight: 700 !important; font-size: 0.75rem !important; text-transform: uppercase; padding: 12px 8px !important; border-bottom: 1px solid rgba(255,255,255,0.06) !important; }
+.premium-table :deep(td) { color: rgba(255,255,255,0.9) !important; padding: 10px 8px !important; border-bottom: 1px solid rgba(255,255,255,0.03) !important; }
 .premium-table :deep(tr:hover) { background: rgba(255,255,255,0.02) !important; }
-
-/* Empty */
 .empty-state { padding: 40px; text-align: center; border: 1px dashed rgba(255,255,255,0.08); }
-
-/* Animaciones */
 .fade-in { animation: fadeIn 0.4s ease; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-
-@media (max-width: 600px) {
-  .header-premium { flex-direction: column; gap: 12px; align-items: stretch !important; }
-  .kpi-number { font-size: 1.5rem; }
-}
+@media (max-width: 600px) { .header-premium { flex-direction: column; gap: 12px; align-items: stretch !important; } .kpi-number { font-size: 1.5rem; } }
 </style>
