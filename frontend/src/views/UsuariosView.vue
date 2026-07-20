@@ -1,133 +1,136 @@
 <template>
-  <v-container>
-    <v-row>
-      <v-col cols="12">
-        <div class="d-flex justify-space-between align-center mb-4">
-          <h1 class="text-h4">👥 Gestión de Usuarios</h1>
-          <v-btn color="success" @click="abrirDialogCrear">
-            <v-icon start>mdi-account-plus</v-icon>
-            Nuevo Usuario
-          </v-btn>
+  <v-container fluid class="pa-0">
+    <div class="background-gradient"></div>
+    
+    <v-row class="ma-0">
+      <v-col cols="12" class="pa-4">
+        <!-- HEADER PREMIUM -->
+        <div class="header-premium d-flex align-center justify-space-between flex-wrap">
+          <div class="d-flex align-center">
+            <div class="icon-wrapper pulse-animation">
+              <v-icon size="32" color="white">mdi-shield-account</v-icon>
+            </div>
+            <div class="ml-3">
+              <h1 class="text-h4 font-weight-bold text-white">Gestión de Usuarios</h1>
+              <p class="text-subtitle-2 text-white" style="opacity: 0.7;">Administración de accesos al sistema</p>
+            </div>
+          </div>
+          <div class="d-flex align-center" style="gap: 12px;">
+            <v-chip class="step-chip" color="transparent" size="large">
+              <span class="text-white font-weight-bold">{{ usuarios.length }} Usuarios</span>
+            </v-chip>
+            <v-btn v-if="esAdmin" color="#4caf50" rounded="pill" @click="abrirDialogCrear" elevation="0">
+              <v-icon start>mdi-account-plus</v-icon>Nuevo Usuario
+            </v-btn>
+          </div>
         </div>
+
+        <!-- TABLA PREMIUM -->
+        <v-row class="mt-4">
+          <v-col cols="12">
+            <v-card class="glass-card rounded-xl" elevation="0">
+              <v-card-title class="text-h6 font-weight-bold text-white pa-4 d-flex align-center">
+                <v-icon color="#4facfe" class="mr-2">mdi-account-group</v-icon>
+                Lista de Usuarios
+                <v-spacer></v-spacer>
+                <v-chip color="#4facfe" variant="tonal" size="small">{{ usuarios.length }} registros</v-chip>
+              </v-card-title>
+              <v-card-text class="pa-4 pt-0">
+                <div class="table-wrapper">
+                  <v-data-table
+                    :items="usuarios"
+                    :headers="headers"
+                    :loading="cargando"
+                    :items-per-page="10"
+                    class="premium-table"
+                  >
+                    <template v-slot:item.id="{ item }">
+                      <span class="text-caption" style="color: rgba(255,255,255,0.3);">#{{ item.id }}</span>
+                    </template>
+                    <template v-slot:item.username="{ item }">
+                      <div class="d-flex align-center">
+                        <v-avatar size="32" :color="colorRolBg(item.rol)" class="mr-2">
+                          <span class="text-caption font-weight-bold text-white">{{ item.username?.charAt(0).toUpperCase() }}</span>
+                        </v-avatar>
+                        <div>
+                          <div class="text-white font-weight-bold">{{ item.nombre || item.username }}</div>
+                          <div class="text-caption" style="color: rgba(255,255,255,0.3);">@{{ item.username }}</div>
+                        </div>
+                      </div>
+                    </template>
+                    <template v-slot:item.rol="{ item }">
+                      <v-chip :color="colorRol(item.rol)" size="x-small" variant="flat">{{ item.rol }}</v-chip>
+                    </template>
+                    <template v-slot:item.tienda="{ item }">
+                      <span v-if="item.tienda_nombre" class="text-white">{{ item.tienda_nombre }}</span>
+                      <v-chip v-else-if="item.rol === 'admin'" color="error" size="x-small" variant="tonal">Todas</v-chip>
+                      <span v-else class="text-caption" style="color: rgba(255,255,255,0.3);">-</span>
+                    </template>
+                    <template v-slot:item.activo="{ item }">
+                      <v-chip :color="item.activo ? 'success' : 'grey'" size="x-small" variant="flat">
+                        {{ item.activo ? 'Activo' : 'Inactivo' }}
+                      </v-chip>
+                    </template>
+                    <template v-slot:item.acciones="{ item }">
+                      <div v-if="esAdmin" class="d-flex gap-1">
+                        <v-btn icon="mdi-pencil" size="x-small" color="primary" variant="tonal" @click="editarUsuario(item)" />
+                        <v-btn icon="mdi-delete" size="x-small" color="error" variant="tonal" @click="eliminarUsuario(item)" />
+                      </div>
+                      <span v-else class="text-caption" style="color: rgba(255,255,255,0.3);">-</span>
+                    </template>
+                  </v-data-table>
+                </div>
+                <div v-if="usuarios.length === 0 && !cargando" class="empty-state glass-effect rounded-xl mt-2">
+                  <v-icon size="32" color="rgba(255,255,255,0.1)">mdi-account-off</v-icon>
+                  <div class="text-caption" style="color: rgba(255,255,255,0.3);">No hay usuarios registrados</div>
+                </div>
+              </v-card-text>
+            </v-card>
+          </v-col>
+        </v-row>
       </v-col>
     </v-row>
 
-    <!-- Tabla de usuarios -->
-    <v-row>
-      <v-col cols="12">
-        <v-card>
-          <v-card-text>
-            <v-data-table
-              :items="usuarios"
-              :headers="headers"
-              :loading="cargando"
-              :items-per-page="10"
-            >
-              <template v-slot:item.activo="{ item }">
-                <v-chip :color="item.activo ? 'success' : 'error'" size="small">
-                  {{ item.activo ? 'Activo' : 'Inactivo' }}
-                </v-chip>
-              </template>
-
-              <template v-slot:item.rol="{ item }">
-                <v-chip :color="colorRol(item.rol)" size="small">
-                  {{ item.rol }}
-                </v-chip>
-              </template>
-
-              <!-- 🔥 NUEVO: Mostrar tienda asignada -->
-              <template v-slot:item.tienda="{ item }">
-                <span v-if="item.tienda_nombre">{{ item.tienda_nombre }}</span>
-                <v-chip v-else-if="item.rol === 'admin'" color="error" size="small">Todas</v-chip>
-                <span v-else class="text-grey">-</span>
-              </template>
-
-              <template v-slot:item.acciones="{ item }">
-                <v-btn icon="mdi-pencil" size="small" color="primary" @click="editarUsuario(item)"></v-btn>
-                <v-btn icon="mdi-delete" size="small" color="error" @click="eliminarUsuario(item)"></v-btn>
-              </template>
-            </v-data-table>
-          </v-card-text>
-        </v-card>
-      </v-col>
-    </v-row>
-
-    <!-- Dialog: Crear/Editar Usuario -->
+    <!-- DIALOG: Crear/Editar Usuario -->
     <v-dialog v-model="dialogUsuario" max-width="500">
-      <v-card>
-        <v-card-title>
+      <v-card class="glass-card">
+        <v-card-title class="text-white pa-4" :style="`background: linear-gradient(135deg, ${usuarioEditando ? '#ffd54f, #f9a825' : '#4caf50, #2e7d32'});`">
+          <v-icon start>{{ usuarioEditando ? 'mdi-pencil' : 'mdi-account-plus' }}</v-icon>
           {{ usuarioEditando ? 'Editar Usuario' : 'Nuevo Usuario' }}
         </v-card-title>
-        <v-card-text>
-          <v-text-field
-            v-model="formUsuario.username"
-            label="Usuario *"
-            :disabled="!!usuarioEditando"
-            variant="outlined"
-          />
-          <v-text-field
-            v-model="formUsuario.password"
-            label="Contraseña"
-            type="password"
-            variant="outlined"
-            :hint="usuarioEditando ? 'Dejar vacío para no cambiar' : 'Mínimo 8 caracteres'"
-            persistent-hint
-          />
-          <v-text-field
-            v-model="formUsuario.nombre"
-            label="Nombre completo"
-            variant="outlined"
-          />
-          <v-text-field
-            v-model="formUsuario.email"
-            label="Email"
-            variant="outlined"
-          />
-          
-          <!-- 🔥 ROLES ACTUALIZADOS -->
-          <v-select
-            v-model="formUsuario.rol"
-            :items="rolesDisponibles"
-            label="Rol *"
-            variant="outlined"
-          />
-          
-          <!-- 🔥 SELECTOR DE TIENDA (solo si NO es admin) -->
-          <v-select
-            v-if="formUsuario.rol !== 'admin'"
-            v-model="formUsuario.tienda_id"
-            :items="tiendas"
-            item-title="nombre"
-            item-value="id"
-            label="Asignar a Tienda/Cooperativa *"
-            variant="outlined"
-          />
-          
-          <v-switch
-            v-model="formUsuario.activo"
-            label="Usuario activo"
-            color="success"
-          />
+        <v-card-text class="pa-4">
+          <v-text-field v-model="formUsuario.username" label="Usuario *" :disabled="!!usuarioEditando" variant="outlined" density="comfortable" dark class="custom-input mb-2" placeholder="Ej: ana" />
+          <v-text-field v-model="formUsuario.password" label="Contraseña" type="password" variant="outlined" density="comfortable" dark class="custom-input mb-2" :placeholder="usuarioEditando ? '••••••••' : 'Mínimo 8 caracteres'" />
+          <v-text-field v-model="formUsuario.nombre" label="Nombre completo" variant="outlined" density="comfortable" dark class="custom-input mb-2" placeholder="Ej: Ana García" />
+          <v-text-field v-model="formUsuario.email" label="Email" variant="outlined" density="comfortable" dark class="custom-input mb-2" placeholder="Ej: ana@coop.com" />
+          <v-select v-model="formUsuario.rol" :items="rolesDisponibles" label="Rol *" variant="outlined" density="comfortable" dark class="custom-input mb-2" />
+          <v-select v-if="formUsuario.rol !== 'admin'" v-model="formUsuario.tienda_id" :items="tiendas" item-title="nombre" item-value="id" label="Asignar a Tienda/Cooperativa *" variant="outlined" density="comfortable" dark class="custom-input mb-2" />
+          <v-switch v-model="formUsuario.activo" label="Usuario activo" color="#4caf50" hide-details class="mt-2" />
         </v-card-text>
-        <v-card-actions>
-          <v-btn @click="dialogUsuario = false">Cancelar</v-btn>
-          <v-btn color="primary" @click="guardarUsuario" :loading="guardando">
+        <v-card-actions class="pa-4">
+          <v-btn @click="dialogUsuario = false" variant="text" color="grey">Cancelar</v-btn>
+          <v-spacer></v-spacer>
+          <v-btn :color="usuarioEditando ? '#ffd54f' : '#4caf50'" rounded="pill" @click="guardarUsuario" :loading="guardando" elevation="0">
             {{ usuarioEditando ? 'Actualizar' : 'Crear' }}
           </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
 
-    <!-- Dialog: Confirmar Eliminar -->
+    <!-- DIALOG: Eliminar -->
     <v-dialog v-model="dialogEliminar" max-width="400">
-      <v-card>
-        <v-card-title class="text-error">¿Eliminar usuario?</v-card-title>
-        <v-card-text>
-          ¿Estás seguro de eliminar al usuario <strong>{{ usuarioAEliminar?.username }}</strong>?
+      <v-card class="glass-card">
+        <v-card-title class="text-white pa-4" style="background: linear-gradient(135deg, #f44336, #c62828);">
+          <v-icon start>mdi-delete</v-icon>¿Eliminar usuario?
+        </v-card-title>
+        <v-card-text class="pa-4">
+          <p class="text-white">¿Estás seguro de eliminar a <strong>{{ usuarioAEliminar?.username }}</strong>?</p>
+          <p class="text-caption" style="color: rgba(255,255,255,0.3);">Esta acción no se puede deshacer.</p>
         </v-card-text>
-        <v-card-actions>
-          <v-btn @click="dialogEliminar = false">Cancelar</v-btn>
-          <v-btn color="error" @click="confirmarEliminar">Eliminar</v-btn>
+        <v-card-actions class="pa-4">
+          <v-btn @click="dialogEliminar = false" variant="text" color="grey">Cancelar</v-btn>
+          <v-spacer></v-spacer>
+          <v-btn color="#f44336" rounded="pill" @click="confirmarEliminar" elevation="0">Eliminar</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -135,11 +138,11 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { api } from '@/config/api'
 
 const usuarios = ref([])
-const tiendas = ref([])  // 🔥 NUEVO
+const tiendas = ref([])
 const cargando = ref(false)
 const guardando = ref(false)
 const dialogUsuario = ref(false)
@@ -147,17 +150,14 @@ const dialogEliminar = ref(false)
 const usuarioEditando = ref(null)
 const usuarioAEliminar = ref(null)
 
-const formUsuario = ref({
-  username: '',
-  password: '',
-  nombre: '',
-  email: '',
-  rol: 'cajero',
-  tienda_id: null,  // 🔥 NUEVO
-  activo: true
+const formUsuario = ref({ username: '', password: '', nombre: '', email: '', rol: 'cajero', tienda_id: null, activo: true })
+
+// ✅ Solo admin_central puede editar/eliminar
+const esAdmin = computed(() => {
+  const rol = localStorage.getItem('admin_rol')
+  return rol === 'admin_central'
 })
 
-// 🔥 Roles disponibles
 const rolesDisponibles = [
   { title: 'Administrador Central (ve todo)', value: 'admin' },
   { title: 'Tienda/Cooperativa (ve solo su tienda)', value: 'tienda' },
@@ -165,174 +165,85 @@ const rolesDisponibles = [
 ]
 
 const headers = [
-  { title: 'ID', key: 'id' },
+  { title: '#', key: 'id', width: '60px' },
   { title: 'Usuario', key: 'username' },
-  { title: 'Nombre', key: 'nombre' },
   { title: 'Email', key: 'email' },
   { title: 'Rol', key: 'rol' },
-  { title: 'Tienda', key: 'tienda' },  // 🔥 NUEVO
+  { title: 'Tienda', key: 'tienda' },
   { title: 'Estado', key: 'activo' },
   { title: 'Acciones', key: 'acciones', sortable: false }
 ]
 
-// 🔥 Colores por rol
-const colorRol = (rol) => {
-  const colores = { admin: 'error', tienda: 'primary', cajero: 'warning' }
-  return colores[rol] || 'grey'
-}
+const colorRol = (rol) => ({ admin: 'error', tienda: 'primary', cajero: 'warning' })[rol] || 'grey'
+const colorRolBg = (rol) => ({ admin: '#f44336', tienda: '#4facfe', cajero: '#ffd54f' })[rol] || '#78909C'
 
-// ============================================================
-// ✅ CARGAR TIENDAS
-// ============================================================
 const cargarTiendas = async () => {
-  try {
-    const data = await api.get('/admin/tiendas')
-    tiendas.value = Array.isArray(data) ? data : []
-  } catch (e) {
-    console.error('Error cargando tiendas:', e)
-  }
+  try { const d = await api.get('/admin/tiendas'); tiendas.value = Array.isArray(d) ? d : [] } catch (e) {}
 }
 
-// ============================================================
-// ✅ CARGAR USUARIOS
-// ============================================================
 const cargarUsuarios = async () => {
   cargando.value = true
-  try {
-    const data = await api.get('/admin/usuarios')
-    usuarios.value = data
-    console.log('✅ Usuarios cargados:', usuarios.value.length)
-  } catch (error) {
-    console.error('❌ Error cargando usuarios:', error)
-    if (error.response?.status === 401) {
-      alert('⛔ Sesión expirada o no autorizado')
-      localStorage.clear()
-      window.location.href = '/login'
-    } else {
-      alert('Error al cargar usuarios: ' + (error.response?.data?.detail || error.message))
-    }
-  } finally {
-    cargando.value = false
-  }
+  try { usuarios.value = await api.get('/admin/usuarios') } catch (e) { if (e.response?.status === 401) { localStorage.clear(); window.location.href = '/login' } }
+  finally { cargando.value = false }
 }
 
-// ============================================================
-// ✅ GUARDAR USUARIO
-// ============================================================
 const guardarUsuario = async () => {
-  if (!formUsuario.value.username) {
-    alert('El nombre de usuario es obligatorio')
-    return
-  }
-  
-  // 🔥 Validar tienda si no es admin
-  if (formUsuario.value.rol !== 'admin' && !formUsuario.value.tienda_id) {
-    alert('Debe seleccionar una tienda/cooperativa')
-    return
-  }
-
+  if (!formUsuario.value.username) { alert('Usuario requerido'); return }
+  if (formUsuario.value.rol !== 'admin' && !formUsuario.value.tienda_id) { alert('Seleccione una tienda'); return }
   guardando.value = true
   try {
-    const payload = {
-      username: formUsuario.value.username,
-      nombre: formUsuario.value.nombre,
-      email: formUsuario.value.email,
-      rol: formUsuario.value.rol,
-      activo: formUsuario.value.activo,
-      tienda_id: formUsuario.value.rol === 'admin' ? null : formUsuario.value.tienda_id  // 🔥
-    }
-    
-    // Solo enviar password si se ingresó uno
-    if (formUsuario.value.password) {
-      payload.password = formUsuario.value.password
-    }
-
-    if (usuarioEditando.value) {
-      await api.put(`/admin/usuarios/${usuarioEditando.value.id}`, payload)
-      alert('✅ Usuario actualizado')
-    } else {
-      if (!formUsuario.value.password) {
-        alert('La contraseña es obligatoria para nuevos usuarios')
-        guardando.value = false
-        return
-      }
-      await api.post('/admin/usuarios', payload)
-      alert('✅ Usuario creado')
-    }
-    
-    dialogUsuario.value = false
-    await cargarUsuarios()
-  } catch (error) {
-    console.error('❌ Error guardando usuario:', error)
-    alert('❌ Error: ' + (error.response?.data?.detail || error.message))
-  } finally {
-    guardando.value = false
-  }
+    const payload = { username: formUsuario.value.username, nombre: formUsuario.value.nombre, email: formUsuario.value.email, rol: formUsuario.value.rol, activo: formUsuario.value.activo, tienda_id: formUsuario.value.rol === 'admin' ? null : formUsuario.value.tienda_id }
+    if (formUsuario.value.password) payload.password = formUsuario.value.password
+    if (usuarioEditando.value) { await api.put(`/admin/usuarios/${usuarioEditando.value.id}`, payload); alert('✅ Actualizado') }
+    else { if (!formUsuario.value.password) { alert('Contraseña requerida'); guardando.value = false; return }; await api.post('/admin/usuarios', payload); alert('✅ Creado') }
+    dialogUsuario.value = false; await cargarUsuarios()
+  } catch (e) { alert('❌ Error: ' + (e.response?.data?.detail || e.message)) }
+  finally { guardando.value = false }
 }
 
-// ============================================================
-// ✅ ELIMINAR USUARIO
-// ============================================================
 const confirmarEliminar = async () => {
-  try {
-    await api.delete(`/admin/usuarios/${usuarioAEliminar.value.id}`)
-    alert('✅ Usuario eliminado')
-    dialogEliminar.value = false
-    await cargarUsuarios()
-  } catch (error) {
-    console.error('❌ Error eliminando usuario:', error)
-    alert('❌ Error al eliminar usuario')
-  }
+  try { await api.delete(`/admin/usuarios/${usuarioAEliminar.value.id}`); alert('✅ Eliminado'); dialogEliminar.value = false; await cargarUsuarios() }
+  catch (e) { alert('❌ Error al eliminar') }
 }
 
-// ============================================================
-// ✅ FUNCIONES DE UI
-// ============================================================
 const abrirDialogCrear = () => {
   usuarioEditando.value = null
-  formUsuario.value = {
-    username: '',
-    password: '',
-    nombre: '',
-    email: '',
-    rol: 'cajero',
-    tienda_id: null,  // 🔥
-    activo: true
-  }
+  formUsuario.value = { username: '', password: '', nombre: '', email: '', rol: 'cajero', tienda_id: null, activo: true }
   dialogUsuario.value = true
 }
-
-const editarUsuario = (usuario) => {
-  usuarioEditando.value = usuario
-  formUsuario.value = {
-    username: usuario.username,
-    password: '',
-    nombre: usuario.nombre || '',
-    email: usuario.email || '',
-    rol: usuario.rol || 'cajero',
-    tienda_id: usuario.tienda_id || null,  // 🔥
-    activo: usuario.activo !== undefined ? usuario.activo : true
-  }
+const editarUsuario = (u) => {
+  usuarioEditando.value = u
+  formUsuario.value = { username: u.username, password: '', nombre: u.nombre || '', email: u.email || '', rol: u.rol || 'cajero', tienda_id: u.tienda_id || null, activo: u.activo !== undefined ? u.activo : true }
   dialogUsuario.value = true
 }
+const eliminarUsuario = (u) => { usuarioAEliminar.value = u; dialogEliminar.value = true }
 
-const eliminarUsuario = (usuario) => {
-  usuarioAEliminar.value = usuario
-  dialogEliminar.value = true
-}
-
-// ============================================================
-// ✅ MOUNTED
-// ============================================================
 onMounted(() => {
-  const token = localStorage.getItem('admin_token')
-  if (!token) {
-    alert('Debes iniciar sesión como administrador')
-    window.location.href = '/login'
-    return
-  }
-  console.log('🔑 Token presente:', token.substring(0, 30) + '...')
-  cargarTiendas()   // 🔥 Cargar tiendas primero
-  cargarUsuarios()
+  if (!localStorage.getItem('admin_token')) { window.location.href = '/login'; return }
+  cargarTiendas(); cargarUsuarios()
 })
 </script>
+
+<style scoped>
+.background-gradient { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: radial-gradient(ellipse at 20% 50%, rgba(79,172,254,0.12), transparent 70%), radial-gradient(ellipse at 80% 50%, rgba(99,102,241,0.08), transparent 70%), #0a0e1a; z-index: 0; }
+.header-premium { position: relative; z-index: 1; padding: 16px 24px; background: rgba(255,255,255,0.05); backdrop-filter: blur(20px); border-radius: 20px; border: 1px solid rgba(255,255,255,0.06); }
+.icon-wrapper { width: 48px; height: 48px; background: linear-gradient(135deg, #4facfe, #6366f1); border-radius: 14px; display: flex; align-items: center; justify-content: center; }
+.pulse-animation { animation: pulse 2s infinite; }
+@keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+.step-chip { background: rgba(255,255,255,0.08) !important; padding: 8px 16px !important; border-radius: 50px !important; }
+.glass-effect { background: rgba(255,255,255,0.05) !important; backdrop-filter: blur(16px) !important; border: 1px solid rgba(255,255,255,0.08) !important; border-radius: 12px !important; }
+.glass-card { background: rgba(255,255,255,0.03) !important; backdrop-filter: blur(24px) !important; border: 1px solid rgba(255,255,255,0.06) !important; border-radius: 24px !important; }
+.table-wrapper { overflow-x: auto; }
+.premium-table { background: transparent !important; }
+.premium-table :deep(th) { color: rgba(255,255,255,0.7) !important; font-weight: 700 !important; font-size: 0.75rem !important; text-transform: uppercase; padding: 12px 8px !important; border-bottom: 1px solid rgba(255,255,255,0.06) !important; }
+.premium-table :deep(td) { color: rgba(255,255,255,0.9) !important; padding: 10px 8px !important; border-bottom: 1px solid rgba(255,255,255,0.03) !important; }
+.premium-table :deep(tr:hover) { background: rgba(255,255,255,0.02) !important; }
+.custom-input :deep(.v-field) { background: rgba(255,255,255,0.05) !important; border-radius: 12px !important; border: 1px solid rgba(255,255,255,0.08) !important; }
+.custom-input :deep(.v-field--focused) { border-color: #4facfe !important; }
+.custom-input :deep(.v-label) { color: rgba(255,255,255,0.5) !important; }
+.custom-input :deep(.v-field__input) { color: white !important; }
+.custom-input :deep(.v-field__input::placeholder) { color: rgba(255,255,255,0.6) !important; font-weight: 500 !important; opacity: 1 !important; }
+.empty-state { padding: 24px; text-align: center; border: 1px dashed rgba(255,255,255,0.08); }
+.gap-1 { gap: 4px; }
+@media (max-width: 600px) { .header-premium { flex-direction: column; gap: 12px; align-items: stretch !important; } }
+</style>
