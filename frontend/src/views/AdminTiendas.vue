@@ -1,157 +1,175 @@
 <template>
-  <v-container>
-    <v-row>
-      <v-col cols="12">
-        <h1 class="text-h4 mb-4">🏪 Gestión de Tiendas</h1>
-      </v-col>
+  <v-container fluid class="pa-0">
+    <div class="background-gradient"></div>
+    
+    <v-row class="ma-0">
+      <v-col cols="12" class="pa-4">
+        <!-- HEADER PREMIUM -->
+        <div class="header-premium d-flex align-center justify-space-between flex-wrap">
+          <div class="d-flex align-center">
+            <div class="icon-wrapper pulse-animation">
+              <v-icon size="32" color="white">mdi-store</v-icon>
+            </div>
+            <div class="ml-3">
+              <h1 class="text-h4 font-weight-bold text-white">Gestión de Tiendas</h1>
+              <p class="text-subtitle-2 text-white" style="opacity: 0.7;">Administración de cooperativas y usuarios</p>
+            </div>
+          </div>
+          <v-chip class="step-chip" color="transparent" size="large">
+            <span class="text-white font-weight-bold">{{ tiendas.length }} Tiendas</span>
+          </v-chip>
+        </div>
 
-      <!-- Lista de Tiendas -->
-      <v-col cols="12" md="6">
-        <v-card>
-          <v-card-title class="d-flex align-center">
-            <v-icon class="mr-2">mdi-store</v-icon>
-            Tiendas
-            <v-spacer></v-spacer>
-            <v-btn color="primary" size="small" @click="dialogTienda = true; tiendaEdit = null">
-              <v-icon start>mdi-plus</v-icon>
-              Nueva Tienda
-            </v-btn>
-          </v-card-title>
-          <v-card-text>
-            <v-table>
-              <thead>
-                <tr>
-                  <th>Nombre</th>
-                  <th>Código</th>
-                  <th>Clientes</th>
-                  <th>Créditos</th>
-                  <th>Estado</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="t in tiendas" :key="t.id">
-                  <td>{{ t.nombre }}</td>
-                  <td><v-chip size="small">{{ t.codigo }}</v-chip></td>
-                  <td>{{ t.total_clientes }}</td>
-                  <td>{{ t.total_creditos }}</td>
-                  <td>
-                    <v-chip :color="t.activo ? 'success' : 'grey'" size="small">
-                      {{ t.activo ? 'Activa' : 'Inactiva' }}
-                    </v-chip>
-                  </td>
-                </tr>
-              </tbody>
-            </v-table>
-          </v-card-text>
-        </v-card>
-      </v-col>
+        <!-- TABLAS -->
+        <v-row class="mt-4">
+          <!-- TIENDAS -->
+          <v-col cols="12" md="6">
+            <v-card class="glass-card rounded-xl" elevation="0">
+              <v-card-title class="text-h6 font-weight-bold text-white pa-4 d-flex align-center">
+                <v-icon color="#4caf50" class="mr-2">mdi-store</v-icon>
+                Tiendas
+                <v-spacer></v-spacer>
+                <v-btn color="#4caf50" size="small" rounded="pill" @click="dialogTienda = true; tiendaEdit = null" elevation="0">
+                  <v-icon start>mdi-plus</v-icon>Nueva
+                </v-btn>
+              </v-card-title>
+              <v-card-text class="pa-4 pt-0">
+                <div class="table-wrapper">
+                  <v-table class="premium-table">
+                    <thead>
+                      <tr>
+                        <th>Nombre</th>
+                        <th>Código</th>
+                        <th class="text-center">Clientes</th>
+                        <th class="text-center">Créditos</th>
+                        <th class="text-center">Estado</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="t in tiendas" :key="t.id" class="fade-in">
+                        <td>
+                          <div class="d-flex align-center">
+                            <v-avatar size="28" color="rgba(76,175,80,0.2)" class="mr-2">
+                              <v-icon size="16" color="#4caf50">mdi-store</v-icon>
+                            </v-avatar>
+                            <span class="text-white font-weight-bold">{{ t.nombre }}</span>
+                          </div>
+                        </td>
+                        <td><v-chip size="x-small" color="#4facfe" variant="tonal">{{ t.codigo }}</v-chip></td>
+                        <td class="text-center"><span class="text-white">{{ t.total_clientes }}</span></td>
+                        <td class="text-center"><span class="text-white">{{ t.total_creditos }}</span></td>
+                        <td class="text-center">
+                          <v-chip :color="t.activo ? 'success' : 'grey'" size="x-small" variant="flat">
+                            {{ t.activo ? 'Activa' : 'Inactiva' }}
+                          </v-chip>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </v-table>
+                </div>
+                <div v-if="tiendas.length === 0" class="empty-state glass-effect rounded-xl mt-2">
+                  <v-icon size="32" color="rgba(255,255,255,0.1)">mdi-store-off</v-icon>
+                  <div class="text-caption" style="color: rgba(255,255,255,0.3);">No hay tiendas registradas</div>
+                </div>
+              </v-card-text>
+            </v-card>
+          </v-col>
 
-      <!-- Lista de Usuarios -->
-      <v-col cols="12" md="6">
-        <v-card>
-          <v-card-title class="d-flex align-center">
-            <v-icon class="mr-2">mdi-account-group</v-icon>
-            Usuarios
-            <v-spacer></v-spacer>
-            <v-btn color="primary" size="small" @click="abrirCrearUsuario">
-              <v-icon start>mdi-plus</v-icon>
-              Nuevo Usuario
-            </v-btn>
-          </v-card-title>
-          <v-card-text>
-            <v-table>
-              <thead>
-                <tr>
-                  <th>Usuario</th>
-                  <th>Rol</th>
-                  <th>Tienda</th>
-                  <th>Activo</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="u in usuarios" :key="u.id">
-                  <td>
-                    <strong>{{ u.nombre || u.username }}</strong>
-                    <div class="text-caption text-grey">{{ u.username }}</div>
-                  </td>
-                  <td>
-                    <v-chip :color="colorRol(u.rol)" size="small">
-                      {{ u.rol }}
-                    </v-chip>
-                  </td>
-                  <td>{{ u.tienda_nombre || 'Todas' }}</td>
-                  <td>
-                    <v-chip :color="u.activo ? 'success' : 'grey'" size="small">
-                      {{ u.activo ? 'Sí' : 'No' }}
-                    </v-chip>
-                  </td>
-                </tr>
-              </tbody>
-            </v-table>
-          </v-card-text>
-        </v-card>
+          <!-- USUARIOS -->
+          <v-col cols="12" md="6">
+            <v-card class="glass-card rounded-xl" elevation="0">
+              <v-card-title class="text-h6 font-weight-bold text-white pa-4 d-flex align-center">
+                <v-icon color="#4facfe" class="mr-2">mdi-account-group</v-icon>
+                Usuarios
+                <v-spacer></v-spacer>
+                <v-btn color="#4facfe" size="small" rounded="pill" @click="abrirCrearUsuario" elevation="0">
+                  <v-icon start>mdi-plus</v-icon>Nuevo
+                </v-btn>
+              </v-card-title>
+              <v-card-text class="pa-4 pt-0">
+                <div class="table-wrapper">
+                  <v-table class="premium-table">
+                    <thead>
+                      <tr>
+                        <th>Usuario</th>
+                        <th>Rol</th>
+                        <th>Tienda</th>
+                        <th class="text-center">Activo</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="u in usuarios" :key="u.id" class="fade-in">
+                        <td>
+                          <div>
+                            <div class="text-white font-weight-bold">{{ u.nombre || u.username }}</div>
+                            <div class="text-caption" style="color: rgba(255,255,255,0.3);">{{ u.username }}</div>
+                          </div>
+                        </td>
+                        <td><v-chip :color="colorRol(u.rol)" size="x-small" variant="flat">{{ u.rol }}</v-chip></td>
+                        <td><span class="text-white">{{ u.tienda_nombre || 'Todas' }}</span></td>
+                        <td class="text-center">
+                          <v-chip :color="u.activo ? 'success' : 'grey'" size="x-small" variant="flat">
+                            {{ u.activo ? 'Sí' : 'No' }}
+                          </v-chip>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </v-table>
+                </div>
+                <div v-if="usuarios.length === 0" class="empty-state glass-effect rounded-xl mt-2">
+                  <v-icon size="32" color="rgba(255,255,255,0.1)">mdi-account-off</v-icon>
+                  <div class="text-caption" style="color: rgba(255,255,255,0.3);">No hay usuarios registrados</div>
+                </div>
+              </v-card-text>
+            </v-card>
+          </v-col>
+        </v-row>
       </v-col>
     </v-row>
 
-    <!-- Dialog: Crear/Editar Tienda -->
+    <!-- DIALOG TIENDA -->
     <v-dialog v-model="dialogTienda" max-width="500">
-      <v-card>
-        <v-card-title>{{ tiendaEdit ? 'Editar' : 'Nueva' }} Tienda</v-card-title>
-        <v-card-text>
-          <v-text-field v-model="tiendaForm.nombre" label="Nombre de la tienda/cooperativa *" variant="outlined" required />
-          <v-text-field v-model="tiendaForm.codigo" label="Código único *" variant="outlined" required hint="Ej: CCS-BQTO" />
-          <v-text-field v-model="tiendaForm.direccion" label="Dirección" variant="outlined" />
-          <v-text-field v-model="tiendaForm.telefono" label="Teléfono" variant="outlined" />
+      <v-card class="glass-card">
+        <v-card-title class="text-white pa-4" style="background: linear-gradient(135deg, #4caf50, #2e7d32);">
+          <v-icon start>mdi-store</v-icon>{{ tiendaEdit ? 'Editar' : 'Nueva' }} Tienda
+        </v-card-title>
+        <v-card-text class="pa-4">
+          <v-text-field v-model="tiendaForm.nombre" label="Nombre de la tienda/cooperativa *" variant="outlined" density="comfortable" dark class="custom-input mb-2" placeholder="Ej: Cecosesola Barquisimeto" />
+          <v-text-field v-model="tiendaForm.codigo" label="Código único *" variant="outlined" density="comfortable" dark class="custom-input mb-2" placeholder="Ej: CCS-BQTO" />
+          <v-text-field v-model="tiendaForm.direccion" label="Dirección" variant="outlined" density="comfortable" dark class="custom-input mb-2" placeholder="Ej: Av. Principal, Centro" />
+          <v-text-field v-model="tiendaForm.telefono" label="Teléfono" variant="outlined" density="comfortable" dark class="custom-input" placeholder="Ej: +584121234567" />
         </v-card-text>
-        <v-card-actions>
-          <v-btn @click="dialogTienda = false">Cancelar</v-btn>
-          <v-btn color="primary" @click="guardarTienda" :loading="cargando">
-            Guardar
-          </v-btn>
+        <v-card-actions class="pa-4">
+          <v-btn @click="dialogTienda = false" variant="text" color="grey">Cancelar</v-btn>
+          <v-spacer></v-spacer>
+          <v-btn color="#4caf50" rounded="pill" @click="guardarTienda" :loading="cargando" elevation="0">Guardar</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
 
-    <!-- Dialog: Crear Usuario -->
+    <!-- DIALOG USUARIO -->
     <v-dialog v-model="dialogUsuario" max-width="500">
-      <v-card>
-        <v-card-title>Nuevo Usuario</v-card-title>
-        <v-card-text>
-          <v-text-field v-model="usuarioForm.username" label="Usuario *" variant="outlined" required />
-          <v-text-field v-model="usuarioForm.password" label="Contraseña *" type="password" variant="outlined" required hint="Mínimo 8 caracteres" />
-          <v-text-field v-model="usuarioForm.nombre" label="Nombre completo" variant="outlined" />
-          <v-text-field v-model="usuarioForm.email" label="Email" variant="outlined" />
-          
-          <v-select
-            v-model="usuarioForm.rol"
-            :items="rolesDisponibles"
-            label="Rol *"
-            variant="outlined"
-            required
-          />
-          
-          <!-- 🔥 SELECTOR DE TIENDA (aparece si el rol NO es admin) -->
-          <v-select
-            v-if="usuarioForm.rol !== 'admin'"
-            v-model="usuarioForm.tienda_id"
-            :items="tiendasSelect"
-            item-title="nombre"
-            item-value="id"
-            label="Asignar a Tienda/Cooperativa *"
-            variant="outlined"
-            required
-          />
+      <v-card class="glass-card">
+        <v-card-title class="text-white pa-4" style="background: linear-gradient(135deg, #4facfe, #6366f1);">
+          <v-icon start>mdi-account-plus</v-icon>Nuevo Usuario
+        </v-card-title>
+        <v-card-text class="pa-4">
+          <v-text-field v-model="usuarioForm.username" label="Usuario *" variant="outlined" density="comfortable" dark class="custom-input mb-2" placeholder="Ej: ana" />
+          <v-text-field v-model="usuarioForm.password" label="Contraseña *" type="password" variant="outlined" density="comfortable" dark class="custom-input mb-2" placeholder="Mínimo 8 caracteres" />
+          <v-text-field v-model="usuarioForm.nombre" label="Nombre completo" variant="outlined" density="comfortable" dark class="custom-input mb-2" placeholder="Ej: Ana García" />
+          <v-text-field v-model="usuarioForm.email" label="Email" variant="outlined" density="comfortable" dark class="custom-input mb-2" placeholder="Ej: ana@coop.com" />
+          <v-select v-model="usuarioForm.rol" :items="rolesDisponibles" label="Rol *" variant="outlined" density="comfortable" dark class="custom-input mb-2" />
+          <v-select v-if="usuarioForm.rol !== 'admin'" v-model="usuarioForm.tienda_id" :items="tiendasSelect" item-title="nombre" item-value="id" label="Asignar a Tienda/Cooperativa *" variant="outlined" density="comfortable" dark class="custom-input" />
         </v-card-text>
-        <v-card-actions>
-          <v-btn @click="dialogUsuario = false">Cancelar</v-btn>
-          <v-btn color="primary" @click="guardarUsuario" :loading="cargando">
-            Crear Usuario
-          </v-btn>
+        <v-card-actions class="pa-4">
+          <v-btn @click="dialogUsuario = false" variant="text" color="grey">Cancelar</v-btn>
+          <v-spacer></v-spacer>
+          <v-btn color="#4facfe" rounded="pill" @click="guardarUsuario" :loading="cargando" elevation="0">Crear Usuario</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
 
-    <v-snackbar v-model="snackbar.show" :color="snackbar.color">
+    <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="5000" rounded="pill">
       {{ snackbar.text }}
     </v-snackbar>
   </v-container>
@@ -161,7 +179,6 @@
 import { ref, computed, onMounted } from 'vue'
 import { api } from '@/config/api'
 
-// Datos
 const tiendas = ref([])
 const usuarios = ref([])
 const cargando = ref(false)
@@ -169,126 +186,80 @@ const dialogTienda = ref(false)
 const dialogUsuario = ref(false)
 const tiendaEdit = ref(null)
 
-const tiendaForm = ref({
-  nombre: '',
-  codigo: '',
-  direccion: '',
-  telefono: ''
-})
-
-const usuarioForm = ref({
-  username: '',
-  password: '',
-  nombre: '',
-  email: '',
-  rol: 'cajero',
-  tienda_id: null
-})
-
+const tiendaForm = ref({ nombre: '', codigo: '', direccion: '', telefono: '' })
+const usuarioForm = ref({ username: '', password: '', nombre: '', email: '', rol: 'cajero', tienda_id: null })
 const snackbar = ref({ show: false, text: '', color: 'success' })
 
-// Roles disponibles
 const rolesDisponibles = [
   { title: 'Administrador Central (ve todo)', value: 'admin' },
   { title: 'Tienda/Cooperativa (ve solo su tienda)', value: 'tienda' },
   { title: 'Cajero (ve solo su tienda)', value: 'cajero' }
 ]
 
-// Tiendas para el select
-const tiendasSelect = computed(() => 
-  tiendas.value.filter(t => t.activo).map(t => ({ id: t.id, nombre: t.nombre }))
-)
+const tiendasSelect = computed(() => tiendas.value.filter(t => t.activo).map(t => ({ id: t.id, nombre: t.nombre })))
+const colorRol = (rol) => ({ admin: 'error', tienda: 'primary', cajero: 'warning' })[rol] || 'grey'
 
-const colorRol = (rol) => {
-  const colores = { admin: 'error', tienda: 'primary', cajero: 'warning' }
-  return colores[rol] || 'grey'
-}
-
-// Cargar datos
 const cargarTiendas = async () => {
-  try {
-    const data = await api.get('/admin/tiendas')
-    tiendas.value = Array.isArray(data) ? data : []
-  } catch (e) {
-    console.error('Error cargando tiendas:', e)
-  }
+  try { const d = await api.get('/admin/tiendas'); tiendas.value = Array.isArray(d) ? d : [] } catch (e) {}
 }
-
 const cargarUsuarios = async () => {
-  try {
-    const data = await api.get('/admin/usuarios')
-    usuarios.value = Array.isArray(data) ? data : []
-  } catch (e) {
-    console.error('Error cargando usuarios:', e)
-  }
+  try { const d = await api.get('/admin/usuarios'); usuarios.value = Array.isArray(d) ? d : [] } catch (e) {}
 }
 
-// Guardar tienda
 const guardarTienda = async () => {
-  if (!tiendaForm.value.nombre || !tiendaForm.value.codigo) {
-    snackbar.value = { show: true, text: 'Nombre y código son requeridos', color: 'error' }
-    return
-  }
-
+  if (!tiendaForm.value.nombre || !tiendaForm.value.codigo) { snackbar.value = { show: true, text: 'Nombre y código requeridos', color: 'error' }; return }
   cargando.value = true
   try {
-    if (tiendaEdit.value) {
-      await api.put(`/admin/tiendas/${tiendaEdit.value.id}`, tiendaForm.value)
-      snackbar.value = { show: true, text: 'Tienda actualizada', color: 'success' }
-    } else {
-      await api.post('/admin/tiendas', tiendaForm.value)
-      snackbar.value = { show: true, text: 'Tienda creada', color: 'success' }
-    }
-    dialogTienda.value = false
-    tiendaForm.value = { nombre: '', codigo: '', direccion: '', telefono: '' }
-    tiendaEdit.value = null
+    if (tiendaEdit.value) { await api.put(`/admin/tiendas/${tiendaEdit.value.id}`, tiendaForm.value); snackbar.value = { show: true, text: 'Tienda actualizada', color: 'success' } }
+    else { await api.post('/admin/tiendas', tiendaForm.value); snackbar.value = { show: true, text: 'Tienda creada', color: 'success' } }
+    dialogTienda.value = false; tiendaForm.value = { nombre: '', codigo: '', direccion: '', telefono: '' }; tiendaEdit.value = null
     await cargarTiendas()
-  } catch (e) {
-    snackbar.value = { show: true, text: e.response?.data?.detail || 'Error', color: 'error' }
-  } finally {
-    cargando.value = false
-  }
+  } catch (e) { snackbar.value = { show: true, text: e.response?.data?.detail || 'Error', color: 'error' } }
+  finally { cargando.value = false }
 }
 
-// Crear usuario
 const abrirCrearUsuario = () => {
   usuarioForm.value = { username: '', password: '', nombre: '', email: '', rol: 'cajero', tienda_id: null }
   dialogUsuario.value = true
 }
 
 const guardarUsuario = async () => {
-  if (!usuarioForm.value.username || !usuarioForm.value.password) {
-    snackbar.value = { show: true, text: 'Usuario y contraseña requeridos', color: 'error' }
-    return
-  }
-  if (usuarioForm.value.rol !== 'admin' && !usuarioForm.value.tienda_id) {
-    snackbar.value = { show: true, text: 'Debe seleccionar una tienda', color: 'error' }
-    return
-  }
-
+  if (!usuarioForm.value.username || !usuarioForm.value.password) { snackbar.value = { show: true, text: 'Usuario y contraseña requeridos', color: 'error' }; return }
+  if (usuarioForm.value.rol !== 'admin' && !usuarioForm.value.tienda_id) { snackbar.value = { show: true, text: 'Debe seleccionar una tienda', color: 'error' }; return }
   cargando.value = true
   try {
-    await api.post('/admin/usuarios', {
-      username: usuarioForm.value.username,
-      password: usuarioForm.value.password,
-      nombre: usuarioForm.value.nombre,
-      email: usuarioForm.value.email,
-      rol: usuarioForm.value.rol,
-      tienda_id: usuarioForm.value.rol === 'admin' ? null : usuarioForm.value.tienda_id,
-      activo: true
-    })
-    snackbar.value = { show: true, text: 'Usuario creado', color: 'success' }
-    dialogUsuario.value = false
+    await api.post('/admin/usuarios', { username: usuarioForm.value.username, password: usuarioForm.value.password, nombre: usuarioForm.value.nombre, email: usuarioForm.value.email, rol: usuarioForm.value.rol, tienda_id: usuarioForm.value.rol === 'admin' ? null : usuarioForm.value.tienda_id, activo: true })
+    snackbar.value = { show: true, text: 'Usuario creado', color: 'success' }; dialogUsuario.value = false
     await cargarUsuarios()
-  } catch (e) {
-    snackbar.value = { show: true, text: e.response?.data?.detail || 'Error', color: 'error' }
-  } finally {
-    cargando.value = false
-  }
+  } catch (e) { snackbar.value = { show: true, text: e.response?.data?.detail || 'Error', color: 'error' } }
+  finally { cargando.value = false }
 }
 
-onMounted(() => {
-  cargarTiendas()
-  cargarUsuarios()
-})
+onMounted(() => { cargarTiendas(); cargarUsuarios() })
 </script>
+
+<style scoped>
+.background-gradient { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: radial-gradient(ellipse at 20% 50%, rgba(79,172,254,0.12), transparent 70%), radial-gradient(ellipse at 80% 50%, rgba(99,102,241,0.08), transparent 70%), #0a0e1a; z-index: 0; }
+.header-premium { position: relative; z-index: 1; padding: 16px 24px; background: rgba(255,255,255,0.05); backdrop-filter: blur(20px); border-radius: 20px; border: 1px solid rgba(255,255,255,0.06); }
+.icon-wrapper { width: 48px; height: 48px; background: linear-gradient(135deg, #4facfe, #6366f1); border-radius: 14px; display: flex; align-items: center; justify-content: center; }
+.pulse-animation { animation: pulse 2s infinite; }
+@keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+.step-chip { background: rgba(255,255,255,0.08) !important; padding: 8px 16px !important; border-radius: 50px !important; }
+.glass-effect { background: rgba(255,255,255,0.05) !important; backdrop-filter: blur(16px) !important; border: 1px solid rgba(255,255,255,0.08) !important; border-radius: 12px !important; }
+.glass-card { background: rgba(255,255,255,0.03) !important; backdrop-filter: blur(24px) !important; border: 1px solid rgba(255,255,255,0.06) !important; border-radius: 24px !important; }
+.table-wrapper { overflow-x: auto; }
+.premium-table { background: transparent !important; }
+.premium-table :deep(th) { color: rgba(255,255,255,0.7) !important; font-weight: 700 !important; font-size: 0.75rem !important; text-transform: uppercase; padding: 12px 8px !important; border-bottom: 1px solid rgba(255,255,255,0.06) !important; }
+.premium-table :deep(td) { color: rgba(255,255,255,0.9) !important; padding: 10px 8px !important; border-bottom: 1px solid rgba(255,255,255,0.03) !important; }
+.premium-table :deep(tr:hover) { background: rgba(255,255,255,0.02) !important; }
+.custom-input :deep(.v-field) { background: rgba(255,255,255,0.05) !important; border-radius: 12px !important; border: 1px solid rgba(255,255,255,0.08) !important; }
+.custom-input :deep(.v-field--focused) { border-color: #4facfe !important; }
+.custom-input :deep(.v-label) { color: rgba(255,255,255,0.5) !important; }
+.custom-input :deep(.v-field__input) { color: white !important; }
+.custom-input :deep(.v-field__input::placeholder) { color: rgba(255,255,255,0.6) !important; font-weight: 500 !important; opacity: 1 !important; }
+.custom-input :deep(.v-field__append-inner) { color: rgba(255,255,255,0.4) !important; }
+.empty-state { padding: 24px; text-align: center; border: 1px dashed rgba(255,255,255,0.08); }
+.fade-in { animation: fadeIn 0.4s ease; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+@media (max-width: 600px) { .header-premium { flex-direction: column; gap: 12px; align-items: stretch !important; } }
+</style>
