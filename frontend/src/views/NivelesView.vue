@@ -52,27 +52,27 @@
                         <th class="text-left" style="color: rgba(255,255,255,0.8); font-weight: 700;">Score</th>
                         <th class="text-right" style="color: rgba(255,255,255,0.8); font-weight: 700;">
                           <div>Límite USD</div>
-                          <div style="font-weight: 400; font-size: 0.6rem; color: rgba(255,255,255,0.4);">Monto máximo</div>
+                          <div style="font-weight: 400; font-size: 0.65rem; color: rgba(255,255,255,0.7);">Monto máximo</div>
                         </th>
                         <th class="text-right" style="color: rgba(255,255,255,0.8); font-weight: 700;">
                           <div>Entrada %</div>
-                          <div style="font-weight: 400; font-size: 0.6rem; color: rgba(255,255,255,0.4);">Pago inicial</div>
+                          <div style="font-weight: 400; font-size: 0.6rem; color: rgba(255,255,255,0.7);">Pago inicial</div>
                         </th>
                         <th class="text-right" style="color: rgba(255,255,255,0.8); font-weight: 700;">
                           <div>Financia %</div>
-                          <div style="font-weight: 400; font-size: 0.6rem; color: rgba(255,255,255,0.4);">Saldo a financiar</div>
+                          <div style="font-weight: 400; font-size: 0.6rem; color: rgba(255,255,255,0.7);">Saldo a financiar</div>
                         </th>
                         <th class="text-center" style="color: rgba(255,255,255,0.8); font-weight: 700;">
                           <div>Cuotas Base</div>
-                          <div style="font-weight: 400; font-size: 0.6rem; color: rgba(255,255,255,0.4);">Mínimo</div>
+                          <div style="font-weight: 400; font-size: 0.6rem; color: rgba(255,255,255,0.7);">Mínimo</div>
                         </th>
                         <th class="text-center" style="color: rgba(255,255,255,0.8); font-weight: 700;">
                           <div>Cuotas Máx</div>
-                          <div style="font-weight: 400; font-size: 0.6rem; color: rgba(255,255,255,0.4);">Máximo</div>
+                          <div style="font-weight: 400; font-size: 0.6rem; color: rgba(255,255,255,0.7);">Máximo</div>
                         </th>
                         <th class="text-right" style="color: rgba(255,255,255,0.8); font-weight: 700;">
                           <div>Mora %</div>
-                          <div style="font-weight: 400; font-size: 0.6rem; color: rgba(255,255,255,0.4);">Interés diario</div>
+                          <div style="font-weight: 400; font-size: 0.6rem; color: rgba(255,255,255,0.7);">Interés diario</div>
                         </th>
                         <th class="text-center" style="color: rgba(255,255,255,0.8); font-weight: 700;">Aprobación</th>
                         <th class="text-center" style="color: rgba(255,255,255,0.8); font-weight: 700;">Acciones</th>
