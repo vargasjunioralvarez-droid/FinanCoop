@@ -75,7 +75,7 @@
                         <td>
                           <v-text-field
                             :model-value="config.monto_max_usd"
-                            @update:model-value="config.monto_max_usd = $event"
+                            @update:model-value="config.monto_max_usd = Number($event)"
                             type="number"
                             density="compact"
                             hide-details
@@ -100,6 +100,7 @@
                             bg-color="white"
                             min="0"
                             max="100"
+                            step="1"
                           >
                             <template v-slot:append-inner>
                               <span style="color: #666; font-weight: 600;">%</span>
@@ -118,6 +119,7 @@
                             bg-color="white"
                             min="0"
                             max="100"
+                            step="1"
                           >
                             <template v-slot:append-inner>
                               <span style="color: #666; font-weight: 600;">%</span>
@@ -127,31 +129,33 @@
                         <td>
                           <v-text-field
                             :model-value="config.cuotas_base"
-                            @update:model-value="config.cuotas_base = $event"
+                            @update:model-value="config.cuotas_base = Number($event)"
                             type="number"
                             density="compact"
                             hide-details
                             variant="outlined"
                             class="premium-input"
                             bg-color="white"
+                            min="1"
                           ></v-text-field>
                         </td>
                         <td>
                           <v-text-field
                             :model-value="config.cuotas_max"
-                            @update:model-value="config.cuotas_max = $event"
+                            @update:model-value="config.cuotas_max = Number($event)"
                             type="number"
                             density="compact"
                             hide-details
                             variant="outlined"
                             class="premium-input"
                             bg-color="white"
+                            min="1"
                           ></v-text-field>
                         </td>
                         <td>
                           <v-text-field
                             :model-value="config.mora_diaria"
-                            @update:model-value="config.mora_diaria = $event"
+                            @update:model-value="config.mora_diaria = Number($event)"
                             type="number"
                             density="compact"
                             hide-details
@@ -159,6 +163,7 @@
                             class="premium-input"
                             bg-color="white"
                             step="0.1"
+                            min="0"
                           >
                             <template v-slot:append-inner>
                               <span style="color: #666; font-weight: 600;">%</span>
@@ -277,16 +282,19 @@ const nivelIcono = (nivel) => {
 // ✅ FUNCIONES PARA MANTENER SUMA = 100%
 const actualizarEntrada = (nivel, valor) => {
   const config = niveles.value[nivel]
-  const entrada = parseFloat(valor) || 0
-  config.entrada_pct = Math.min(100, Math.max(0, entrada))
-  config.financia_pct = 100 - config.entrada_pct
+  // Asegurar que sea un número entero
+  let entrada = parseInt(valor) || 0
+  entrada = Math.min(100, Math.max(0, entrada))
+  config.entrada_pct = entrada
+  config.financia_pct = 100 - entrada
 }
 
 const actualizarFinancia = (nivel, valor) => {
   const config = niveles.value[nivel]
-  const financia = parseFloat(valor) || 0
-  config.financia_pct = Math.min(100, Math.max(0, financia))
-  config.entrada_pct = 100 - config.financia_pct
+  let financia = parseInt(valor) || 0
+  financia = Math.min(100, Math.max(0, financia))
+  config.financia_pct = financia
+  config.entrada_pct = 100 - financia
 }
 
 const cargarNiveles = async () => {
@@ -309,17 +317,31 @@ const guardarNivel = async (nivel) => {
     const config = niveles.value[nivel]
     
     // ✅ VALIDAR QUE LA SUMA SEA 100%
-    const suma = (parseFloat(config.entrada_pct) || 0) + (parseFloat(config.financia_pct) || 0)
+    const entrada = parseInt(config.entrada_pct) || 0
+    const financia = parseInt(config.financia_pct) || 0
+    const suma = entrada + financia
+    
     if (suma !== 100) {
-      errorMsg.value = `❌ La suma de entrada (${config.entrada_pct}%) + financiamiento (${config.financia_pct}%) debe ser 100%`
+      errorMsg.value = `❌ La suma de entrada (${entrada}%) + financiamiento (${financia}%) debe ser 100% (actual: ${suma}%)`
       cargandoNivel.value = ''
       return
     }
     
+    // ✅ VALIDAR QUE CUOTAS BASE <= CUOTAS MAX
+    const cuotasBase = parseInt(config.cuotas_base) || 1
+    const cuotasMax = parseInt(config.cuotas_max) || 1
+    
+    if (cuotasBase > cuotasMax) {
+      errorMsg.value = `❌ Las cuotas base (${cuotasBase}) no pueden ser mayores que las cuotas máximas (${cuotasMax})`
+      cargandoNivel.value = ''
+      return
+    }
+    
+    // ✅ ENVIAR PORCENTAJES COMO ENTEROS (NO DECIMALES)
     const payload = {
       monto_max_usd: parseFloat(config.monto_max_usd) || 100,
-      entrada_pct: parseFloat(config.entrada_pct) || 30,
-      financia_pct: parseFloat(config.financia_pct) || 70,
+      entrada_pct: parseInt(config.entrada_pct) || 30,
+      financia_pct: parseInt(config.financia_pct) || 70,
       cuotas_base: parseInt(config.cuotas_base) || 3,
       cuotas_max: parseInt(config.cuotas_max) || 6,
       mora_diaria: parseFloat(config.mora_diaria) || 2,
