@@ -49,16 +49,16 @@
                   <v-table class="premium-table">
                     <thead>
                       <tr>
-                        <th class="text-left">Nivel</th>
-                        <th class="text-left">Score</th>
-                        <th class="text-right">Límite USD</th>
-                        <th class="text-right">Entrada %</th>
-                        <th class="text-right">Financia %</th>
-                        <th class="text-center">Cuotas Base</th>
-                        <th class="text-center">Cuotas Máx</th>
-                        <th class="text-right">Mora %</th>
-                        <th class="text-center">Aprobación</th>
-                        <th class="text-center">Acciones</th>
+                        <th class="text-left" style="color: rgba(255,255,255,0.7);">Nivel</th>
+                        <th class="text-left" style="color: rgba(255,255,255,0.7);">Score</th>
+                        <th class="text-right" style="color: rgba(255,255,255,0.7);">Límite USD</th>
+                        <th class="text-right" style="color: rgba(255,255,255,0.7);">Entrada %</th>
+                        <th class="text-right" style="color: rgba(255,255,255,0.7);">Financia %</th>
+                        <th class="text-center" style="color: rgba(255,255,255,0.7);">Cuotas Base</th>
+                        <th class="text-center" style="color: rgba(255,255,255,0.7);">Cuotas Máx</th>
+                        <th class="text-right" style="color: rgba(255,255,255,0.7);">Mora %</th>
+                        <th class="text-center" style="color: rgba(255,255,255,0.7);">Aprobación</th>
+                        <th class="text-center" style="color: rgba(255,255,255,0.7);">Acciones</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -66,10 +66,10 @@
                         <td>
                           <div class="d-flex align-center">
                             <div class="level-dot" :style="`background: ${nivelColor(nivel)}`"></div>
-                            <span class="font-weight-bold text-white">{{ nivel.toUpperCase() }}</span>
+                            <span class="font-weight-bold" :style="{ color: nivelColor(nivel) }">{{ nivel.toUpperCase() }}</span>
                           </div>
                         </td>
-                        <td class="text-white" style="opacity: 0.7;">
+                        <td style="color: rgba(255,255,255,0.8);">
                           {{ config.min_score }} - {{ config.max_score }}
                         </td>
                         <td>
@@ -82,6 +82,7 @@
                             prefix="$"
                             class="premium-input"
                             dark
+                            style="color: white !important;"
                           ></v-text-field>
                         </td>
                         <td>
@@ -94,6 +95,7 @@
                             suffix="%"
                             class="premium-input"
                             dark
+                            style="color: white !important;"
                           ></v-text-field>
                         </td>
                         <td>
@@ -106,6 +108,7 @@
                             suffix="%"
                             class="premium-input"
                             dark
+                            style="color: white !important;"
                           ></v-text-field>
                         </td>
                         <td>
@@ -117,6 +120,7 @@
                             variant="outlined"
                             class="premium-input"
                             dark
+                            style="color: white !important;"
                           ></v-text-field>
                         </td>
                         <td>
@@ -128,6 +132,7 @@
                             variant="outlined"
                             class="premium-input"
                             dark
+                            style="color: white !important;"
                           ></v-text-field>
                         </td>
                         <td>
@@ -141,6 +146,7 @@
                             class="premium-input"
                             dark
                             step="0.1"
+                            style="color: white !important;"
                           ></v-text-field>
                         </td>
                         <td class="text-center">
@@ -159,7 +165,7 @@
                             :loading="cargandoNivel === nivel"
                             class="rounded-xl"
                           >
-                            <v-icon size="18">mdi-content-save</v-icon>
+                            <v-icon size="18" color="white">mdi-content-save</v-icon>
                           </v-btn>
                         </td>
                       </tr>
@@ -190,12 +196,12 @@
                     lg="2"
                   >
                     <div class="level-summary-card" :style="`border-color: ${nivelColor(nivel)}`">
-                      <div class="level-summary-icon" :style="`background: ${nivelColor(nivel)}20`">
+                      <div class="level-summary-icon" :style="`background: ${nivelColor(nivel)}30`">
                         <v-icon :color="nivelColor(nivel)">{{ nivelIcono(nivel) }}</v-icon>
                       </div>
-                      <div class="level-summary-name text-white">{{ nivel.toUpperCase() }}</div>
-                      <div class="level-summary-amount">${{ config.monto_max_usd }}</div>
-                      <div class="level-summary-details">
+                      <div class="level-summary-name" :style="{ color: nivelColor(nivel) }">{{ nivel.toUpperCase() }}</div>
+                      <div class="level-summary-amount text-white">${{ config.monto_max_usd }}</div>
+                      <div class="level-summary-details" style="color: rgba(255,255,255,0.5);">
                         {{ config.entrada_pct }}% entrada · {{ config.cuotas_base }}-{{ config.cuotas_max }} cuotas
                       </div>
                     </div>
@@ -228,9 +234,9 @@ const nivelesOrdenados = computed(() => {
 const nivelColor = (nivel) => {
   const colores = { 
     nuevo: '#78909C', 
-    bronce: '#8D6E63', 
+    bronce: '#A1887F', 
     plata: '#90A4AE', 
-    oro: '#FFD700', 
+    oro: '#FFD54F', 
     platino: '#7E57C2' 
   }
   return colores[nivel] || '#78909C'
@@ -266,7 +272,6 @@ const guardarNivel = async (nivel) => {
   try {
     const config = niveles.value[nivel]
     
-    // ✅ SOLO LOS CAMPOS QUE ESPERA EL BACKEND
     const payload = {
       monto_max_usd: parseFloat(config.monto_max_usd) || 100,
       entrada_pct: parseFloat(config.entrada_pct) || 30,
@@ -402,7 +407,7 @@ onMounted(cargarNiveles)
 
 .premium-table thead th {
   background: rgba(255, 255, 255, 0.03) !important;
-  color: rgba(255, 255, 255, 0.5) !important;
+  color: rgba(255, 255, 255, 0.7) !important;
   font-weight: 600 !important;
   font-size: 0.7rem !important;
   text-transform: uppercase !important;
@@ -414,6 +419,7 @@ onMounted(cargarNiveles)
 .premium-table tbody td {
   padding: 8px 6px !important;
   border-bottom: 1px solid rgba(255, 255, 255, 0.03) !important;
+  color: rgba(255, 255, 255, 0.8) !important;
 }
 
 .premium-table tbody tr:hover {
@@ -428,11 +434,11 @@ onMounted(cargarNiveles)
   flex-shrink: 0;
 }
 
-/* ✅ INPUTS PREMIUM */
+/* ✅ INPUTS PREMIUM - CON TEXTO BLANCO VISIBLE */
 .premium-input :deep(.v-field) {
-  background: rgba(255, 255, 255, 0.05) !important;
+  background: rgba(255, 255, 255, 0.08) !important;
   border-radius: 10px !important;
-  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
 }
 
 .premium-input :deep(.v-field--focused) {
@@ -441,27 +447,37 @@ onMounted(cargarNiveles)
 }
 
 .premium-input :deep(.v-field__input) {
-  color: white !important;
+  color: #ffffff !important;
   font-size: 0.9rem !important;
 }
 
 .premium-input :deep(.v-field__input::placeholder) {
-  color: rgba(255, 255, 255, 0.2) !important;
+  color: rgba(255, 255, 255, 0.3) !important;
+}
+
+.premium-input :deep(.v-label) {
+  color: rgba(255, 255, 255, 0.5) !important;
+}
+
+.premium-input :deep(.v-field__prepend-inner),
+.premium-input :deep(.v-field__append-inner) {
+  color: rgba(255, 255, 255, 0.4) !important;
 }
 
 /* ✅ RESUMEN DE NIVELES */
 .level-summary-card {
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.05);
   border-radius: 16px;
   padding: 16px;
   text-align: center;
-  border: 2px solid transparent;
+  border: 2px solid rgba(255, 255, 255, 0.05);
   transition: all 0.3s ease;
 }
 
 .level-summary-card:hover {
   transform: translateY(-4px);
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.15);
 }
 
 .level-summary-icon {
@@ -478,18 +494,16 @@ onMounted(cargarNiveles)
   font-size: 0.7rem;
   text-transform: uppercase;
   letter-spacing: 1px;
-  opacity: 0.5;
+  font-weight: 700;
 }
 
 .level-summary-amount {
   font-size: 1.5rem;
   font-weight: 800;
-  color: white;
 }
 
 .level-summary-details {
   font-size: 0.65rem;
-  opacity: 0.4;
   margin-top: 4px;
 }
 
