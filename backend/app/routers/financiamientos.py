@@ -404,3 +404,72 @@ def eliminar_financiamiento(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+    
+    # backend/app/routers/financiamientos.py
+
+@router.get("")
+def listar_financiamientos(
+    skip: int = 0,
+    limit: int = 50,
+    estado: str = None,
+    cliente_id: Optional[int] = None,  # ✅ NUEVO PARÁMETRO
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user),
+    tienda_id: Optional[int] = Depends(get_current_tienda)
+):
+    try:
+        query = db.query(Financiamiento)
+        
+        # ✅ FILTRO POR TIENDA
+        if tienda_id:
+            query = query.filter(Financiamiento.tienda_id == tienda_id)
+        
+        # ✅ FILTRO POR CLIENTE (NUEVO)
+        if cliente_id:
+            query = query.filter(Financiamiento.cliente_id == cliente_id)
+        
+        # ✅ FILTRO POR ESTADO
+        if estado:
+            query = query.filter(Financiamiento.estado == estado)
+        
+        total = query.count()
+        financiamientos = query.order_by(Financiamiento.id.desc()).offset(skip).limit(limit).all()
+        
+        resultado = []
+        for fin in financiamientos:
+            cliente = db.query(Cliente).filter(Cliente.id == fin.cliente_id).first()
+            
+            # ✅ CONTAR CUOTAS PAGADAS
+            cuotas_pagadas = db.query(Cuota).filter(
+                Cuota.financiamiento_id == fin.id,
+                Cuota.estado == "pagada"
+            ).count()
+            
+            resultado.append({
+                "id": fin.id,
+                "codigo": fin.codigo,
+                "cliente_id": fin.cliente_id,
+                "cliente_nombre": cliente.nombre if cliente else "Desconocido",
+                "descripcion": fin.descripcion,
+                "monto_total_bs": round(fin.monto_total_bs, 2),
+                "monto_total_usd": round(fin.monto_total_usd, 2),
+                "cuotas_aprobadas": fin.cuotas_aprobadas,
+                "cuotas_pagadas": cuotas_pagadas,  # ✅ NUEVO
+                "estado": fin.estado,
+                "tienda_id": fin.tienda_id,
+                "tienda_nombre": fin.tienda.nombre if fin.tienda else None,
+                "creado_en": fin.creado_en.isoformat() if fin.creado_en else None
+            })
+        
+        return {
+            "total": total,
+            "skip": skip,
+            "limit": limit,
+            "tienda_filtro": tienda_id,
+            "cliente_filtro": cliente_id,  # ✅ NUEVO
+            "financiamientos": resultado
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

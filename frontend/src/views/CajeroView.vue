@@ -118,8 +118,8 @@
 
                 <!-- ✅ BARRAS DE PROGRESO - LÍMITE -->
                 <div class="limite-card glass-effect mt-3">
-                  <div class="d-flex justify-space-between align-center">
-                    <div class="d-flex align-center" style="gap: 16px;">
+                  <div class="d-flex justify-space-between align-center flex-wrap" style="gap: 8px;">
+                    <div class="d-flex align-center" style="gap: 16px; flex-wrap: wrap;">
                       <div class="metric-item">
                         <span class="metric-label">Límite</span>
                         <span class="metric-value">${{ clienteEncontrado.limite_disponible?.limite_usd || 0 }}</span>
@@ -159,7 +159,7 @@
                   </div>
                 </div>
 
-                <!-- ✅ FINANCIAMIENTOS ACTIVOS -->
+                <!-- ✅ FINANCIAMIENTOS ACTIVOS - AHORA CON DETALLE DE TIENDA -->
                 <div v-if="clienteEncontrado.financiamientos_activos && clienteEncontrado.financiamientos_activos.length > 0" class="mt-3">
                   <div class="financiamientos-header d-flex align-center">
                     <v-icon color="#FFD700" class="mr-2">mdi-clock-outline</v-icon>
@@ -169,23 +169,51 @@
                   
                   <div class="financiamientos-grid mt-2">
                     <div v-for="fin in clienteEncontrado.financiamientos_activos" :key="fin.id" class="financiamiento-item glass-effect">
-                      <div class="d-flex justify-space-between align-center">
-                        <div class="d-flex align-center">
+                      <div class="d-flex justify-space-between align-center flex-wrap" style="gap: 8px;">
+                        <div class="d-flex align-center flex-wrap" style="gap: 8px;">
+                          <!-- ✅ TIENDA DESTACADA -->
                           <v-chip size="small" color="info" variant="flat" class="tienda-chip">
                             <v-icon start size="12">mdi-store</v-icon>
-                            {{ fin.tienda_nombre || 'N/A' }}
+                            {{ fin.tienda_nombre || 'Sin tienda' }}
                           </v-chip>
-                          <span class="text-white font-weight-bold ml-2">${{ formatearNumero(fin.monto_total_usd) }}</span>
+                          <!-- ✅ CÓDIGO DEL FINANCIAMIENTO -->
+                          <v-chip size="x-small" variant="outlined" class="text-white">
+                            {{ fin.codigo }}
+                          </v-chip>
+                          <!-- ✅ MONTO -->
+                          <span class="text-white font-weight-bold">
+                            ${{ formatearNumero(fin.monto_total_usd) }}
+                            <span class="text-caption" style="color: rgba(255,255,255,0.4);">
+                              (BS {{ formatearNumero(fin.monto_total_bs) }})
+                            </span>
+                          </span>
                         </div>
                         <div class="d-flex align-center" style="gap: 8px;">
+                          <!-- ✅ CUOTAS -->
                           <v-chip size="x-small" :color="fin.cuotas_pagadas === fin.cuotas_aprobadas ? 'success' : 'primary'" variant="tonal">
-                            {{ fin.cuotas_pagadas || 0 }}/{{ fin.cuotas_aprobadas }}
+                            {{ fin.cuotas_pagadas || 0 }}/{{ fin.cuotas_aprobadas }} cuotas
                           </v-chip>
+                          <!-- ✅ ESTADO -->
                           <v-chip size="x-small" :color="fin.estado === 'activo' ? 'success' : 'warning'" variant="flat">
                             {{ fin.estado }}
                           </v-chip>
                         </div>
                       </div>
+                      <!-- ✅ DESCRIPCIÓN -->
+                      <div class="text-caption mt-1" style="color: rgba(255,255,255,0.4);" v-if="fin.descripcion">
+                        <v-icon size="12" color="rgba(255,255,255,0.3)">mdi-clipboard-text</v-icon>
+                        {{ fin.descripcion }}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <!-- Resumen de deuda por tienda -->
+                  <div class="mt-2" v-if="Object.keys(clienteEncontrado.deuda_por_tienda || {}).length > 0">
+                    <span class="text-caption" style="color: rgba(255,255,255,0.4);">Deuda por tienda:</span>
+                    <div class="d-flex flex-wrap mt-1" style="gap: 8px;">
+                      <v-chip v-for="(deuda, tienda) in clienteEncontrado.deuda_por_tienda" :key="tienda" size="small" color="error" variant="tonal">
+                        {{ tienda }}: ${{ formatearNumero(deuda.monto_usd) }} ({{ deuda.cuotas_restantes }} cuotas restantes)
+                      </v-chip>
                     </div>
                   </div>
                 </div>
@@ -355,8 +383,234 @@
           </v-card>
         </div>
 
-        <!-- PASO 2, 3, 4: Similar al diseño anterior pero con mejor estilo -->
-        <!-- ... (el resto del código mantiene la misma funcionalidad) ... -->
+        <!-- PASO 2: Monto en BS -->
+        <v-col cols="12" v-if="paso === 2">
+          <v-card class="glass-card rounded-xl" elevation="0">
+            <v-card-title class="text-h5 pa-4 text-white">
+              <v-icon start color="#4facfe">mdi-currency-brl</v-icon>
+              2. Monto de la Compra
+            </v-card-title>
+            
+            <v-card-text class="pa-4">
+              <!-- Resumen cliente -->
+              <div class="glass-effect pa-3 mb-4">
+                <div class="d-flex justify-space-between flex-wrap" style="gap: 8px;">
+                  <div class="text-white"><strong>Cliente:</strong> {{ clienteEncontrado?.nombre }}</div>
+                  <v-chip :color="nivelColor(clienteEncontrado?.nivel)" text-color="white" size="small">
+                    {{ clienteEncontrado?.nivel?.toUpperCase() }}
+                  </v-chip>
+                  <div class="text-white"><strong>Disponible:</strong> <span class="text-success">${{ clienteEncontrado?.limite_disponible?.disponible_usd || 0 }}</span></div>
+                  <div class="text-white"><strong>Límite:</strong> ${{ clienteEncontrado?.limite_disponible?.limite_usd || 0 }}</div>
+                </div>
+              </div>
+              
+              <v-text-field
+                v-model="montoTotalBS"
+                label="Monto Total en Bolívares"
+                type="number"
+                prefix="BS"
+                @input="calcularPropuesta"
+                variant="outlined"
+                density="comfortable"
+                hint="Ingrese el monto en Bolívares"
+                persistent-hint
+                prepend-inner-icon="mdi-currency-brl"
+                dark
+                class="custom-input"
+              ></v-text-field>
+              
+              <div class="text-caption mb-2" v-if="tasaDolar && montoTotalBS">
+                <v-icon color="info" size="small">mdi-information</v-icon>
+                Equivalente: ~${{ (parseFloat(montoTotalBS) / tasaDolar).toFixed(2) }} USD (referencia)
+              </div>
+
+              <v-alert v-if="excedeLimite" type="error" class="mt-3 rounded-xl" border="start" prominent>
+                <v-icon start>mdi-cancel</v-icon>
+                <strong>Monto excede el límite disponible</strong>
+                <div class="text-caption mt-1">
+                  Límite disponible: <strong>${{ clienteEncontrado?.limite_disponible?.disponible_usd || 0 }} USD</strong> | 
+                  Solicitado: <strong>~${{ ((parseFloat(montoTotalBS) || 0) / (tasaDolar || 40)).toFixed(2) }} USD</strong>
+                </div>
+              </v-alert>
+              
+              <v-alert v-if="propuesta && !excedeLimite" type="info" class="mt-3 rounded-xl" border="start">
+                <h3 class="text-h6 mb-2">📋 Propuesta de Financiamiento</h3>
+                <v-divider class="my-2"></v-divider>
+                
+                <v-row>
+                  <v-col cols="12" md="6">
+                    <div class="d-flex justify-space-between pa-2 rounded-lg" style="background: rgba(255,255,255,0.05);">
+                      <span class="text-white" style="opacity: 0.7;">Monto Total:</span>
+                      <strong class="text-white">BS {{ formatearNumero(propuesta.propuesta?.monto_solicitado_bs || propuesta.monto_total_bs) }}</strong>
+                    </div>
+                    <div class="d-flex justify-space-between pa-2 mt-1" style="background: rgba(255,255,255,0.03);">
+                      <span class="text-white" style="opacity: 0.7;">Monto en USD:</span>
+                      <strong class="text-white">${{ formatearNumero(propuesta.propuesta?.monto_solicitado_usd || propuesta.monto_total_usd) }}</strong>
+                    </div>
+                  </v-col>
+                  <v-col cols="12" md="6">
+                    <div class="d-flex justify-space-between pa-2 rounded-lg" style="background: rgba(255,87,34,0.15);">
+                      <span class="text-white" style="opacity: 0.7;">💳 Entrada HOY ({{ propuesta.propuesta?.entrada_pct || propuesta.entrada_pct }}%):</span>
+                      <strong class="text-error">BS {{ formatearNumero(propuesta.propuesta?.entrada_bs || propuesta.monto_entrada_bs) }}</strong>
+                    </div>
+                    <div class="d-flex justify-space-between pa-2 mt-1" style="background: rgba(76,175,80,0.15);">
+                      <span class="text-white" style="opacity: 0.7;">📊 A financiar ({{ propuesta.propuesta?.financia_pct || propuesta.financia_pct }}%):</span>
+                      <strong class="text-success">BS {{ formatearNumero(propuesta.propuesta?.financia_bs || propuesta.monto_financia_bs) }}</strong>
+                    </div>
+                  </v-col>
+                </v-row>
+                
+                <div class="d-flex justify-space-between pa-2 mt-2 rounded-lg" style="background: rgba(33,150,243,0.15);">
+                  <span class="text-white" style="opacity: 0.7;">💰 Disponible después:</span>
+                  <strong class="text-primary">${{ formatearNumero(clienteEncontrado?.limite_disponible?.disponible_usd - (propuesta.propuesta?.monto_solicitado_usd || 0)) }}</strong>
+                </div>
+              </v-alert>
+              
+              <div v-if="propuesta && !excedeLimite" class="mt-3">
+                <label class="text-subtitle-2 font-weight-bold text-white">Seleccionar cuotas:</label>
+                <v-radio-group v-model="cuotasSeleccionadas" class="mt-2">
+                  <v-radio v-for="cuota in opcionesCuotas" :key="cuota.value" :value="cuota.value" color="#4facfe">
+                    <template v-slot:label>
+                      <div class="text-white">
+                        <strong>{{ cuota.value }} cuotas</strong>
+                        <span class="text-caption ml-2" style="color: rgba(255,255,255,0.6);">
+                          BS {{ formatearNumero(cuota.monto) }} cada una
+                          <span style="color: rgba(255,255,255,0.3);">(${{ formatearNumero(cuota.monto_usd) }} ref.)</span>
+                        </span>
+                      </div>
+                    </template>
+                  </v-radio>
+                </v-radio-group>
+                
+                <v-alert v-if="requiereAprobacion" type="warning" class="mt-2 rounded-xl" border="start">
+                  ⚠️ Requiere aprobación del establecimiento para {{ cuotasSeleccionadas }} cuotas
+                </v-alert>
+              </div>
+              
+              <div class="d-flex mt-4" style="gap: 8px;">
+                <v-btn @click="paso = 1" variant="text" color="grey">
+                  <v-icon start>mdi-arrow-left</v-icon> Volver
+                </v-btn>
+                <v-btn 
+                  v-if="cuotasSeleccionadas && !excedeLimite" 
+                  color="#4caf50" 
+                  @click="paso = 3" 
+                  class="flex-grow-1"
+                  size="large"
+                  elevation="0"
+                  rounded="xl"
+                >
+                  Confirmar Propuesta <v-icon end>mdi-arrow-right</v-icon>
+                </v-btn>
+              </div>
+            </v-card-text>
+          </v-card>
+        </v-col>
+
+        <!-- PASO 3: Confirmar -->
+        <v-col cols="12" v-if="paso === 3">
+          <v-card class="glass-card rounded-xl" elevation="0">
+            <v-card-title class="text-h5 pa-4 text-white">
+              <v-icon start color="#FFD700">mdi-check-circle</v-icon>
+              3. Confirmar Venta
+            </v-card-title>
+            
+            <v-card-text class="pa-4">
+              <div class="glass-effect pa-4 mb-3">
+                <h3 class="text-h6 mb-2 text-white">📋 Resumen de la Venta</h3>
+                <v-divider class="my-2" style="border-color: rgba(255,255,255,0.1);"></v-divider>
+                <v-row>
+                  <v-col cols="12" md="6">
+                    <p class="text-white"><strong>Cliente:</strong> {{ clienteEncontrado?.nombre }}</p>
+                    <p class="text-white"><strong>Teléfono:</strong> {{ clienteEncontrado?.telefono }}</p>
+                    <p class="text-white"><strong>Dirección:</strong> {{ clienteEncontrado?.direccion }}</p>
+                  </v-col>
+                  <v-col cols="12" md="6">
+                    <p class="text-white"><strong>Monto Total:</strong> BS {{ formatearNumero(montoTotalBS) }}</p>
+                    <p class="text-error"><strong>💳 Entrada HOY:</strong> BS {{ formatearNumero(propuesta?.propuesta?.entrada_bs || propuesta?.monto_entrada_bs) }}</p>
+                    <p class="text-success"><strong>📊 Financia:</strong> BS {{ formatearNumero(propuesta?.propuesta?.financia_bs || propuesta?.monto_financia_bs) }}</p>
+                  </v-col>
+                </v-row>
+                <v-divider class="my-2" style="border-color: rgba(255,255,255,0.1);"></v-divider>
+                <v-row>
+                  <v-col cols="12" md="4">
+                    <p class="text-white"><strong>Cuotas:</strong> {{ cuotasSeleccionadas }} quincenales</p>
+                  </v-col>
+                  <v-col cols="12" md="4">
+                    <p class="text-white"><strong>Monto cuota:</strong> BS {{ formatearNumero(montoCuotaSeleccionada) }}</p>
+                  </v-col>
+                  <v-col cols="12" md="4">
+                    <p class="text-white"><strong>Total a pagar:</strong> BS {{ formatearNumero(parseFloat(montoTotalBS)) }}</p>
+                  </v-col>
+                </v-row>
+              </div>
+              
+              <v-text-field 
+                v-model="descripcion" 
+                label="Descripción de la compra" 
+                placeholder="Ej: iPhone 15, Consulta Dental, etc." 
+                variant="outlined" 
+                density="comfortable"
+                prepend-inner-icon="mdi-clipboard-text"
+                dark
+                class="custom-input"
+              />
+              
+              <div class="d-flex mt-4" style="gap: 8px;">
+                <v-btn @click="paso = 2" variant="text" color="grey">
+                  <v-icon start>mdi-arrow-left</v-icon> Volver
+                </v-btn>
+                <v-btn 
+                  color="#4caf50" 
+                  @click="crearFinanciamiento" 
+                  class="flex-grow-1"
+                  size="large"
+                  elevation="0"
+                  rounded="xl"
+                >
+                  <v-icon start>mdi-cash-check</v-icon> Cobrar Entrada y Crear Financiamiento
+                </v-btn>
+              </div>
+            </v-card-text>
+          </v-card>
+        </v-col>
+
+        <!-- PASO 4: Éxito -->
+        <v-col cols="12" v-if="paso === 4">
+          <v-card class="glass-card rounded-xl" elevation="0" color="transparent">
+            <v-card-text class="pa-6 text-center">
+              <div class="success-icon-wrapper">
+                <v-icon size="80" color="#4caf50">mdi-check-circle-outline</v-icon>
+              </div>
+              <h2 class="text-h3 font-weight-bold text-white mt-3">✅ Financiamiento Creado</h2>
+              <h3 class="text-h5 mt-2 text-white" style="opacity: 0.8;">{{ resultado?.financiamiento?.codigo }}</h3>
+              <p class="text-body-1 mt-2 text-white" style="opacity: 0.7;">{{ resultado?.mensaje }}</p>
+              <p class="text-caption mt-1 text-white" style="opacity: 0.5;">Tasa aplicada: {{ resultado?.financiamiento?.tasa_aplicada }} BS/$</p>
+              
+              <v-divider class="my-4" style="border-color: rgba(255,255,255,0.1);"></v-divider>
+              
+              <h4 class="mb-2 text-white">📅 Cuotas Generadas ({{ cuotasSeleccionadas }})</h4>
+              <div class="glass-effect pa-3">
+                <div v-for="n in cuotasSeleccionadas" :key="n" class="d-flex justify-space-between py-1" style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                  <span class="text-white font-weight-bold">Cuota #{{ n }}</span>
+                  <span class="text-white" style="opacity: 0.7;">Vence: {{ fechaCuota(n) }} | BS {{ formatearNumero(resultado?.financiamiento?.monto_cuota_bs) }}</span>
+                </div>
+              </div>
+              
+              <v-btn 
+                color="#4facfe" 
+                @click="resetear" 
+                block 
+                class="mt-4 font-weight-bold"
+                size="large"
+                rounded="xl"
+                elevation="0"
+              >
+                <v-icon start>mdi-plus</v-icon> Nueva Venta
+              </v-btn>
+            </v-card-text>
+          </v-card>
+        </v-col>
       </v-col>
     </v-row>
   </v-container>
@@ -426,6 +680,36 @@ const porcentajeUsado = computed(() => {
   return limite > 0 ? (usado / limite) * 100 : 0
 })
 
+const opcionesCuotas = computed(() => {
+  if (!propuesta.value) return []
+  const p = propuesta.value.propuesta || propuesta.value
+  const config = propuesta.value.configuracion_nivel || {}
+  const cuotasBase = p.cuotas_base || config.cuotas_base || 4
+  const cuotasMax = p.cuotas_max || config.cuotas_max || 12
+  const financiaBs = p.financia_bs || propuesta.value.monto_financia_bs || 0
+  const opciones = []
+  for (let i = cuotasBase; i <= cuotasMax; i++) {
+    const montoCuota = financiaBs / i
+    opciones.push({ 
+      value: i, 
+      monto: montoCuota, 
+      monto_usd: montoCuota / (propuesta.value.tasa_dolar_actual || tasaDolar.value || 40) 
+    })
+  }
+  return opciones
+})
+
+const montoCuotaSeleccionada = computed(() => {
+  const opcion = opcionesCuotas.value.find(o => o.value === cuotasSeleccionadas.value)
+  return opcion?.monto || 0
+})
+
+const registroValido = computed(() => {
+  return nuevoCliente.value.nombre && nuevoCliente.value.telefono && nuevoCliente.value.email &&
+         nuevoCliente.value.direccion && nuevoCliente.value.referencia_nombre &&
+         nuevoCliente.value.referencia_telefono && nuevoCliente.value.referencia_parentesco
+})
+
 const formatearNumero = (num) => num ? Number(num).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0,00'
 
 onMounted(async () => {
@@ -447,17 +731,21 @@ const buscarCliente = async () => {
       clienteNoEncontrado.value = true
       nuevoCliente.value.cedula = busquedaCedula.value
     } else {
+      // ✅ OBTENER FINANCIAMIENTOS ACTIVOS DEL CLIENTE
       const financiamientos = await api.get(`/financiamientos?cliente_id=${data.id}&estado=activo`)
       
+      console.log('📊 Financiamientos obtenidos:', financiamientos)
+      
+      // ✅ Calcular deuda por tienda
       const deudaPorTienda = {}
-      if (financiamientos.financiamientos) {
+      if (financiamientos.financiamientos && financiamientos.financiamientos.length > 0) {
         financiamientos.financiamientos.forEach(fin => {
           const tienda = fin.tienda_nombre || 'Sin tienda'
           if (!deudaPorTienda[tienda]) {
             deudaPorTienda[tienda] = { monto_usd: 0, cuotas_restantes: 0 }
           }
-          deudaPorTienda[tienda].monto_usd += fin.monto_total_usd
-          deudaPorTienda[tienda].cuotas_restantes += fin.cuotas_aprobadas - (fin.cuotas_pagadas || 0)
+          deudaPorTienda[tienda].monto_usd += fin.monto_total_usd || 0
+          deudaPorTienda[tienda].cuotas_restantes += (fin.cuotas_aprobadas || 0) - (fin.cuotas_pagadas || 0)
         })
       }
       
@@ -468,6 +756,8 @@ const buscarCliente = async () => {
         deuda_por_tienda: deudaPorTienda
       }
       clienteNoEncontrado.value = false
+      
+      console.log('✅ Cliente encontrado con financiamientos:', clienteEncontrado.value)
     }
   } catch (e) {
     console.error('Error buscando cliente:', e)
@@ -503,11 +793,82 @@ const registrarCliente = async () => {
   }
 }
 
-const registroValido = computed(() => {
-  return nuevoCliente.value.nombre && nuevoCliente.value.telefono && nuevoCliente.value.email &&
-         nuevoCliente.value.direccion && nuevoCliente.value.referencia_nombre &&
-         nuevoCliente.value.referencia_telefono && nuevoCliente.value.referencia_parentesco
-})
+const calcularPropuesta = async () => {
+  if (!montoTotalBS.value || parseFloat(montoTotalBS.value) <= 0 || !clienteEncontrado.value) {
+    propuesta.value = null
+    cuotasSeleccionadas.value = null
+    excedeLimite.value = false
+    return
+  }
+  
+  const tasa = tasaDolar.value || 40
+  const montoUSD = parseFloat(montoTotalBS.value) / tasa
+  const disponibleUSD = clienteEncontrado.value?.limite_disponible?.disponible_usd || 0
+  
+  if (montoUSD > disponibleUSD) {
+    excedeLimite.value = true
+    propuesta.value = null
+    cuotasSeleccionadas.value = null
+    return
+  }
+  
+  excedeLimite.value = false
+  
+  try {
+    const data = await api.get(`/clientes/${clienteEncontrado.value.id}/nivel-propuesta?monto_total_bs=${montoTotalBS.value}`)
+    propuesta.value = data
+    cuotasSeleccionadas.value = data.propuesta?.cuotas_base || data.configuracion_nivel?.cuotas_base || 4
+    requiereAprobacion.value = data.propuesta?.requiere_aprobacion_extra || false
+  } catch (e) { 
+    console.error('Error calculando propuesta:', e)
+    propuesta.value = null 
+  }
+}
+
+const fechaCuota = (n) => {
+  const fecha = new Date()
+  fecha.setDate(fecha.getDate() + (15 * n))
+  return fecha.toLocaleDateString('es-VE')
+}
+
+const crearFinanciamiento = async () => {
+  try {
+    const data = await api.post('/financiamientos', { 
+      cliente_id: clienteEncontrado.value.id, 
+      descripcion: descripcion.value || 'Compra', 
+      monto_total_bs: parseFloat(montoTotalBS.value), 
+      cuotas_solicitadas: cuotasSeleccionadas.value 
+    })
+    if (data.error) { 
+      alert('Error: ' + data.error)
+      return 
+    }
+    resultado.value = data
+    paso.value = 4
+  } catch (e) { 
+    console.error('Error creando financiamiento:', e)
+    alert('Error creando financiamiento') 
+  }
+}
+
+const resetear = () => {
+  paso.value = 1
+  busquedaCedula.value = ''
+  clienteEncontrado.value = null
+  clienteNoEncontrado.value = false
+  nuevoCliente.value = { 
+    nombre: '', telefono: '', email: '', cedula: '', 
+    direccion: '', referencia_nombre: '', referencia_telefono: '', 
+    referencia_parentesco: '' 
+  }
+  montoTotalBS.value = ''
+  propuesta.value = null
+  cuotasSeleccionadas.value = null
+  descripcion.value = ''
+  resultado.value = {}
+  requiereAprobacion.value = false
+  excedeLimite.value = false
+}
 </script>
 
 <style scoped>
@@ -780,6 +1141,26 @@ const registroValido = computed(() => {
   box-shadow: 0 8px 32px rgba(76, 175, 80, 0.4) !important;
 }
 
+/* ✅ INPUTS CUSTOM */
+.custom-input :deep(.v-field) {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border-radius: 12px !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+.custom-input :deep(.v-field--focused) {
+  border-color: #4facfe !important;
+  box-shadow: 0 0 0 3px rgba(79, 172, 254, 0.15) !important;
+}
+
+.custom-input :deep(.v-label) {
+  color: rgba(255, 255, 255, 0.6) !important;
+}
+
+.custom-input :deep(.v-field__input) {
+  color: white !important;
+}
+
 /* ✅ ANIMACIONES */
 .fade-in {
   animation: fadeIn 0.5s ease;
@@ -821,6 +1202,10 @@ const registroValido = computed(() => {
   
   .cliente-premium-card .v-row {
     flex-direction: column !important;
+  }
+  
+  .financiamiento-item {
+    padding: 10px 12px;
   }
 }
 </style>
