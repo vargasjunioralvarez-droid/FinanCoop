@@ -466,6 +466,13 @@ def buscar_cliente_por_cedula(cedula: str, db: Session = Depends(get_db)):
     tasa = obtener_tasa_actual(db)
     disponible = calcular_usado_disponible(cliente.id, db)
     
+    # 🔥 CONTAR CUOTAS VENCIDAS
+    cuotas_vencidas = db.query(Cuota).join(Financiamiento).filter(
+        Financiamiento.cliente_id == cliente.id,
+        Cuota.estado == "pendiente",
+        Cuota.fecha_vencimiento < datetime.now(timezone.utc)
+    ).count()
+    
     return {
         "encontrado": True,
         "id": cliente.id,

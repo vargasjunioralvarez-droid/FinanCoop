@@ -225,9 +225,20 @@
                 </div>
 
                 <!-- ✅ BOTÓN CONTINUAR -->
+                                <!-- 🔥 ALERTA DE MOROSIDAD -->
+                <v-alert v-if="clienteEncontrado?.cuotas_vencidas > 0" type="error" class="mt-3 rounded-xl" border="start" prominent>
+                  <v-icon start>mdi-alert-octagon</v-icon>
+                  <strong>⚠️ Cliente con cuotas vencidas</strong>
+                  <div class="text-caption mt-1">
+                    Tiene <strong>{{ clienteEncontrado.cuotas_vencidas }}</strong> cuota(s) pendiente(s) por pagar.
+                    Debe ponerse al día antes de realizar una nueva compra.
+                  </div>
+                </v-alert>
+
+                <!-- ✅ BOTÓN CONTINUAR -->
                 <div class="mt-4">
                   <v-btn 
-                    v-if="clienteEncontrado.limite_disponible?.puede_comprar" 
+                    v-if="clienteEncontrado.limite_disponible?.puede_comprar && clienteEncontrado?.cuotas_vencidas === 0"
                     color="#4facfe" 
                     @click="paso = 2" 
                     size="x-large"
