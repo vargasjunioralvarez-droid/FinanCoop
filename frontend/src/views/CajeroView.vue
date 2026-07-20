@@ -195,7 +195,7 @@
                     <!-- ✅ CAMBIO 1: Esta línea -->
                     <div class="d-flex justify-space-between pa-2 rounded-lg" style="background: rgba(0,0,0,0.3);">
                       <span class="text-white" style="opacity: 0.9;">💳 Entrada HOY ({{ propuesta.propuesta?.entrada_pct || propuesta.entrada_pct }}%):</span>
-                      <strong class="text-error">BS {{ formatearNumero(propuesta.propuesta?.entrada_bs || propuesta.monto_entrada_bs) }}</strong>
+                      <strong class="text-warning">BS {{ formatearNumero(propuesta.propuesta?.entrada_bs || propuesta.monto_entrada_bs) }}</strong>
                     </div>
                     <!-- ✅ CAMBIO 2: Esta línea -->
                     <div class="d-flex justify-space-between pa-2 mt-1 rounded-lg" style="background: rgba(0,0,0,0.3);">
@@ -208,7 +208,7 @@
                 <!-- ✅ CAMBIO 3: Esta línea -->
                 <div class="d-flex justify-space-between pa-2 mt-2 rounded-lg" style="background: rgba(0,0,0,0.3);">
                   <span class="text-white" style="opacity: 0.9;">💰 Disponible después:</span>
-                  <strong class="text-primary">${{ formatearNumero(clienteEncontrado?.limite_disponible?.disponible_usd - (propuesta.propuesta?.monto_solicitado_usd || 0)) }}</strong>
+                  <strong class="text-white">${{ formatearNumero(clienteEncontrado?.limite_disponible?.disponible_usd - (propuesta.propuesta?.monto_solicitado_usd || 0)) }}</strong>
                 </div>
               </v-alert>
               
