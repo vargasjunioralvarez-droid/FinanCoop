@@ -6,7 +6,7 @@ from .config import router as config_router
 from .app_mobile import router as app_mobile_router
 from .admin import router as admin_router
 from .auth import router as auth_router
-from .upload import router as upload_router  # ← AGREGADO
+from .upload import router as upload_router
 from .bancos import router as bancos_router
 
 __all__ = [
@@ -17,5 +17,6 @@ __all__ = [
     "app_mobile_router",
     "admin_router",
     "auth_router",
-    "upload_router"  # ← AGREGADO
+    "upload_router",
+    "bancos_router",
 ]
