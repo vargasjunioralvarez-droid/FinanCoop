@@ -83,9 +83,13 @@ def crear_financiamiento(
         requiere_aprobacion = f.cuotas_solicitadas > config["cuotas_base"] and config["aprobacion_extra"]
         cuotas_aprobadas = f.cuotas_solicitadas if not requiere_aprobacion else config["cuotas_base"]
         
-        # ✅ CALCULAR MONTOS
-        entrada_bs = f.monto_total_bs * (config["entrada_pct"] / 100)
-        financia_bs = f.monto_total_bs - entrada_bs
+        # ✅ CALCULAR MONTOS - PORCENTAJES CORRECTOS
+        # entrada_pct y financia_pct vienen como enteros (30, 70, etc.)
+        entrada_pct = config["entrada_pct"] / 100  # Convertir a decimal (30/100 = 0.30)
+        financia_pct = config["financia_pct"] / 100  # Convertir a decimal (70/100 = 0.70)
+        
+        entrada_bs = f.monto_total_bs * entrada_pct  # 1000 * 0.30 = 300
+        financia_bs = f.monto_total_bs * financia_pct  # 1000 * 0.70 = 700
         monto_cuota_bs = financia_bs / cuotas_aprobadas if cuotas_aprobadas > 0 else 0
         
         entrada_usd_ref = entrada_bs / tasa if tasa > 0 else 0
@@ -181,6 +185,9 @@ def crear_financiamiento(
         logger.error(f"❌ Error: {e}")
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ... (el resto de los endpoints quedan igual)
 
 
 @router.post("/{id}/aprobar")

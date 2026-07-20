@@ -80,6 +80,7 @@
                       variant="outlined"
                       suffix="%"
                       class="mt-2"
+                      step="0.5"
                     ></v-text-field>
                   </td>
                   <td>
@@ -91,6 +92,7 @@
                       variant="outlined"
                       suffix="%"
                       class="mt-2"
+                      step="0.5"
                     ></v-text-field>
                   </td>
                   <td>
@@ -122,6 +124,7 @@
                       variant="outlined"
                       suffix="%"
                       class="mt-2"
+                      step="0.1"
                     ></v-text-field>
                   </td>
                   <td class="text-center">
@@ -235,33 +238,29 @@ const guardarNivel = async (nivel) => {
   try {
     const config = niveles.value[nivel]
     
-    // ✅ FORMATO CORRECTO - SOLO los campos que espera el backend
-    // El backend solo espera estos campos (NO min_score, NO max_score)
+    // ✅ ENVIAR PORCENTAJES COMO ENTEROS (30, 70, etc.)
     const payload = {
       monto_max_usd: parseFloat(config.monto_max_usd) || 100,
-      entrada_pct: parseFloat(config.entrada_pct) || 0.30,
-      financia_pct: parseFloat(config.financia_pct) || 0.70,
+      entrada_pct: parseFloat(config.entrada_pct) || 30,    // ✅ 30% como 30
+      financia_pct: parseFloat(config.financia_pct) || 70,   // ✅ 70% como 70
       cuotas_base: parseInt(config.cuotas_base) || 3,
       cuotas_max: parseInt(config.cuotas_max) || 6,
-      mora_diaria: parseFloat(config.mora_diaria) || 0.02,
+      mora_diaria: parseFloat(config.mora_diaria) || 2,      // ✅ 2% como 2
       aprobacion_extra: config.aprobacion_extra || false
     }
     
     console.log(`📤 Guardando ${nivel}:`, payload)
     
-    // ✅ Usar PUT para actualizar
     const response = await api.put(`/config/niveles/${nivel}`, payload)
     
     console.log(`✅ Respuesta para ${nivel}:`, response)
     successMsg.value = `✅ Nivel ${nivel.toUpperCase()} actualizado correctamente`
     
-    // Recargar datos para asegurar consistencia
     await cargarNiveles()
     
   } catch (e) {
     console.error(`❌ Error guardando ${nivel}:`, e)
     
-    // Mostrar mensaje de error más detallado
     let errorDetail = 'Error guardando nivel'
     if (e.response) {
       console.error('❌ Response status:', e.response.status)
@@ -329,7 +328,6 @@ onMounted(cargarNiveles)
   color: rgba(0,0,0,0.6) !important;
 }
 
-/* ✅ Estilos para alerts */
 .v-alert {
   border-radius: 12px !important;
 }
