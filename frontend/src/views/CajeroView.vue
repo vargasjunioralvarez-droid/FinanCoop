@@ -135,9 +135,9 @@
                         <span class="metric-value text-success">${{ clienteEncontrado.limite_disponible?.disponible_usd || 0 }}</span>
                       </div>
                     </div>
-                    <v-chip :color="clienteEncontrado.limite_disponible?.puede_comprar ? 'success' : 'error'" size="small" class="status-chip">
-                      {{ clienteEncontrado.limite_disponible?.puede_comprar ? '✅ Puede comprar' : '❌ Sin saldo' }}
-                    </v-chip>
+                    <v-chip :color="clienteEncontrado.limite_disponible?.disponible_usd > 0 ? 'success' : 'error'" size="small" class="status-chip">
+                    {{ clienteEncontrado.limite_disponible?.disponible_usd > 0 ? '✅ Puede comprar' : '❌ Sin saldo' }}
+                  </v-chip>
                   </div>
                   
                   <div class="progress-wrapper mt-2">
@@ -238,7 +238,7 @@
                 <!-- ✅ BOTÓN CONTINUAR -->
                 <div class="mt-4">
                   <v-btn 
-                    v-if="clienteEncontrado.limite_disponible?.puede_comprar && clienteEncontrado?.cuotas_vencidas === 0"
+                  v-if="clienteEncontrado.limite_disponible?.disponible_usd > 0 && (clienteEncontrado?.cuotas_vencidas || 0) === 0"
                     color="#4facfe" 
                     @click="paso = 2" 
                     size="x-large"
@@ -250,21 +250,21 @@
                     <v-icon end>mdi-arrow-right</v-icon>
                   </v-btn>
                   
-                  <v-alert 
-                    v-else 
-                    type="error" 
-                    variant="tonal" 
-                    class="rounded-xl"
-                    border="start"
-                  >
-                    <div class="d-flex align-center">
-                      <v-icon color="error" size="28" class="mr-2">mdi-alert-circle</v-icon>
-                      <div>
-                        <strong class="text-white">Cliente sin saldo disponible</strong>
-                        <div class="text-caption" style="color: rgba(255,255,255,0.6);">Ha alcanzado el límite máximo de crédito</div>
-                      </div>
-                    </div>
-                  </v-alert>
+                  <v-alert v-else type="error" variant="tonal" class="rounded-xl" border="start">
+  <div class="d-flex align-center">
+    <v-icon color="error" size="28" class="mr-2">mdi-alert-circle</v-icon>
+    <div>
+      <strong class="text-white" v-if="(clienteEncontrado?.cuotas_vencidas || 0) > 0">
+        ⚠️ Cliente con {{ clienteEncontrado.cuotas_vencidas }} cuota(s) vencida(s)
+      </strong>
+      <strong class="text-white" v-else>Cliente sin saldo disponible</strong>
+      <div class="text-caption" style="color: rgba(255,255,255,0.6);">
+        <span v-if="(clienteEncontrado?.cuotas_vencidas || 0) > 0">Debe ponerse al día antes de comprar</span>
+        <span v-else>Ha alcanzado el límite máximo de crédito</span>
+      </div>
+    </div>
+  </div>
+</v-alert>
                 </div>
               </div>
 
