@@ -16,6 +16,7 @@ router = APIRouter(prefix="/financiamientos", tags=["Financiamientos"])
 
 MAX_CREDITOS_ACTIVOS = 3
 
+
 @router.post("")
 def crear_financiamiento(
     f: FinanciamientoCreate, 
@@ -31,7 +32,7 @@ def crear_financiamiento(
         if cliente.estado != "aprobado":
             raise HTTPException(status_code=400, detail="Cliente no está aprobado. Debe ser verificado por el administrador.")
         
-        # ✅ VALIDACIÓN 2: Calcular nivel (puede ser "nuevo" con score 0)
+        # ✅ VALIDACIÓN 2: Calcular nivel
         nivel, config = calcular_nivel(cliente.score)
         
         # ✅ VALIDACIÓN 3: Límite de créditos activos
@@ -83,10 +84,10 @@ def crear_financiamiento(
         requiere_aprobacion = f.cuotas_solicitadas > config["cuotas_base"] and config["aprobacion_extra"]
         cuotas_aprobadas = f.cuotas_solicitadas if not requiere_aprobacion else config["cuotas_base"]
         
-        # ✅ CALCULAR MONTOS - PORCENTAJES CORRECTOS
-        # entrada_pct y financia_pct vienen como enteros (30, 70, etc.)
-        entrada_pct = config["entrada_pct"] / 100  # Convertir a decimal (30/100 = 0.30)
-        financia_pct = config["financia_pct"] / 100  # Convertir a decimal (70/100 = 0.70)
+        # ✅ CALCULAR MONTOS
+        # entrada_pct y financia_pct vienen como enteros (30, 70, etc.) desde config.py
+        entrada_pct = config["entrada_pct"] / 100  # 30/100 = 0.30
+        financia_pct = config["financia_pct"] / 100  # 70/100 = 0.70
         
         entrada_bs = f.monto_total_bs * entrada_pct  # 1000 * 0.30 = 300
         financia_bs = f.monto_total_bs * financia_pct  # 1000 * 0.70 = 700
@@ -100,7 +101,7 @@ def crear_financiamiento(
         codigo = f"F-{random.randint(100000, 999999)}"
         fecha_primera = datetime.now(timezone.utc) + timedelta(days=15)
         
-        # ✅ ASIGNAR TIENDA DEL USUARIO ACTUAL (quien vende)
+        # ✅ ASIGNAR TIENDA DEL USUARIO ACTUAL
         tienda_id = None
         if hasattr(current_user, 'tienda_id') and current_user.tienda_id:
             tienda_id = current_user.tienda_id
@@ -187,9 +188,6 @@ def crear_financiamiento(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ... (el resto de los endpoints quedan igual)
-
-
 @router.post("/{id}/aprobar")
 def aprobar_financiamiento(
     id: int, 
@@ -249,6 +247,7 @@ def listar_financiamientos(
     skip: int = 0,
     limit: int = 50,
     estado: str = None,
+    cliente_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user),
     tienda_id: Optional[int] = Depends(get_current_tienda)
@@ -256,9 +255,15 @@ def listar_financiamientos(
     try:
         query = db.query(Financiamiento)
         
+        # ✅ FILTRO POR TIENDA
         if tienda_id:
             query = query.filter(Financiamiento.tienda_id == tienda_id)
         
+        # ✅ FILTRO POR CLIENTE
+        if cliente_id:
+            query = query.filter(Financiamiento.cliente_id == cliente_id)
+        
+        # ✅ FILTRO POR ESTADO
         if estado:
             query = query.filter(Financiamiento.estado == estado)
         
@@ -268,6 +273,13 @@ def listar_financiamientos(
         resultado = []
         for fin in financiamientos:
             cliente = db.query(Cliente).filter(Cliente.id == fin.cliente_id).first()
+            
+            # ✅ CONTAR CUOTAS PAGADAS
+            cuotas_pagadas = db.query(Cuota).filter(
+                Cuota.financiamiento_id == fin.id,
+                Cuota.estado == "pagada"
+            ).count()
+            
             resultado.append({
                 "id": fin.id,
                 "codigo": fin.codigo,
@@ -277,6 +289,7 @@ def listar_financiamientos(
                 "monto_total_bs": round(fin.monto_total_bs, 2),
                 "monto_total_usd": round(fin.monto_total_usd, 2),
                 "cuotas_aprobadas": fin.cuotas_aprobadas,
+                "cuotas_pagadas": cuotas_pagadas,
                 "estado": fin.estado,
                 "tienda_id": fin.tienda_id,
                 "tienda_nombre": fin.tienda.nombre if fin.tienda else None,
@@ -288,6 +301,7 @@ def listar_financiamientos(
             "skip": skip,
             "limit": limit,
             "tienda_filtro": tienda_id,
+            "cliente_filtro": cliente_id,
             "financiamientos": resultado
         }
         
@@ -403,73 +417,4 @@ def eliminar_financiamiento(
         raise
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-    
-    # backend/app/routers/financiamientos.py
-
-@router.get("")
-def listar_financiamientos(
-    skip: int = 0,
-    limit: int = 50,
-    estado: str = None,
-    cliente_id: Optional[int] = None,  # ✅ NUEVO PARÁMETRO
-    db: Session = Depends(get_db),
-    current_user = Depends(get_current_user),
-    tienda_id: Optional[int] = Depends(get_current_tienda)
-):
-    try:
-        query = db.query(Financiamiento)
-        
-        # ✅ FILTRO POR TIENDA
-        if tienda_id:
-            query = query.filter(Financiamiento.tienda_id == tienda_id)
-        
-        # ✅ FILTRO POR CLIENTE (NUEVO)
-        if cliente_id:
-            query = query.filter(Financiamiento.cliente_id == cliente_id)
-        
-        # ✅ FILTRO POR ESTADO
-        if estado:
-            query = query.filter(Financiamiento.estado == estado)
-        
-        total = query.count()
-        financiamientos = query.order_by(Financiamiento.id.desc()).offset(skip).limit(limit).all()
-        
-        resultado = []
-        for fin in financiamientos:
-            cliente = db.query(Cliente).filter(Cliente.id == fin.cliente_id).first()
-            
-            # ✅ CONTAR CUOTAS PAGADAS
-            cuotas_pagadas = db.query(Cuota).filter(
-                Cuota.financiamiento_id == fin.id,
-                Cuota.estado == "pagada"
-            ).count()
-            
-            resultado.append({
-                "id": fin.id,
-                "codigo": fin.codigo,
-                "cliente_id": fin.cliente_id,
-                "cliente_nombre": cliente.nombre if cliente else "Desconocido",
-                "descripcion": fin.descripcion,
-                "monto_total_bs": round(fin.monto_total_bs, 2),
-                "monto_total_usd": round(fin.monto_total_usd, 2),
-                "cuotas_aprobadas": fin.cuotas_aprobadas,
-                "cuotas_pagadas": cuotas_pagadas,  # ✅ NUEVO
-                "estado": fin.estado,
-                "tienda_id": fin.tienda_id,
-                "tienda_nombre": fin.tienda.nombre if fin.tienda else None,
-                "creado_en": fin.creado_en.isoformat() if fin.creado_en else None
-            })
-        
-        return {
-            "total": total,
-            "skip": skip,
-            "limit": limit,
-            "tienda_filtro": tienda_id,
-            "cliente_filtro": cliente_id,  # ✅ NUEVO
-            "financiamientos": resultado
-        }
-        
-    except Exception as e:
-        logger.error(f"❌ Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
