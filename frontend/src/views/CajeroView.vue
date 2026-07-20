@@ -736,23 +736,24 @@ const buscarCliente = async () => {
       
       console.log('📊 Financiamientos obtenidos:', financiamientos)
       
+      // ✅ CORREGIDO: el interceptor de api.js ya extrae el array
+      const listaFinanciamientos = Array.isArray(financiamientos) ? financiamientos : (financiamientos.financiamientos || [])
+      
       // ✅ Calcular deuda por tienda
       const deudaPorTienda = {}
-      if (financiamientos.financiamientos && financiamientos.financiamientos.length > 0) {
-        financiamientos.financiamientos.forEach(fin => {
-          const tienda = fin.tienda_nombre || 'Sin tienda'
-          if (!deudaPorTienda[tienda]) {
-            deudaPorTienda[tienda] = { monto_usd: 0, cuotas_restantes: 0 }
-          }
-          deudaPorTienda[tienda].monto_usd += fin.monto_total_usd || 0
-          deudaPorTienda[tienda].cuotas_restantes += (fin.cuotas_aprobadas || 0) - (fin.cuotas_pagadas || 0)
-        })
-      }
+      listaFinanciamientos.forEach(fin => {
+        const tienda = fin.tienda_nombre || 'Sin tienda'
+        if (!deudaPorTienda[tienda]) {
+          deudaPorTienda[tienda] = { monto_usd: 0, cuotas_restantes: 0 }
+        }
+        deudaPorTienda[tienda].monto_usd += fin.monto_total_usd || 0
+        deudaPorTienda[tienda].cuotas_restantes += (fin.cuotas_aprobadas || 0) - (fin.cuotas_pagadas || 0)
+      })
       
       clienteEncontrado.value = { 
         ...data, 
         bloqueado: false,
-        financiamientos_activos: financiamientos.financiamientos || [],
+        financiamientos_activos: listaFinanciamientos,
         deuda_por_tienda: deudaPorTienda
       }
       clienteNoEncontrado.value = false
@@ -768,7 +769,6 @@ const buscarCliente = async () => {
     cargando.value = false
   }
 }
-
 const registrarCliente = async () => {
   if (!registroValido.value) { 
     alert('Complete todos los campos obligatorios')
