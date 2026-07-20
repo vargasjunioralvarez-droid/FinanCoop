@@ -27,7 +27,7 @@
 
         <!-- KPIs PREMIUM -->
         <v-row class="mt-4">
-          <v-col cols="12" sm="4">
+          <v-col cols="12" sm="3">
             <v-card class="kpi-card glass-card rounded-xl" elevation="0">
               <v-card-text class="pa-4 text-center">
                 <div class="kpi-icon-wrapper mb-2" style="background: rgba(76,175,80,0.15);">
@@ -38,7 +38,7 @@
               </v-card-text>
             </v-card>
           </v-col>
-          <v-col cols="12" sm="4">
+          <v-col cols="12" sm="3">
             <v-card class="kpi-card glass-card rounded-xl" elevation="0">
               <v-card-text class="pa-4 text-center">
                 <div class="kpi-icon-wrapper mb-2" style="background: rgba(79,172,254,0.15);">
@@ -49,7 +49,7 @@
               </v-card-text>
             </v-card>
           </v-col>
-          <v-col cols="12" sm="4">
+          <v-col cols="12" sm="3">
             <v-card class="kpi-card glass-card rounded-xl" elevation="0">
               <v-card-text class="pa-4 text-center">
                 <div class="kpi-icon-wrapper mb-2" style="background: rgba(255,213,79,0.15);">
@@ -57,6 +57,17 @@
                 </div>
                 <div class="kpi-number text-warning">BS {{ formatearBS(totalEntrada) }}</div>
                 <div class="kpi-label">Entradas Cobradas</div>
+              </v-card-text>
+            </v-card>
+          </v-col>
+          <v-col cols="12" sm="3">
+            <v-card class="kpi-card glass-card rounded-xl" elevation="0">
+              <v-card-text class="pa-4 text-center">
+                <div class="kpi-icon-wrapper mb-2" style="background: rgba(244,67,54,0.15);">
+                  <v-icon size="28" color="#f44336">mdi-clock-outline</v-icon>
+                </div>
+                <div class="kpi-number text-error">BS {{ formatearBS(totalPendiente) }}</div>
+                <div class="kpi-label">Pendiente por Cobrar</div>
               </v-card-text>
             </v-card>
           </v-col>
@@ -82,6 +93,7 @@
                         <th>Cliente</th>
                         <th class="text-right">Monto</th>
                         <th class="text-right">Entrada</th>
+                        <th class="text-right">Pendiente</th>
                         <th class="text-center">Cuotas</th>
                         <th class="text-right">Hora</th>
                       </tr>
@@ -104,6 +116,9 @@
                         </td>
                         <td class="text-right">
                           <span class="text-success font-weight-bold">BS {{ formatearBS(v.monto_entrada_bs) }}</span>
+                        </td>
+                        <td class="text-right">
+                          <span class="text-error font-weight-bold">BS {{ formatearBS((v.monto_total_bs || 0) - (v.monto_entrada_bs || 0)) }}</span>
                         </td>
                         <td class="text-center">
                           <v-chip size="x-small" color="rgba(255,255,255,0.1)" variant="flat">{{ v.cuotas_aprobadas }}</v-chip>
@@ -140,6 +155,7 @@ const tiendaNombre = ref('')
 const fechaHoy = new Date().toLocaleDateString('es-VE', { weekday: 'long', day: 'numeric', month: 'long' })
 const totalHoy = computed(() => ventasHoy.value.reduce((s, v) => s + (v.monto_total_bs || 0), 0))
 const totalEntrada = computed(() => ventasHoy.value.reduce((s, v) => s + (v.monto_entrada_bs || 0), 0))
+const totalPendiente = computed(() => ventasHoy.value.reduce((s, v) => s + ((v.monto_total_bs || 0) - (v.monto_entrada_bs || 0)), 0))
 
 const formatearBS = (m) => m ? Number(m).toLocaleString('es-VE', { minimumFractionDigits: 2 }) : '0,00'
 const formatearHora = (f) => f ? new Date(f).toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' }) : ''
@@ -159,7 +175,6 @@ const cargarUsuario = async () => {
   } catch (e) {}
 }
 
-// 🔥 FUNCIÓN PARA IMPRIMIR REPORTE
 const imprimirReporte = () => {
   const ventana = window.open('', '_blank', 'width=900,height=700')
   if (!ventana) { alert('Permite las ventanas emergentes para imprimir'); return }
@@ -171,6 +186,7 @@ const imprimirReporte = () => {
       <td>${v.cliente_nombre || '-'}</td>
       <td style="text-align:right;">BS ${formatearBS(v.monto_total_bs)}</td>
       <td style="text-align:right;">BS ${formatearBS(v.monto_entrada_bs)}</td>
+      <td style="text-align:right; color:#f44336; font-weight:bold;">BS ${formatearBS((v.monto_total_bs || 0) - (v.monto_entrada_bs || 0))}</td>
       <td style="text-align:center;">${v.cuotas_aprobadas || 0}</td>
       <td style="text-align:right;">${formatearHora(v.creado_en)}</td>
     </tr>`
@@ -185,7 +201,7 @@ const imprimirReporte = () => {
           .header { text-align: center; margin-bottom: 20px; }
           .header h1 { margin: 0; font-size: 22px; }
           .header p { margin: 2px 0; font-size: 14px; color: #666; }
-          .resumen { display: flex; justify-content: space-around; margin-bottom: 20px; }
+          .resumen { display: flex; justify-content: space-around; margin-bottom: 20px; flex-wrap: wrap; gap: 10px; }
           .resumen div { text-align: center; padding: 10px 20px; background: #f5f5f5; border-radius: 8px; }
           .resumen strong { font-size: 20px; }
           table { width: 100%; border-collapse: collapse; margin-top: 10px; }
@@ -193,10 +209,7 @@ const imprimirReporte = () => {
           td { padding: 8px; border-bottom: 1px solid #eee; font-size: 13px; }
           tr:hover { background: #f9f9f9; }
           .footer { text-align: center; margin-top: 30px; font-size: 11px; color: #999; }
-          @media print {
-            body { margin: 0; }
-            .no-print { display: none; }
-          }
+          @media print { body { margin: 0; } .no-print { display: none; } }
         </style>
       </head>
       <body>
@@ -209,18 +222,15 @@ const imprimirReporte = () => {
           <div><div style="color:#4caf50;">Total Ventas</div><strong>${ventasHoy.value.length}</strong></div>
           <div><div style="color:#4facfe;">Total Financiado</div><strong>BS ${formatearBS(totalHoy.value)}</strong></div>
           <div><div style="color:#ffd54f;">Entradas Cobradas</div><strong>BS ${formatearBS(totalEntrada.value)}</strong></div>
+          <div><div style="color:#f44336;">Pendiente</div><strong>BS ${formatearBS(totalPendiente.value)}</strong></div>
         </div>
         <table>
-          <thead><tr><th>Código</th><th>Cliente</th><th>Monto</th><th>Entrada</th><th>Cuotas</th><th>Hora</th></tr></thead>
+          <thead><tr><th>Código</th><th>Cliente</th><th>Monto</th><th>Entrada</th><th>Pendiente</th><th>Cuotas</th><th>Hora</th></tr></thead>
           <tbody>${filas}</tbody>
         </table>
-        <div class="footer">
-          <p>FinanCoop © ${new Date().getFullYear()} - Sistema de Financiamiento</p>
-        </div>
+        <div class="footer"><p>FinanCoop © ${new Date().getFullYear()} - Sistema de Financiamiento</p></div>
         <div class="no-print" style="text-align:center; margin-top:20px;">
-          <button onclick="window.print()" style="padding:10px 30px; font-size:16px; background:#4facfe; color:white; border:none; border-radius:25px; cursor:pointer;">
-            🖨️ Imprimir Reporte
-          </button>
+          <button onclick="window.print()" style="padding:10px 30px; font-size:16px; background:#4facfe; color:white; border:none; border-radius:25px; cursor:pointer;">🖨️ Imprimir Reporte</button>
         </div>
       </body>
     </html>
@@ -243,11 +253,12 @@ onMounted(() => { cargarVentas(); cargarUsuario() })
 .kpi-card { transition: transform 0.3s ease; }
 .kpi-card:hover { transform: translateY(-4px); }
 .kpi-icon-wrapper { width: 56px; height: 56px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto; }
-.kpi-number { font-size: 2rem; font-weight: 800; }
-.kpi-label { font-size: 0.75rem; color: rgba(255,255,255,0.4); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
+.kpi-number { font-size: 1.8rem; font-weight: 800; }
+.kpi-label { font-size: 0.7rem; color: rgba(255,255,255,0.4); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
 .text-success { color: #4caf50 !important; }
 .text-primary { color: #4facfe !important; }
 .text-warning { color: #ffd54f !important; }
+.text-error { color: #f44336 !important; }
 .table-wrapper { overflow-x: auto; }
 .premium-table { background: transparent !important; }
 .premium-table :deep(th) { color: rgba(255,255,255,0.7) !important; font-weight: 700 !important; font-size: 0.75rem !important; text-transform: uppercase; padding: 12px 8px !important; border-bottom: 1px solid rgba(255,255,255,0.06) !important; }
@@ -256,5 +267,5 @@ onMounted(() => { cargarVentas(); cargarUsuario() })
 .empty-state { padding: 40px; text-align: center; border: 1px dashed rgba(255,255,255,0.08); }
 .fade-in { animation: fadeIn 0.4s ease; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-@media (max-width: 600px) { .header-premium { flex-direction: column; gap: 12px; align-items: stretch !important; } .kpi-number { font-size: 1.5rem; } }
+@media (max-width: 600px) { .header-premium { flex-direction: column; gap: 12px; align-items: stretch !important; } .kpi-number { font-size: 1.3rem; } }
 </style>
