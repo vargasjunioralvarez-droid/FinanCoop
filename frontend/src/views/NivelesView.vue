@@ -82,8 +82,12 @@
                             variant="outlined"
                             prefix="$"
                             class="premium-input"
-                            dark
-                          ></v-text-field>
+                            bg-color="rgba(255,255,255,0.1)"
+                          >
+                            <template v-slot:prepend-inner>
+                              <span style="color: rgba(255,255,255,0.5); font-weight: 600;">$</span>
+                            </template>
+                          </v-text-field>
                         </td>
                         <td>
                           <v-text-field
@@ -95,8 +99,12 @@
                             variant="outlined"
                             suffix="%"
                             class="premium-input"
-                            dark
-                          ></v-text-field>
+                            bg-color="rgba(255,255,255,0.1)"
+                          >
+                            <template v-slot:append-inner>
+                              <span style="color: rgba(255,255,255,0.5); font-weight: 600;">%</span>
+                            </template>
+                          </v-text-field>
                         </td>
                         <td>
                           <v-text-field
@@ -108,8 +116,12 @@
                             variant="outlined"
                             suffix="%"
                             class="premium-input"
-                            dark
-                          ></v-text-field>
+                            bg-color="rgba(255,255,255,0.1)"
+                          >
+                            <template v-slot:append-inner>
+                              <span style="color: rgba(255,255,255,0.5); font-weight: 600;">%</span>
+                            </template>
+                          </v-text-field>
                         </td>
                         <td>
                           <v-text-field
@@ -120,7 +132,7 @@
                             hide-details
                             variant="outlined"
                             class="premium-input"
-                            dark
+                            bg-color="rgba(255,255,255,0.1)"
                           ></v-text-field>
                         </td>
                         <td>
@@ -132,7 +144,7 @@
                             hide-details
                             variant="outlined"
                             class="premium-input"
-                            dark
+                            bg-color="rgba(255,255,255,0.1)"
                           ></v-text-field>
                         </td>
                         <td>
@@ -145,9 +157,13 @@
                             variant="outlined"
                             suffix="%"
                             class="premium-input"
-                            dark
+                            bg-color="rgba(255,255,255,0.1)"
                             step="0.1"
-                          ></v-text-field>
+                          >
+                            <template v-slot:append-inner>
+                              <span style="color: rgba(255,255,255,0.5); font-weight: 600;">%</span>
+                            </template>
+                          </v-text-field>
                         </td>
                         <td class="text-center">
                           <v-checkbox
@@ -439,17 +455,18 @@ onMounted(cargarNiveles)
 .premium-input :deep(.v-field) {
   background: rgba(255, 255, 255, 0.08) !important;
   border-radius: 10px !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
 }
 
 .premium-input :deep(.v-field--focused) {
   border-color: #4facfe !important;
-  box-shadow: 0 0 0 3px rgba(79, 172, 254, 0.15) !important;
+  box-shadow: 0 0 0 3px rgba(79, 172, 254, 0.2) !important;
 }
 
 .premium-input :deep(.v-field__input) {
   color: #ffffff !important;
   font-size: 0.9rem !important;
+  font-weight: 600 !important;
 }
 
 .premium-input :deep(.v-field__input::placeholder) {
@@ -460,9 +477,10 @@ onMounted(cargarNiveles)
   color: rgba(255, 255, 255, 0.5) !important;
 }
 
-.premium-input :deep(.v-field__prepend-inner),
-.premium-input :deep(.v-field__append-inner) {
-  color: rgba(255, 255, 255, 0.4) !important;
+/* ✅ FORZAR COLOR DE TEXTO EN INPUTS */
+.premium-input input {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
 }
 
 /* ✅ RESUMEN DE NIVELES */
