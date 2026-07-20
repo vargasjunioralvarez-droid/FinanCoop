@@ -833,12 +833,21 @@ const fechaCuota = (n) => {
 
 const crearFinanciamiento = async () => {
   try {
+    // ✅ ENVIAR EL MONTO EN BOLÍVARES DIRECTAMENTE
+    const montoEnBs = parseFloat(montoTotalBS.value)
+    
+    if (!montoEnBs || montoEnBs <= 0) {
+      alert('Ingrese un monto válido')
+      return
+    }
+    
     const data = await api.post('/financiamientos', { 
       cliente_id: clienteEncontrado.value.id, 
       descripcion: descripcion.value || 'Compra', 
-      monto_total_bs: parseFloat(montoTotalBS.value), 
+      monto_total_bs: montoEnBs,  // ✅ En BOLÍVARES
       cuotas_solicitadas: cuotasSeleccionadas.value 
     })
+    
     if (data.error) { 
       alert('Error: ' + data.error)
       return 
@@ -850,6 +859,7 @@ const crearFinanciamiento = async () => {
     alert('Error creando financiamiento') 
   }
 }
+
 
 const resetear = () => {
   paso.value = 1
