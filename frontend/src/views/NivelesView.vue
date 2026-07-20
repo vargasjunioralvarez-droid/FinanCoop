@@ -64,11 +64,11 @@
                         </th>
                         <th class="text-center" style="color: rgba(255,255,255,0.8); font-weight: 700;">
                           <div>Cuotas Base</div>
-                          <div style="font-weight: 600; font-size: 0.75rem; color: #000000; text-align: center;">Mínimo</div>
+                          <div style="font-weight: 600; font-size: 0.75rem; color: #000000; text-align: center;">Cuota Mínimo</div>
                         </th>
                         <th class="text-center" style="color: rgba(255,255,255,0.8); font-weight: 700;">
                           <div>Cuotas Máx</div>
-                          <div style="font-weight: 600; font-size: 0.75rem; color: #000000; text-align: center;">Máximo</div>
+                          <div style="font-weight: 600; font-size: 0.75rem; color: #000000; text-align: center;">Cuota Máximo</div>
                         </th>
                         <th class="text-right" style="color: rgba(255,255,255,0.8); font-weight: 700;">
                           <div>Mora %</div>
