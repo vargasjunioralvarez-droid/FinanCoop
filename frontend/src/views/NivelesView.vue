@@ -49,16 +49,16 @@
                   <v-table class="premium-table">
                     <thead>
                       <tr>
-                        <th class="text-left" style="color: rgba(255,255,255,0.7);">Nivel</th>
-                        <th class="text-left" style="color: rgba(255,255,255,0.7);">Score</th>
-                        <th class="text-right" style="color: rgba(255,255,255,0.7);">Límite USD</th>
-                        <th class="text-right" style="color: rgba(255,255,255,0.7);">Entrada %</th>
-                        <th class="text-right" style="color: rgba(255,255,255,0.7);">Financia %</th>
-                        <th class="text-center" style="color: rgba(255,255,255,0.7);">Cuotas Base</th>
-                        <th class="text-center" style="color: rgba(255,255,255,0.7);">Cuotas Máx</th>
-                        <th class="text-right" style="color: rgba(255,255,255,0.7);">Mora %</th>
-                        <th class="text-center" style="color: rgba(255,255,255,0.7);">Aprobación</th>
-                        <th class="text-center" style="color: rgba(255,255,255,0.7);">Acciones</th>
+                        <th class="text-left" style="color: rgba(255,255,255,0.8); font-weight: 700;">Nivel</th>
+                        <th class="text-left" style="color: rgba(255,255,255,0.8); font-weight: 700;">Score</th>
+                        <th class="text-right" style="color: rgba(255,255,255,0.8); font-weight: 700;">Límite USD</th>
+                        <th class="text-right" style="color: rgba(255,255,255,0.8); font-weight: 700;">Entrada %</th>
+                        <th class="text-right" style="color: rgba(255,255,255,0.8); font-weight: 700;">Financia %</th>
+                        <th class="text-center" style="color: rgba(255,255,255,0.8); font-weight: 700;">Cuotas Base</th>
+                        <th class="text-center" style="color: rgba(255,255,255,0.8); font-weight: 700;">Cuotas Máx</th>
+                        <th class="text-right" style="color: rgba(255,255,255,0.8); font-weight: 700;">Mora %</th>
+                        <th class="text-center" style="color: rgba(255,255,255,0.8); font-weight: 700;">Aprobación</th>
+                        <th class="text-center" style="color: rgba(255,255,255,0.8); font-weight: 700;">Acciones</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -66,10 +66,10 @@
                         <td>
                           <div class="d-flex align-center">
                             <div class="level-dot" :style="`background: ${nivelColor(nivel)}`"></div>
-                            <span class="font-weight-bold" :style="{ color: nivelColor(nivel) }">{{ nivel.toUpperCase() }}</span>
+                            <span class="font-weight-bold" :style="{ color: nivelColor(nivel), fontSize: '0.9rem' }">{{ nivel.toUpperCase() }}</span>
                           </div>
                         </td>
-                        <td style="color: rgba(255,255,255,0.8);">
+                        <td style="color: rgba(255,255,255,0.9); font-weight: 500;">
                           {{ config.min_score }} - {{ config.max_score }}
                         </td>
                         <td>
@@ -81,10 +81,10 @@
                             hide-details
                             variant="outlined"
                             class="premium-input"
-                            bg-color="rgba(255,255,255,0.1)"
+                            bg-color="white"
                           >
                             <template v-slot:prepend-inner>
-                              <span style="color: rgba(255,255,255,0.5); font-weight: 600;">$</span>
+                              <span style="color: #666; font-weight: 600;">$</span>
                             </template>
                           </v-text-field>
                         </td>
@@ -97,12 +97,12 @@
                             hide-details
                             variant="outlined"
                             class="premium-input"
-                            bg-color="rgba(255,255,255,0.1)"
+                            bg-color="white"
                             min="0"
                             max="100"
                           >
                             <template v-slot:append-inner>
-                              <span style="color: rgba(255,255,255,0.5); font-weight: 600;">%</span>
+                              <span style="color: #666; font-weight: 600;">%</span>
                             </template>
                           </v-text-field>
                         </td>
@@ -115,12 +115,12 @@
                             hide-details
                             variant="outlined"
                             class="premium-input"
-                            bg-color="rgba(255,255,255,0.1)"
+                            bg-color="white"
                             min="0"
                             max="100"
                           >
                             <template v-slot:append-inner>
-                              <span style="color: rgba(255,255,255,0.5); font-weight: 600;">%</span>
+                              <span style="color: #666; font-weight: 600;">%</span>
                             </template>
                           </v-text-field>
                         </td>
@@ -133,7 +133,7 @@
                             hide-details
                             variant="outlined"
                             class="premium-input"
-                            bg-color="rgba(255,255,255,0.1)"
+                            bg-color="white"
                           ></v-text-field>
                         </td>
                         <td>
@@ -145,7 +145,7 @@
                             hide-details
                             variant="outlined"
                             class="premium-input"
-                            bg-color="rgba(255,255,255,0.1)"
+                            bg-color="white"
                           ></v-text-field>
                         </td>
                         <td>
@@ -157,11 +157,11 @@
                             hide-details
                             variant="outlined"
                             class="premium-input"
-                            bg-color="rgba(255,255,255,0.1)"
+                            bg-color="white"
                             step="0.1"
                           >
                             <template v-slot:append-inner>
-                              <span style="color: rgba(255,255,255,0.5); font-weight: 600;">%</span>
+                              <span style="color: #666; font-weight: 600;">%</span>
                             </template>
                           </v-text-field>
                         </td>
@@ -218,8 +218,12 @@
                       </div>
                       <div class="level-summary-name" :style="{ color: nivelColor(nivel) }">{{ nivel.toUpperCase() }}</div>
                       <div class="level-summary-amount text-white">${{ config.monto_max_usd }}</div>
-                      <div class="level-summary-details" style="color: rgba(255,255,255,0.5);">
-                        {{ config.entrada_pct }}% entrada · {{ config.cuotas_base }}-{{ config.cuotas_max }} cuotas
+                      <div class="level-summary-details" style="color: rgba(255,255,255,0.6);">
+                        <span style="color: #4caf50;">{{ config.entrada_pct }}% entrada</span> · 
+                        <span style="color: #ffd54f;">{{ config.cuotas_base }}-{{ config.cuotas_max }} cuotas</span>
+                      </div>
+                      <div class="level-summary-details" style="color: rgba(255,255,255,0.4); font-size: 0.6rem;">
+                        Mora: {{ config.mora_diaria }}%
                       </div>
                     </div>
                   </v-col>
@@ -274,22 +278,14 @@ const nivelIcono = (nivel) => {
 const actualizarEntrada = (nivel, valor) => {
   const config = niveles.value[nivel]
   const entrada = parseFloat(valor) || 0
-  
-  // Limitar entre 0 y 100
   config.entrada_pct = Math.min(100, Math.max(0, entrada))
-  
-  // Ajustar financia_pct para que sume 100%
   config.financia_pct = 100 - config.entrada_pct
 }
 
 const actualizarFinancia = (nivel, valor) => {
   const config = niveles.value[nivel]
   const financia = parseFloat(valor) || 0
-  
-  // Limitar entre 0 y 100
   config.financia_pct = Math.min(100, Math.max(0, financia))
-  
-  // Ajustar entrada_pct para que sume 100%
   config.entrada_pct = 100 - config.financia_pct
 }
 
@@ -455,11 +451,6 @@ onMounted(cargarNiveles)
 
 .premium-table thead th {
   background: rgba(255, 255, 255, 0.03) !important;
-  color: rgba(255, 255, 255, 0.7) !important;
-  font-weight: 600 !important;
-  font-size: 0.7rem !important;
-  text-transform: uppercase !important;
-  letter-spacing: 0.8px !important;
   padding: 12px 8px !important;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
 }
@@ -467,7 +458,6 @@ onMounted(cargarNiveles)
 .premium-table tbody td {
   padding: 8px 6px !important;
   border-bottom: 1px solid rgba(255, 255, 255, 0.03) !important;
-  color: rgba(255, 255, 255, 0.8) !important;
 }
 
 .premium-table tbody tr:hover {
@@ -482,11 +472,11 @@ onMounted(cargarNiveles)
   flex-shrink: 0;
 }
 
-/* ✅ INPUTS PREMIUM - VISIBLES */
+/* ✅ INPUTS PREMIUM - CON FONDO BLANCO Y TEXTO NEGRO */
 .premium-input :deep(.v-field) {
-  background: rgba(255, 255, 255, 0.08) !important;
+  background: #ffffff !important;
   border-radius: 10px !important;
-  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border: 1px solid rgba(0, 0, 0, 0.1) !important;
 }
 
 .premium-input :deep(.v-field--focused) {
@@ -495,24 +485,23 @@ onMounted(cargarNiveles)
 }
 
 .premium-input :deep(.v-field__input) {
-  color: #ffffff !important;
+  color: #000000 !important;
   font-size: 0.9rem !important;
   font-weight: 600 !important;
 }
 
 .premium-input :deep(.v-field__input::placeholder) {
-  color: rgba(255, 255, 255, 0.3) !important;
+  color: rgba(0, 0, 0, 0.3) !important;
 }
 
-/* ✅ FORZAR COLOR DE TEXTO EN INPUTS */
 .premium-input input {
-  color: #ffffff !important;
-  -webkit-text-fill-color: #ffffff !important;
+  color: #000000 !important;
+  -webkit-text-fill-color: #000000 !important;
 }
 
 .premium-input :deep(.v-field__prepend-inner),
 .premium-input :deep(.v-field__append-inner) {
-  color: rgba(255, 255, 255, 0.5) !important;
+  color: #666 !important;
 }
 
 /* ✅ RESUMEN DE NIVELES */
