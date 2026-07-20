@@ -1,237 +1,200 @@
 <template>
-  <v-container fluid class="dashboard-bg">
-    <!-- Título con animación -->
-    <v-row>
-      <v-col cols="12">
-        <div class="text-center mb-6">
-          <h1 class="text-h3 font-weight-bold text-white dashboard-title">
-            📊  FinanCoop
-          </h1>
-          <p class="text-subtitle-1 text-grey-lighten-2">
-            Resumen del sistema de financiamiento
-          </p>
+  <v-container fluid class="pa-0">
+    <!-- ✅ FONDO MODERNO -->
+    <div class="background-gradient"></div>
+
+    <v-row class="ma-0">
+      <v-col cols="12" class="pa-4">
+        <!-- ✅ HEADER PREMIUM -->
+        <div class="header-premium d-flex align-center justify-space-between flex-wrap">
+          <div class="d-flex align-center">
+            <div class="icon-wrapper pulse-animation">
+              <v-icon size="32" color="white">mdi-chart-box</v-icon>
+            </div>
+            <div class="ml-3">
+              <h1 class="text-h4 font-weight-bold text-white">Dashboard</h1>
+              <p class="text-subtitle-2 text-white" style="opacity: 0.7;">Resumen del sistema de financiamiento</p>
+            </div>
+          </div>
+          <div class="d-flex align-center" style="gap: 12px;">
+            <div class="tasa-card glass-effect">
+              <v-icon size="20" color="#FFD700">mdi-currency-usd</v-icon>
+              <span class="font-weight-bold text-white ml-1">{{ stats.tasa || 0 }}</span>
+              <span class="text-white" style="opacity: 0.6; font-size: 0.75rem;">BS/$</span>
+            </div>
+            <v-chip class="step-chip" color="transparent" size="large">
+              <span class="text-white font-weight-bold">Actualizado</span>
+              <span class="text-white ml-1" style="opacity: 0.6; font-size: 0.7rem;">{{ new Date().toLocaleTimeString() }}</span>
+            </v-chip>
+          </div>
         </div>
-      </v-col>
-    </v-row>
 
-    <!-- KPIs Principales -->
-    <v-row>
-      <v-col cols="12" sm="6" md="3">
-        <v-card class="kpi-card" elevation="8" color="primary" dark>
-          <v-card-text>
-            <div class="d-flex align-center justify-space-between">
-              <div>
-                <div class="text-caption text-grey-lighten-2">Total Clientes</div>
-                <div class="text-h3 font-weight-bold">{{ stats.clientes }}</div>
-                <div class="text-caption text-success mt-1">
-                  <v-icon size="small">mdi-trending-up</v-icon>
-                  Registrados
+        <!-- ✅ KPIs PRINCIPALES -->
+        <v-row class="mt-4">
+          <v-col cols="12" sm="6" md="3" v-for="kpi in kpis" :key="kpi.label">
+            <div class="kpi-card glass-effect" :class="kpi.color">
+              <div class="d-flex align-center justify-space-between">
+                <div>
+                  <div class="kpi-label">{{ kpi.label }}</div>
+                  <div class="kpi-value">{{ kpi.value }}</div>
+                  <div class="kpi-sub" v-if="kpi.sub">
+                    <v-icon size="14" :color="kpi.subColor || 'white'" class="mr-1">{{ kpi.subIcon }}</v-icon>
+                    {{ kpi.sub }}
+                  </div>
+                </div>
+                <div class="kpi-icon-wrapper" :style="`background: ${kpi.iconBg}`">
+                  <v-icon size="32" color="white">{{ kpi.icon }}</v-icon>
                 </div>
               </div>
-              <v-avatar size="64" color="primary-lighten-2" class="kpi-icon">
-                <v-icon size="36">mdi-account-group</v-icon>
-              </v-avatar>
             </div>
-          </v-card-text>
-        </v-card>
-      </v-col>
+          </v-col>
+        </v-row>
 
-      <v-col cols="12" sm="6" md="3">
-        <v-card class="kpi-card" elevation="8" color="success" dark>
-          <v-card-text>
-            <div class="d-flex align-center justify-space-between">
-              <div>
-                <div class="text-caption text-grey-lighten-2">Financiamientos Activos</div>
-                <div class="text-h3 font-weight-bold">{{ stats.activos }}</div>
-                <div class="text-caption text-warning mt-1">
-                  <v-icon size="small">mdi-clock-outline</v-icon>
-                  En curso
-                </div>
-              </div>
-              <v-avatar size="64" color="success-lighten-2" class="kpi-icon">
-                <v-icon size="36">mdi-cash-multiple</v-icon>
-              </v-avatar>
-            </div>
-          </v-card-text>
-        </v-card>
-      </v-col>
-
-      <v-col cols="12" sm="6" md="3">
-        <v-card class="kpi-card" elevation="8" color="warning" dark>
-          <v-card-text>
-            <div class="d-flex align-center justify-space-between">
-              <div>
-                <div class="text-caption text-grey-lighten-2">Cuotas Pendientes</div>
-                <div class="text-h3 font-weight-bold">{{ stats.pendientes }}</div>
-                <div class="text-caption text-error mt-1">
-                  <v-icon size="small">mdi-alert-circle</v-icon>
-                  Por cobrar
-                </div>
-              </div>
-              <v-avatar size="64" color="warning-lighten-2" class="kpi-icon">
-                <v-icon size="36">mdi-calendar-clock</v-icon>
-              </v-avatar>
-            </div>
-          </v-card-text>
-        </v-card>
-      </v-col>
-
-      <v-col cols="12" sm="6" md="3">
-        <v-card class="kpi-card" elevation="8" color="info" dark>
-          <v-card-text>
-            <div class="d-flex align-center justify-space-between">
-              <div>
-                <div class="text-caption text-grey-lighten-2">Tasa del Día</div>
-                <div class="text-h3 font-weight-bold">{{ stats.tasa }}</div>
-                <div class="text-caption text-grey-lighten-2 mt-1">
-                  <v-icon size="small">mdi-currency-usd</v-icon>
-                  BS/$
-                </div>
-              </div>
-              <v-avatar size="64" color="info-lighten-2" class="kpi-icon">
-                <v-icon size="36">mdi-bank</v-icon>
-              </v-avatar>
-            </div>
-          </v-card-text>
-        </v-card>
-      </v-col>
-    </v-row>
-
-    <!-- Gráfica y Tabla -->
-    <v-row class="mt-4">
-      <!-- Gráfica de Barras -->
-      <v-col cols="12" lg="7">
-        <v-card class="chart-card" elevation="6">
-          <v-card-title class="text-h6 font-weight-bold">
-            <v-icon color="primary" class="mr-2">mdi-chart-bar</v-icon>
-            Financiamientos por Nivel
-          </v-card-title>
-          <v-card-text>
-            <div class="chart-container">
-              <div
-                v-for="(nivel, idx) in nivelesData"
-                :key="idx"
-                class="chart-bar-wrapper"
-              >
-                <div class="chart-label">{{ nivel.nombre }}</div>
-                <div class="chart-bar-bg">
+        <!-- ✅ GRÁFICA Y TABLA -->
+        <v-row class="mt-4">
+          <!-- Gráfica de Barras -->
+          <v-col cols="12" lg="7">
+            <v-card class="glass-card rounded-xl" elevation="0">
+              <v-card-title class="text-h6 font-weight-bold text-white pa-4">
+                <v-icon color="#FFD700" class="mr-2">mdi-chart-bar</v-icon>
+                Financiamientos por Nivel
+              </v-card-title>
+              <v-card-text class="pa-4">
+                <div class="chart-container">
                   <div
-                    class="chart-bar-fill"
-                    :style="{
-                      width: `${(nivel.cantidad / maxNivel) * 100}%`,
-                      backgroundColor: nivel.color
-                    }"
+                    v-for="(nivel, idx) in nivelesData"
+                    :key="idx"
+                    class="chart-bar-wrapper"
                   >
-                    <span class="chart-value">{{ nivel.cantidad }}</span>
+                    <div class="d-flex justify-space-between align-center">
+                      <div class="chart-label">{{ nivel.nombre }}</div>
+                      <span class="chart-count">{{ nivel.cantidad }}</span>
+                    </div>
+                    <div class="chart-bar-bg">
+                      <div
+                        class="chart-bar-fill"
+                        :style="{
+                          width: `${(nivel.cantidad / maxNivel) * 100}%`,
+                          background: `linear-gradient(90deg, ${nivel.color}80, ${nivel.color})`
+                        }"
+                      >
+                        <span class="chart-value">{{ nivel.cantidad }}</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </div>
-          </v-card-text>
-        </v-card>
-      </v-col>
+                <div class="text-caption text-center mt-2" style="color: rgba(255,255,255,0.3);">
+                  Distribución de clientes por nivel de financiamiento
+                </div>
+              </v-card-text>
+            </v-card>
+          </v-col>
 
-      <!-- Tabla de Actividad Reciente -->
-      <v-col cols="12" lg="5">
-        <v-card class="recent-card" elevation="6">
-          <v-card-title class="text-h6 font-weight-bold">
-            <v-icon color="success" class="mr-2">mdi-history</v-icon>
-            Financiamientos Recientes
-          </v-card-title>
-          <v-card-text>
-            <v-list density="compact">
-              <v-list-item
-                v-for="(fin, idx) in recientes"
-                :key="idx"
-                :class="{
-                  'bg-success-lighten-5': fin.estado === 'completado',
-                  'bg-warning-lighten-5': fin.estado === 'activo'
-                }"
-                class="mb-2 rounded"
-              >
-                <template v-slot:prepend>
-                  <v-avatar :color="fin.estado === 'activo' ? 'warning' : 'success'" size="36">
-                    <v-icon size="20" color="white">
-                      {{ fin.estado === 'activo' ? 'mdi-clock-outline' : 'mdi-check-circle' }}
-                    </v-icon>
-                  </v-avatar>
-                </template>
-                <v-list-item-title class="font-weight-bold">
-                  {{ fin.codigo }}
-                  <v-chip size="x-small" :color="fin.estado === 'activo' ? 'warning' : 'success'" class="ml-2">
-                    {{ fin.estado }}
-                  </v-chip>
-                </v-list-item-title>
-                <v-list-item-subtitle>
-                  {{ fin.cliente }} — BS {{ formatearBS(fin.monto_total_bs) }}
-                </v-list-item-subtitle>
-                <template v-slot:append>
-                  <div class="text-caption text-grey">
-                    {{ formatearFecha(fin.fecha_creacion) }}
+          <!-- Actividad Reciente -->
+          <v-col cols="12" lg="5">
+            <v-card class="glass-card rounded-xl" elevation="0">
+              <v-card-title class="text-h6 font-weight-bold text-white pa-4">
+                <v-icon color="#4facfe" class="mr-2">mdi-history</v-icon>
+                Financiamientos Recientes
+              </v-card-title>
+              <v-card-text class="pa-4">
+                <div v-if="recientes.length > 0">
+                  <div
+                    v-for="(fin, idx) in recientes"
+                    :key="idx"
+                    class="recent-item glass-effect mb-2"
+                  >
+                    <div class="d-flex align-center justify-space-between">
+                      <div class="d-flex align-center">
+                        <v-avatar size="40" :color="fin.estado === 'activo' ? '#FFD700' : '#4caf50'" class="mr-3">
+                          <v-icon size="20" color="white">
+                            {{ fin.estado === 'activo' ? 'mdi-clock-outline' : 'mdi-check-circle' }}
+                          </v-icon>
+                        </v-avatar>
+                        <div>
+                          <div class="recent-code font-weight-bold text-white">
+                            {{ fin.codigo }}
+                            <v-chip size="x-small" :color="fin.estado === 'activo' ? 'warning' : 'success'" class="ml-2">
+                              {{ fin.estado }}
+                            </v-chip>
+                          </div>
+                          <div class="recent-cliente" style="color: rgba(255,255,255,0.6); font-size: 0.8rem;">
+                            {{ fin.cliente }}
+                          </div>
+                        </div>
+                      </div>
+                      <div class="text-right">
+                        <div class="recent-monto text-white font-weight-bold">
+                          BS {{ formatearBS(fin.monto_total_bs) }}
+                        </div>
+                        <div class="recent-fecha" style="color: rgba(255,255,255,0.3); font-size: 0.65rem;">
+                          {{ formatearFecha(fin.fecha_creacion) }}
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                </template>
-              </v-list-item>
-            </v-list>
-            <v-alert
-              v-if="recientes.length === 0"
-              type="info"
-              density="compact"
-              class="mt-2"
-            >
-              No hay financiamientos recientes
-            </v-alert>
-          </v-card-text>
-        </v-card>
-      </v-col>
-    </v-row>
+                </div>
+                <div v-else class="empty-state glass-effect">
+                  <v-icon color="rgba(255,255,255,0.3)" size="32">mdi-inbox</v-icon>
+                  <div class="text-caption" style="color: rgba(255,255,255,0.4);">No hay financiamientos recientes</div>
+                </div>
+              </v-card-text>
+            </v-card>
+          </v-col>
+        </v-row>
 
-    <!-- Alertas y Resumen -->
-    <v-row class="mt-4">
-      <v-col cols="12" md="6">
-        <v-card class="alert-card" elevation="6" color="error" dark>
-          <v-card-title class="text-h6">
-            <v-icon class="mr-2">mdi-alert-circle</v-icon>
-            Cuotas Vencidas
-          </v-card-title>
-          <v-card-text>
-            <div class="d-flex align-center">
-              <div class="text-h2 font-weight-bold mr-4">{{ stats.vencidas }}</div>
-              <div>
-                <div class="text-body-1">cuotas están vencidas</div>
+        <!-- ✅ ALERTAS Y RESUMEN -->
+        <v-row class="mt-4">
+          <v-col cols="12" md="6">
+            <div class="alert-card glass-effect" style="border-left: 4px solid #ef5350;">
+              <div class="d-flex align-center justify-space-between">
+                <div class="d-flex align-center">
+                  <div class="alert-icon-wrapper" style="background: rgba(239, 83, 80, 0.15);">
+                    <v-icon size="28" color="#ef5350">mdi-alert-circle</v-icon>
+                  </div>
+                  <div class="ml-3">
+                    <div class="alert-title text-white font-weight-bold">Cuotas Vencidas</div>
+                    <div class="alert-value text-h3 font-weight-bold text-white">{{ stats.vencidas || 0 }}</div>
+                  </div>
+                </div>
                 <v-btn
                   to="/conciliacion"
-                  color="white"
+                  color="#ef5350"
                   variant="outlined"
                   size="small"
-                  class="mt-2"
+                  class="rounded-xl"
                 >
                   Ver Conciliación
                 </v-btn>
               </div>
             </div>
-          </v-card-text>
-        </v-card>
-      </v-col>
+          </v-col>
 
-      <v-col cols="12" md="6">
-        <v-card class="alert-card" elevation="6" color="purple-darken-2" dark>
-          <v-card-title class="text-h6">
-            <v-icon class="mr-2">mdi-wallet</v-icon>
-            Cartera Total
-          </v-card-title>
-          <v-card-text>
-            <div class="d-flex align-center justify-space-between">
-              <div>
-                <div class="text-caption">En Bolívares</div>
-                <div class="text-h4 font-weight-bold">BS {{ formatearBS(stats.cartera_bs) }}</div>
-              </div>
-              <div class="text-right">
-                <div class="text-caption">Referencia USD</div>
-                <div class="text-h4 font-weight-bold">$ {{ formatearUSD(stats.cartera_usd) }}</div>
+          <v-col cols="12" md="6">
+            <div class="alert-card glass-effect" style="border-left: 4px solid #7E57C2;">
+              <div class="d-flex align-center justify-space-between">
+                <div class="d-flex align-center">
+                  <div class="alert-icon-wrapper" style="background: rgba(126, 87, 194, 0.15);">
+                    <v-icon size="28" color="#7E57C2">mdi-wallet</v-icon>
+                  </div>
+                  <div class="ml-3">
+                    <div class="alert-title text-white font-weight-bold">Cartera Total</div>
+                    <div class="d-flex align-center" style="gap: 16px;">
+                      <div>
+                        <span class="text-caption" style="color: rgba(255,255,255,0.4);">BS</span>
+                        <span class="alert-value text-h4 font-weight-bold text-white">{{ formatearBS(stats.cartera_bs) }}</span>
+                      </div>
+                      <div>
+                        <span class="text-caption" style="color: rgba(255,255,255,0.4);">USD</span>
+                        <span class="alert-value text-h4 font-weight-bold text-white">${{ formatearUSD(stats.cartera_usd) }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
-          </v-card-text>
-        </v-card>
+          </v-col>
+        </v-row>
       </v-col>
     </v-row>
   </v-container>
@@ -253,6 +216,49 @@ const stats = ref({
 
 const recientes = ref([])
 const nivelesData = ref([])
+
+const kpis = computed(() => [
+  { 
+    label: 'Total Clientes', 
+    value: stats.value.clientes, 
+    icon: 'mdi-account-group', 
+    color: 'primary',
+    iconBg: 'rgba(79, 172, 254, 0.2)',
+    sub: 'Registrados',
+    subIcon: 'mdi-trending-up',
+    subColor: '#4caf50'
+  },
+  { 
+    label: 'Financiamientos Activos', 
+    value: stats.value.activos, 
+    icon: 'mdi-cash-multiple', 
+    color: 'success',
+    iconBg: 'rgba(76, 175, 80, 0.2)',
+    sub: 'En curso',
+    subIcon: 'mdi-clock-outline',
+    subColor: '#FFD700'
+  },
+  { 
+    label: 'Cuotas Pendientes', 
+    value: stats.value.pendientes, 
+    icon: 'mdi-calendar-clock', 
+    color: 'warning',
+    iconBg: 'rgba(255, 193, 7, 0.2)',
+    sub: 'Por cobrar',
+    subIcon: 'mdi-alert-circle',
+    subColor: '#ef5350'
+  },
+  { 
+    label: 'Tasa del Día', 
+    value: stats.value.tasa || 0, 
+    icon: 'mdi-bank', 
+    color: 'info',
+    iconBg: 'rgba(0, 188, 212, 0.2)',
+    sub: 'BS/$',
+    subIcon: 'mdi-currency-usd',
+    subColor: 'rgba(255,255,255,0.6)'
+  }
+])
 
 const maxNivel = computed(() => {
   if (nivelesData.value.length === 0) return 1
@@ -292,18 +298,17 @@ const cargarDatos = async () => {
     const tasaData = await api.get('/config/tasa-dolar')
     stats.value.tasa = tasaData.tasa || 0
 
-    // ✅ Clientes - el interceptor ya devuelve array
+    // ✅ Clientes
     const clientesData = await api.get('/clientes')
     stats.value.clientes = Array.isArray(clientesData) ? clientesData.length : 0
 
-    // ✅ Financiamientos - el interceptor ya devuelve array
+    // ✅ Financiamientos
     const financiamientos = await api.get('/financiamientos')
     const listaFinanciamientos = Array.isArray(financiamientos) ? financiamientos : []
     
     const activos = listaFinanciamientos.filter(f => f.estado === 'activo')
     stats.value.activos = activos.length
 
-    // Cuotas y cartera
     let pendientes = 0
     let vencidas = 0
     let cartera_bs = 0
@@ -319,7 +324,6 @@ const cargarDatos = async () => {
     }
 
     for (const fin of listaFinanciamientos) {
-      // Contar por nivel
       if (fin.nivel_aplicado && nivelesConteo[fin.nivel_aplicado] !== undefined) {
         nivelesConteo[fin.nivel_aplicado]++
       }
@@ -341,7 +345,7 @@ const cargarDatos = async () => {
           cartera_usd += fin.monto_financia_usd || 0
         }
       } catch (e) {
-        // Si falla una consulta de cuotas, continuar con la siguiente
+        // Continuar
       }
     }
 
@@ -350,14 +354,12 @@ const cargarDatos = async () => {
     stats.value.cartera_bs = cartera_bs
     stats.value.cartera_usd = cartera_usd
 
-    // Datos para gráfica de niveles
     nivelesData.value = Object.keys(nivelesConteo).map(n => ({
       nombre: n.toUpperCase(),
       cantidad: nivelesConteo[n],
       color: colores[n]
     }))
 
-    // Recientes (últimos 5)
     recientes.value = listaFinanciamientos
       .sort((a, b) => new Date(b.creado_en || b.fecha_creacion || 0) - new Date(a.creado_en || a.fecha_creacion || 0))
       .slice(0, 5)
@@ -378,62 +380,147 @@ onMounted(cargarDatos)
 </script>
 
 <style scoped>
-.dashboard-bg {
-  background: linear-gradient(135deg, #1a237e 0%, #0d47a1 50%, #01579b 100%);
-  min-height: 100vh;
-  padding: 24px;
+/* ✅ FONDO MODERNO */
+.background-gradient {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(ellipse at 20% 50%, rgba(79, 172, 254, 0.12), transparent 70%),
+              radial-gradient(ellipse at 80% 50%, rgba(99, 102, 241, 0.08), transparent 70%),
+              #0a0e1a;
+  z-index: 0;
 }
 
-.dashboard-title {
-  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
-  animation: fadeInDown 0.8s ease;
+/* ✅ HEADER PREMIUM */
+.header-premium {
+  position: relative;
+  z-index: 1;
+  padding: 16px 24px;
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(20px);
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
+.icon-wrapper {
+  width: 48px;
+  height: 48px;
+  background: linear-gradient(135deg, #4facfe, #6366f1);
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pulse-animation {
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+.tasa-card {
+  padding: 8px 16px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.step-chip {
+  background: rgba(255, 255, 255, 0.08) !important;
+  padding: 8px 16px !important;
+  border-radius: 50px !important;
+}
+
+/* ✅ GLASS EFFECT */
+.glass-effect {
+  background: rgba(255, 255, 255, 0.05) !important;
+  backdrop-filter: blur(16px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 16px !important;
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.03) !important;
+  backdrop-filter: blur(24px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+  border-radius: 24px !important;
+}
+
+/* ✅ KPIs */
 .kpi-card {
-  border-radius: 16px;
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
-  overflow: hidden;
+  padding: 16px 20px;
+  transition: all 0.3s ease;
 }
 
 .kpi-card:hover {
-  transform: translateY(-8px);
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.3) !important;
+  transform: translateY(-4px);
+  border-color: rgba(79, 172, 254, 0.3) !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2) !important;
 }
 
-.kpi-icon {
-  opacity: 0.9;
+.kpi-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: rgba(255, 255, 255, 0.4);
 }
 
-.chart-card,
-.recent-card,
-.alert-card {
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(10px);
+.kpi-value {
+  font-size: 2rem;
+  font-weight: 800;
+  color: white;
+  line-height: 1.2;
 }
 
+.kpi-sub {
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: 4px;
+}
+
+.kpi-icon-wrapper {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ✅ GRÁFICA */
 .chart-container {
-  padding: 16px 0;
+  padding: 8px 0;
 }
 
 .chart-bar-wrapper {
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 
 .chart-label {
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   font-weight: 600;
-  color: #424242;
-  margin-bottom: 4px;
-  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.chart-count {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: white;
 }
 
 .chart-bar-bg {
-  background: #e0e0e0;
+  background: rgba(255, 255, 255, 0.05);
   border-radius: 8px;
-  height: 32px;
+  height: 28px;
   overflow: hidden;
   position: relative;
+  margin-top: 2px;
 }
 
 .chart-bar-fill {
@@ -449,28 +536,90 @@ onMounted(cargarDatos)
 
 .chart-value {
   color: white;
-  font-weight: bold;
+  font-weight: 700;
+  font-size: 0.8rem;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* ✅ RECIENTES */
+.recent-item {
+  padding: 12px 16px;
+  transition: all 0.3s ease;
+}
+
+.recent-item:hover {
+  transform: translateX(4px);
+  border-color: rgba(79, 172, 254, 0.2) !important;
+}
+
+.recent-code {
+  font-size: 0.85rem;
+}
+
+.recent-cliente {
+  font-size: 0.75rem;
+}
+
+.recent-monto {
   font-size: 0.9rem;
-  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
 }
 
-@keyframes fadeInDown {
-  from {
-    opacity: 0;
-    transform: translateY(-20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+/* ✅ ALERTAS */
+.alert-card {
+  padding: 16px 20px;
 }
 
+.alert-icon-wrapper {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.alert-title {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  opacity: 0.6;
+}
+
+.alert-value {
+  line-height: 1.2;
+}
+
+/* ✅ EMPTY STATE */
+.empty-state {
+  padding: 24px;
+  text-align: center;
+  border: 1px dashed rgba(255, 255, 255, 0.08);
+}
+
+/* ✅ RESPONSIVE */
 @media (max-width: 600px) {
-  .dashboard-title {
-    font-size: 1.5rem !important;
+  .header-premium {
+    flex-direction: column;
+    gap: 12px;
+    align-items: stretch !important;
   }
-  .kpi-card .text-h3 {
-    font-size: 1.5rem !important;
+  
+  .kpi-value {
+    font-size: 1.5rem;
+  }
+  
+  .kpi-icon-wrapper {
+    width: 44px;
+    height: 44px;
+  }
+  
+  .kpi-icon-wrapper .v-icon {
+    font-size: 24px !important;
+  }
+  
+  .alert-card {
+    flex-direction: column;
+    gap: 12px;
   }
 }
 </style>
