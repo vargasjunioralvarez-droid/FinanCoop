@@ -265,6 +265,31 @@ def crear_usuario(
         logger.error(f"❌ Error creando usuario: {e}")
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+    
+    @router.delete("/tiendas/{id}")
+def eliminar_tienda(
+    id: int,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_admin)
+):
+    """Eliminar una tienda. Solo admin_central."""
+    if current_user.rol != "admin_central":
+        raise HTTPException(status_code=403, detail="Solo el administrador central puede eliminar tiendas")
+    
+    tienda = db.query(Tienda).filter(Tienda.id == id).first()
+    if not tienda:
+        raise HTTPException(status_code=404, detail="Tienda no encontrada")
+    
+    # Verificar si tiene clientes o créditos
+    clientes = db.query(Cliente).filter(Cliente.tienda_id == id).count()
+    if clientes > 0:
+        raise HTTPException(status_code=400, detail=f"No se puede eliminar: tiene {clientes} cliente(s) asignados")
+    
+    db.delete(tienda)
+    db.commit()
+    
+    logger.info(f"🗑️ Tienda eliminada: {tienda.nombre}")
+    return {"success": True, "mensaje": f"Tienda {tienda.nombre} eliminada"}
 
 # ============================================================
 # ACTUALIZAR USUARIO (SOLO admin_central)
