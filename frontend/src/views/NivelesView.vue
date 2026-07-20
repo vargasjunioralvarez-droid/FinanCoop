@@ -80,7 +80,6 @@
                             density="compact"
                             hide-details
                             variant="outlined"
-                            prefix="$"
                             class="premium-input"
                             bg-color="rgba(255,255,255,0.1)"
                           >
@@ -92,14 +91,15 @@
                         <td>
                           <v-text-field
                             :model-value="config.entrada_pct"
-                            @update:model-value="config.entrada_pct = $event"
+                            @update:model-value="actualizarEntrada(nivel, $event)"
                             type="number"
                             density="compact"
                             hide-details
                             variant="outlined"
-                            suffix="%"
                             class="premium-input"
                             bg-color="rgba(255,255,255,0.1)"
+                            min="0"
+                            max="100"
                           >
                             <template v-slot:append-inner>
                               <span style="color: rgba(255,255,255,0.5); font-weight: 600;">%</span>
@@ -109,14 +109,15 @@
                         <td>
                           <v-text-field
                             :model-value="config.financia_pct"
-                            @update:model-value="config.financia_pct = $event"
+                            @update:model-value="actualizarFinancia(nivel, $event)"
                             type="number"
                             density="compact"
                             hide-details
                             variant="outlined"
-                            suffix="%"
                             class="premium-input"
                             bg-color="rgba(255,255,255,0.1)"
+                            min="0"
+                            max="100"
                           >
                             <template v-slot:append-inner>
                               <span style="color: rgba(255,255,255,0.5); font-weight: 600;">%</span>
@@ -155,7 +156,6 @@
                             density="compact"
                             hide-details
                             variant="outlined"
-                            suffix="%"
                             class="premium-input"
                             bg-color="rgba(255,255,255,0.1)"
                             step="0.1"
@@ -270,6 +270,29 @@ const nivelIcono = (nivel) => {
   return iconos[nivel] || 'mdi-star'
 }
 
+// ✅ FUNCIONES PARA MANTENER SUMA = 100%
+const actualizarEntrada = (nivel, valor) => {
+  const config = niveles.value[nivel]
+  const entrada = parseFloat(valor) || 0
+  
+  // Limitar entre 0 y 100
+  config.entrada_pct = Math.min(100, Math.max(0, entrada))
+  
+  // Ajustar financia_pct para que sume 100%
+  config.financia_pct = 100 - config.entrada_pct
+}
+
+const actualizarFinancia = (nivel, valor) => {
+  const config = niveles.value[nivel]
+  const financia = parseFloat(valor) || 0
+  
+  // Limitar entre 0 y 100
+  config.financia_pct = Math.min(100, Math.max(0, financia))
+  
+  // Ajustar entrada_pct para que sume 100%
+  config.entrada_pct = 100 - config.financia_pct
+}
+
 const cargarNiveles = async () => {
   try {
     const data = await api.get('/config/niveles')
@@ -288,6 +311,14 @@ const guardarNivel = async (nivel) => {
   
   try {
     const config = niveles.value[nivel]
+    
+    // ✅ VALIDAR QUE LA SUMA SEA 100%
+    const suma = (parseFloat(config.entrada_pct) || 0) + (parseFloat(config.financia_pct) || 0)
+    if (suma !== 100) {
+      errorMsg.value = `❌ La suma de entrada (${config.entrada_pct}%) + financiamiento (${config.financia_pct}%) debe ser 100%`
+      cargandoNivel.value = ''
+      return
+    }
     
     const payload = {
       monto_max_usd: parseFloat(config.monto_max_usd) || 100,
@@ -451,7 +482,7 @@ onMounted(cargarNiveles)
   flex-shrink: 0;
 }
 
-/* ✅ INPUTS PREMIUM - CON TEXTO BLANCO VISIBLE */
+/* ✅ INPUTS PREMIUM - VISIBLES */
 .premium-input :deep(.v-field) {
   background: rgba(255, 255, 255, 0.08) !important;
   border-radius: 10px !important;
@@ -473,14 +504,15 @@ onMounted(cargarNiveles)
   color: rgba(255, 255, 255, 0.3) !important;
 }
 
-.premium-input :deep(.v-label) {
-  color: rgba(255, 255, 255, 0.5) !important;
-}
-
 /* ✅ FORZAR COLOR DE TEXTO EN INPUTS */
 .premium-input input {
   color: #ffffff !important;
   -webkit-text-fill-color: #ffffff !important;
+}
+
+.premium-input :deep(.v-field__prepend-inner),
+.premium-input :deep(.v-field__append-inner) {
+  color: rgba(255, 255, 255, 0.5) !important;
 }
 
 /* ✅ RESUMEN DE NIVELES */
