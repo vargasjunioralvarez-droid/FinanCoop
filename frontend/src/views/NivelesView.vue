@@ -74,8 +74,7 @@
                         </td>
                         <td>
                           <v-text-field
-                            :model-value="config.monto_max_usd"
-                            @update:model-value="config.monto_max_usd = Number($event)"
+                            v-model="config.monto_max_usd"
                             type="number"
                             density="compact"
                             hide-details
@@ -90,7 +89,7 @@
                         </td>
                         <td>
                           <v-text-field
-                            :model-value="config.entrada_pct"
+                            v-model="config.entrada_pct"
                             @update:model-value="actualizarEntrada(nivel, $event)"
                             type="number"
                             density="compact"
@@ -109,7 +108,7 @@
                         </td>
                         <td>
                           <v-text-field
-                            :model-value="config.financia_pct"
+                            v-model="config.financia_pct"
                             @update:model-value="actualizarFinancia(nivel, $event)"
                             type="number"
                             density="compact"
@@ -128,8 +127,7 @@
                         </td>
                         <td>
                           <v-text-field
-                            :model-value="config.cuotas_base"
-                            @update:model-value="config.cuotas_base = Number($event)"
+                            v-model="config.cuotas_base"
                             type="number"
                             density="compact"
                             hide-details
@@ -141,8 +139,7 @@
                         </td>
                         <td>
                           <v-text-field
-                            :model-value="config.cuotas_max"
-                            @update:model-value="config.cuotas_max = Number($event)"
+                            v-model="config.cuotas_max"
                             type="number"
                             density="compact"
                             hide-details
@@ -154,8 +151,7 @@
                         </td>
                         <td>
                           <v-text-field
-                            :model-value="config.mora_diaria"
-                            @update:model-value="config.mora_diaria = Number($event)"
+                            v-model="config.mora_diaria"
                             type="number"
                             density="compact"
                             hide-details
@@ -172,8 +168,7 @@
                         </td>
                         <td class="text-center">
                           <v-checkbox
-                            :model-value="config.aprobacion_extra"
-                            @update:model-value="config.aprobacion_extra = $event"
+                            v-model="config.aprobacion_extra"
                             density="compact"
                             hide-details
                             color="#4facfe"
@@ -199,7 +194,7 @@
           </v-col>
         </v-row>
 
-        <!-- ✅ RESUMEN VISUAL -->
+        <!-- ✅ RESUMEN VISUAL CON SUBTÍTULOS -->
         <v-row class="mt-4">
           <v-col cols="12">
             <v-card class="glass-card rounded-xl" elevation="0">
@@ -243,7 +238,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { api } from '@/config/api'
 
 const niveles = ref({})
@@ -316,7 +311,7 @@ const guardarNivel = async (nivel) => {
   try {
     const config = niveles.value[nivel]
     
-    // ✅ VALIDAR QUE LA SUMA SEA 100%
+    // ✅ CONVERTIR A ENTEROS ANTES DE ENVIAR
     const entrada = parseInt(config.entrada_pct) || 0
     const financia = parseInt(config.financia_pct) || 0
     const suma = entrada + financia
@@ -327,7 +322,6 @@ const guardarNivel = async (nivel) => {
       return
     }
     
-    // ✅ VALIDAR QUE CUOTAS BASE <= CUOTAS MAX
     const cuotasBase = parseInt(config.cuotas_base) || 1
     const cuotasMax = parseInt(config.cuotas_max) || 1
     
@@ -386,7 +380,7 @@ const resetNiveles = async () => {
   try {
     await api.post('/config/niveles/reset')
     successMsg.value = '✅ Niveles restaurados a valores por defecto'
-    await cargarNiveles()
+    await cargandoReset.value = false
   } catch (e) {
     console.error('Error restaurando niveles:', e)
     errorMsg.value = 'Error restaurando niveles'
