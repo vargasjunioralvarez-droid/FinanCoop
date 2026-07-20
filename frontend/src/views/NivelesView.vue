@@ -40,7 +40,7 @@
           </v-alert>
         </div>
 
-        <!-- ✅ TABLA DE NIVELES -->
+        <!-- ✅ TABLA DE NIVELES CON SUBTÍTULOS -->
         <v-row class="mt-4">
           <v-col cols="12">
             <v-card class="glass-card rounded-xl" elevation="0">
@@ -51,12 +51,30 @@
                       <tr>
                         <th class="text-left" style="color: rgba(255,255,255,0.8); font-weight: 700;">Nivel</th>
                         <th class="text-left" style="color: rgba(255,255,255,0.8); font-weight: 700;">Score</th>
-                        <th class="text-right" style="color: rgba(255,255,255,0.8); font-weight: 700;">Límite USD</th>
-                        <th class="text-right" style="color: rgba(255,255,255,0.8); font-weight: 700;">Entrada %</th>
-                        <th class="text-right" style="color: rgba(255,255,255,0.8); font-weight: 700;">Financia %</th>
-                        <th class="text-center" style="color: rgba(255,255,255,0.8); font-weight: 700;">Cuotas Base</th>
-                        <th class="text-center" style="color: rgba(255,255,255,0.8); font-weight: 700;">Cuotas Máx</th>
-                        <th class="text-right" style="color: rgba(255,255,255,0.8); font-weight: 700;">Mora %</th>
+                        <th class="text-right" style="color: rgba(255,255,255,0.8); font-weight: 700;">
+                          <div>Límite USD</div>
+                          <div style="font-weight: 400; font-size: 0.6rem; color: rgba(255,255,255,0.4);">Monto máximo</div>
+                        </th>
+                        <th class="text-right" style="color: rgba(255,255,255,0.8); font-weight: 700;">
+                          <div>Entrada %</div>
+                          <div style="font-weight: 400; font-size: 0.6rem; color: rgba(255,255,255,0.4);">Pago inicial</div>
+                        </th>
+                        <th class="text-right" style="color: rgba(255,255,255,0.8); font-weight: 700;">
+                          <div>Financia %</div>
+                          <div style="font-weight: 400; font-size: 0.6rem; color: rgba(255,255,255,0.4);">Saldo a financiar</div>
+                        </th>
+                        <th class="text-center" style="color: rgba(255,255,255,0.8); font-weight: 700;">
+                          <div>Cuotas Base</div>
+                          <div style="font-weight: 400; font-size: 0.6rem; color: rgba(255,255,255,0.4);">Mínimo</div>
+                        </th>
+                        <th class="text-center" style="color: rgba(255,255,255,0.8); font-weight: 700;">
+                          <div>Cuotas Máx</div>
+                          <div style="font-weight: 400; font-size: 0.6rem; color: rgba(255,255,255,0.4);">Máximo</div>
+                        </th>
+                        <th class="text-right" style="color: rgba(255,255,255,0.8); font-weight: 700;">
+                          <div>Mora %</div>
+                          <div style="font-weight: 400; font-size: 0.6rem; color: rgba(255,255,255,0.4);">Interés diario</div>
+                        </th>
                         <th class="text-center" style="color: rgba(255,255,255,0.8); font-weight: 700;">Aprobación</th>
                         <th class="text-center" style="color: rgba(255,255,255,0.8); font-weight: 700;">Acciones</th>
                       </tr>
@@ -217,13 +235,27 @@
                         <v-icon :color="nivelColor(nivel)">{{ nivelIcono(nivel) }}</v-icon>
                       </div>
                       <div class="level-summary-name" :style="{ color: nivelColor(nivel) }">{{ nivel.toUpperCase() }}</div>
+                      
+                      <!-- LÍMITE -->
                       <div class="level-summary-amount text-white">${{ config.monto_max_usd }}</div>
-                      <div class="level-summary-details" style="color: rgba(255,255,255,0.6);">
-                        <span style="color: #4caf50;">{{ config.entrada_pct }}% entrada</span> · 
-                        <span style="color: #ffd54f;">{{ config.cuotas_base }}-{{ config.cuotas_max }} cuotas</span>
+                      <div class="level-summary-label" style="color: rgba(255,255,255,0.3); font-size: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px;">Límite máximo</div>
+                      
+                      <!-- ENTRADA Y FINANCIAMIENTO -->
+                      <div class="level-summary-details" style="color: rgba(255,255,255,0.6); margin-top: 8px;">
+                        <div>
+                          <span style="color: #4caf50; font-weight: 600;">{{ config.entrada_pct }}%</span>
+                          <span style="color: rgba(255,255,255,0.3); font-size: 0.5rem; display: block;">ENTRADA</span>
+                        </div>
+                        <div style="margin-top: 4px;">
+                          <span style="color: #ffd54f; font-weight: 600;">{{ config.financia_pct }}%</span>
+                          <span style="color: rgba(255,255,255,0.3); font-size: 0.5rem; display: block;">FINANCIA</span>
+                        </div>
                       </div>
-                      <div class="level-summary-details" style="color: rgba(255,255,255,0.4); font-size: 0.6rem;">
-                        Mora: {{ config.mora_diaria }}%
+                      
+                      <!-- CUOTAS -->
+                      <div class="level-summary-details" style="color: rgba(255,255,255,0.4); font-size: 0.6rem; margin-top: 6px;">
+                        <span>{{ config.cuotas_base }}-{{ config.cuotas_max }} cuotas</span>
+                        <span style="color: rgba(255,255,255,0.2); font-size: 0.5rem; display: block;">MORA: {{ config.mora_diaria }}%</span>
                       </div>
                     </div>
                   </v-col>
@@ -238,7 +270,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { api } from '@/config/api'
 
 const niveles = ref({})
@@ -274,10 +306,8 @@ const nivelIcono = (nivel) => {
   return iconos[nivel] || 'mdi-star'
 }
 
-// ✅ FUNCIONES PARA MANTENER SUMA = 100%
 const actualizarEntrada = (nivel, valor) => {
   const config = niveles.value[nivel]
-  // Asegurar que sea un número entero
   let entrada = parseInt(valor) || 0
   entrada = Math.min(100, Math.max(0, entrada))
   config.entrada_pct = entrada
@@ -311,34 +341,24 @@ const guardarNivel = async (nivel) => {
   try {
     const config = niveles.value[nivel]
     
-    // ✅ CONVERTIR A ENTEROS ANTES DE ENVIAR
+    // ✅ VALIDAR SUMA = 100%
     const entrada = parseInt(config.entrada_pct) || 0
     const financia = parseInt(config.financia_pct) || 0
-    const suma = entrada + financia
     
-    if (suma !== 100) {
-      errorMsg.value = `❌ La suma de entrada (${entrada}%) + financiamiento (${financia}%) debe ser 100% (actual: ${suma}%)`
+    if (entrada + financia !== 100) {
+      errorMsg.value = `❌ La suma de entrada (${entrada}%) + financiamiento (${financia}%) debe ser 100%`
       cargandoNivel.value = ''
       return
     }
     
-    const cuotasBase = parseInt(config.cuotas_base) || 1
-    const cuotasMax = parseInt(config.cuotas_max) || 1
-    
-    if (cuotasBase > cuotasMax) {
-      errorMsg.value = `❌ Las cuotas base (${cuotasBase}) no pueden ser mayores que las cuotas máximas (${cuotasMax})`
-      cargandoNivel.value = ''
-      return
-    }
-    
-    // ✅ ENVIAR PORCENTAJES COMO ENTEROS (NO DECIMALES)
+    // ✅ ENVIAR COMO DECIMALES (el backend espera 0.50, 0.50)
     const payload = {
       monto_max_usd: parseFloat(config.monto_max_usd) || 100,
-      entrada_pct: parseInt(config.entrada_pct) || 30,
-      financia_pct: parseInt(config.financia_pct) || 70,
+      entrada_pct: entrada / 100,
+      financia_pct: financia / 100,
       cuotas_base: parseInt(config.cuotas_base) || 3,
       cuotas_max: parseInt(config.cuotas_max) || 6,
-      mora_diaria: parseFloat(config.mora_diaria) || 2,
+      mora_diaria: parseFloat(config.mora_diaria) / 100 || 0.02,
       aprobacion_extra: config.aprobacion_extra || false
     }
     
@@ -380,7 +400,7 @@ const resetNiveles = async () => {
   try {
     await api.post('/config/niveles/reset')
     successMsg.value = '✅ Niveles restaurados a valores por defecto'
-    await cargandoReset.value = false
+    await cargarNiveles()
   } catch (e) {
     console.error('Error restaurando niveles:', e)
     errorMsg.value = 'Error restaurando niveles'
@@ -488,7 +508,7 @@ onMounted(cargarNiveles)
   flex-shrink: 0;
 }
 
-/* ✅ INPUTS PREMIUM - CON FONDO BLANCO Y TEXTO NEGRO */
+/* ✅ INPUTS PREMIUM */
 .premium-input :deep(.v-field) {
   background: #ffffff !important;
   border-radius: 10px !important;
@@ -504,10 +524,6 @@ onMounted(cargarNiveles)
   color: #000000 !important;
   font-size: 0.9rem !important;
   font-weight: 600 !important;
-}
-
-.premium-input :deep(.v-field__input::placeholder) {
-  color: rgba(0, 0, 0, 0.3) !important;
 }
 
 .premium-input input {
@@ -556,6 +572,13 @@ onMounted(cargarNiveles)
 .level-summary-amount {
   font-size: 1.5rem;
   font-weight: 800;
+}
+
+.level-summary-label {
+  font-size: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: -2px;
 }
 
 .level-summary-details {
