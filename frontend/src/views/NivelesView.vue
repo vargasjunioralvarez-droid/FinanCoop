@@ -74,7 +74,8 @@
                         </td>
                         <td>
                           <v-text-field
-                            v-model="config.monto_max_usd"
+                            :model-value="config.monto_max_usd"
+                            @update:model-value="config.monto_max_usd = $event"
                             type="number"
                             density="compact"
                             hide-details
@@ -82,12 +83,12 @@
                             prefix="$"
                             class="premium-input"
                             dark
-                            style="color: white !important;"
                           ></v-text-field>
                         </td>
                         <td>
                           <v-text-field
-                            v-model="config.entrada_pct"
+                            :model-value="config.entrada_pct"
+                            @update:model-value="config.entrada_pct = $event"
                             type="number"
                             density="compact"
                             hide-details
@@ -95,12 +96,12 @@
                             suffix="%"
                             class="premium-input"
                             dark
-                            style="color: white !important;"
                           ></v-text-field>
                         </td>
                         <td>
                           <v-text-field
-                            v-model="config.financia_pct"
+                            :model-value="config.financia_pct"
+                            @update:model-value="config.financia_pct = $event"
                             type="number"
                             density="compact"
                             hide-details
@@ -108,36 +109,36 @@
                             suffix="%"
                             class="premium-input"
                             dark
-                            style="color: white !important;"
                           ></v-text-field>
                         </td>
                         <td>
                           <v-text-field
-                            v-model="config.cuotas_base"
+                            :model-value="config.cuotas_base"
+                            @update:model-value="config.cuotas_base = $event"
                             type="number"
                             density="compact"
                             hide-details
                             variant="outlined"
                             class="premium-input"
                             dark
-                            style="color: white !important;"
                           ></v-text-field>
                         </td>
                         <td>
                           <v-text-field
-                            v-model="config.cuotas_max"
+                            :model-value="config.cuotas_max"
+                            @update:model-value="config.cuotas_max = $event"
                             type="number"
                             density="compact"
                             hide-details
                             variant="outlined"
                             class="premium-input"
                             dark
-                            style="color: white !important;"
                           ></v-text-field>
                         </td>
                         <td>
                           <v-text-field
-                            v-model="config.mora_diaria"
+                            :model-value="config.mora_diaria"
+                            @update:model-value="config.mora_diaria = $event"
                             type="number"
                             density="compact"
                             hide-details
@@ -146,12 +147,12 @@
                             class="premium-input"
                             dark
                             step="0.1"
-                            style="color: white !important;"
                           ></v-text-field>
                         </td>
                         <td class="text-center">
                           <v-checkbox
-                            v-model="config.aprobacion_extra"
+                            :model-value="config.aprobacion_extra"
+                            @update:model-value="config.aprobacion_extra = $event"
                             density="compact"
                             hide-details
                             color="#4facfe"
@@ -257,7 +258,7 @@ const cargarNiveles = async () => {
   try {
     const data = await api.get('/config/niveles')
     niveles.value = data.niveles
-    console.log('📥 Niveles cargados:', niveles.value)
+    console.log('📥 Niveles cargados:', JSON.stringify(niveles.value, null, 2))
   } catch (e) {
     console.error('Error cargando niveles:', e)
     errorMsg.value = 'Error cargando configuración de niveles'
