@@ -289,6 +289,7 @@ class LogsConciliacion(Base):
 # ============================================================
 class LogsConciliacion(Base):
     __tablename__ = "logs_conciliacion"
+    __table_args__ = {'extend_existing': True}
     
     id = Column(Integer, primary_key=True, index=True)
     referencia = Column(String(100))
