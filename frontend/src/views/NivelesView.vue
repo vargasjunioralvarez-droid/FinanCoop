@@ -1,189 +1,210 @@
 <template>
-  <v-container>
-    <v-row>
-      <v-col cols="12">
-        <h1 class="text-h4 mb-4">🏆 Niveles de Financiamiento</h1>
-        <p class="text-body-2 text-grey mb-4">
-          Configure los límites, porcentajes y cuotas para cada nivel de cliente
-        </p>
-      </v-col>
-      
-      <!-- Tabla de Niveles -->
-      <v-col cols="12">
-        <v-card class="rounded-xl" elevation="2">
-          <v-card-title class="d-flex align-center pa-4 bg-primary-lighten-5">
-            <span class="text-h6">Configuración por Nivel</span>
-            <v-spacer></v-spacer>
-            <v-btn 
-              color="warning" 
-              size="small"
-              @click="resetNiveles"
-              :loading="cargandoReset"
-              class="rounded-xl"
-            >
-              <v-icon start>mdi-refresh</v-icon>
-              Restaurar Default
-            </v-btn>
-          </v-card-title>
-          
-          <v-card-text class="pa-4">
-            <!-- ✅ MOSTRAR ERRORES -->
-            <v-alert v-if="errorMsg" type="error" class="mb-3" dismissible @click:close="errorMsg = ''">
-              {{ errorMsg }}
-            </v-alert>
-            <v-alert v-if="successMsg" type="success" class="mb-3" dismissible @click:close="successMsg = ''">
-              {{ successMsg }}
-            </v-alert>
+  <v-container fluid class="pa-0">
+    <!-- ✅ FONDO MODERNO -->
+    <div class="background-gradient"></div>
 
-            <v-table class="rounded-lg">
-              <thead>
-                <tr>
-                  <th class="text-left">Nivel</th>
-                  <th class="text-left">Score</th>
-                  <th class="text-right">Límite USD</th>
-                  <th class="text-right">Entrada %</th>
-                  <th class="text-right">Financia %</th>
-                  <th class="text-center">Cuotas Base</th>
-                  <th class="text-center">Cuotas Máx</th>
-                  <th class="text-right">Mora %</th>
-                  <th class="text-center">Aprobación</th>
-                  <th class="text-center">Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="([nivel, config]) in nivelesOrdenados" :key="nivel">
-                  <td>
-                    <v-chip :color="nivelColor(nivel)" size="small" class="font-weight-bold">
-                      {{ nivel.toUpperCase() }}
-                    </v-chip>
-                  </td>
-                  <td>
-                    {{ config.min_score }} - {{ config.max_score }}
-                  </td>
-                  <td>
-                    <v-text-field
-                      v-model="config.monto_max_usd"
-                      type="number"
-                      density="compact"
-                      hide-details
-                      variant="outlined"
-                      prefix="$"
-                      class="mt-2"
-                    ></v-text-field>
-                  </td>
-                  <td>
-                    <v-text-field
-                      v-model="config.entrada_pct"
-                      type="number"
-                      density="compact"
-                      hide-details
-                      variant="outlined"
-                      suffix="%"
-                      class="mt-2"
-                    ></v-text-field>
-                  </td>
-                  <td>
-                    <v-text-field
-                      v-model="config.financia_pct"
-                      type="number"
-                      density="compact"
-                      hide-details
-                      variant="outlined"
-                      suffix="%"
-                      class="mt-2"
-                    ></v-text-field>
-                  </td>
-                  <td>
-                    <v-text-field
-                      v-model="config.cuotas_base"
-                      type="number"
-                      density="compact"
-                      hide-details
-                      variant="outlined"
-                      class="mt-2"
-                    ></v-text-field>
-                  </td>
-                  <td>
-                    <v-text-field
-                      v-model="config.cuotas_max"
-                      type="number"
-                      density="compact"
-                      hide-details
-                      variant="outlined"
-                      class="mt-2"
-                    ></v-text-field>
-                  </td>
-                  <td>
-                    <v-text-field
-                      v-model="config.mora_diaria"
-                      type="number"
-                      density="compact"
-                      hide-details
-                      variant="outlined"
-                      suffix="%"
-                      class="mt-2"
-                    ></v-text-field>
-                  </td>
-                  <td class="text-center">
-                    <v-checkbox
-                      v-model="config.aprobacion_extra"
-                      density="compact"
-                      hide-details
-                    ></v-checkbox>
-                  </td>
-                  <td class="text-center">
-                    <v-btn 
-                      color="success" 
-                      size="small"
-                      @click="guardarNivel(nivel)"
-                      :loading="cargandoNivel === nivel"
-                      class="rounded-xl"
-                    >
-                      <v-icon size="18">mdi-content-save</v-icon>
-                    </v-btn>
-                  </td>
-                </tr>
-              </tbody>
-            </v-table>
-          </v-card-text>
-        </v-card>
-      </v-col>
-      
-      <!-- Resumen Visual -->
-      <v-col cols="12" class="mt-4">
-        <v-card class="rounded-xl" color="primary" dark>
-          <v-card-title class="pa-4">📊 Resumen de Límites</v-card-title>
-          <v-card-text class="pa-4">
-            <v-row>
-              <v-col 
-                v-for="([nivel, config]) in nivelesOrdenados" 
-                :key="nivel"
-                cols="12" 
-                sm="6" 
-                md="4" 
-                lg="2"
-              >
-                <v-card 
-                  :color="nivelColor(nivel)" 
-                  dark 
-                  class="text-center rounded-xl"
-                  elevation="2"
-                >
-                  <v-card-text class="pa-3">
-                    <div class="text-h6 font-weight-bold">{{ nivel.toUpperCase() }}</div>
-                    <div class="text-h4">${{ config.monto_max_usd }}</div>
-                    <div class="text-caption" style="opacity: 0.8;">Límite máximo</div>
-                    <v-divider class="my-2" style="border-color: rgba(255,255,255,0.2);"></v-divider>
-                    <div class="text-body-2">
-                      Entrada: {{ config.entrada_pct }}%<br>
-                      Cuotas: {{ config.cuotas_base }}-{{ config.cuotas_max }}
+    <v-row class="ma-0">
+      <v-col cols="12" class="pa-4">
+        <!-- ✅ HEADER PREMIUM -->
+        <div class="header-premium d-flex align-center justify-space-between flex-wrap">
+          <div class="d-flex align-center">
+            <div class="icon-wrapper pulse-animation">
+              <v-icon size="32" color="white">mdi-trophy</v-icon>
+            </div>
+            <div class="ml-3">
+              <h1 class="text-h4 font-weight-bold text-white">Niveles de Financiamiento</h1>
+              <p class="text-subtitle-2 text-white" style="opacity: 0.7;">Configuración de niveles por score crediticio</p>
+            </div>
+          </div>
+          <v-btn 
+            color="#FFD700" 
+            size="small"
+            @click="resetNiveles"
+            :loading="cargandoReset"
+            class="rounded-xl"
+          >
+            <v-icon start>mdi-refresh</v-icon>
+            Restaurar Default
+          </v-btn>
+        </div>
+
+        <!-- ✅ ALERTAS -->
+        <div class="mt-4">
+          <v-alert v-if="errorMsg" type="error" class="rounded-xl" dismissible @click:close="errorMsg = ''">
+            <v-icon start>mdi-alert-circle</v-icon>
+            {{ errorMsg }}
+          </v-alert>
+          <v-alert v-if="successMsg" type="success" class="rounded-xl" dismissible @click:close="successMsg = ''">
+            <v-icon start>mdi-check-circle</v-icon>
+            {{ successMsg }}
+          </v-alert>
+        </div>
+
+        <!-- ✅ TABLA DE NIVELES -->
+        <v-row class="mt-4">
+          <v-col cols="12">
+            <v-card class="glass-card rounded-xl" elevation="0">
+              <v-card-text class="pa-4">
+                <div class="table-wrapper">
+                  <v-table class="premium-table">
+                    <thead>
+                      <tr>
+                        <th class="text-left">Nivel</th>
+                        <th class="text-left">Score</th>
+                        <th class="text-right">Límite USD</th>
+                        <th class="text-right">Entrada %</th>
+                        <th class="text-right">Financia %</th>
+                        <th class="text-center">Cuotas Base</th>
+                        <th class="text-center">Cuotas Máx</th>
+                        <th class="text-right">Mora %</th>
+                        <th class="text-center">Aprobación</th>
+                        <th class="text-center">Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="([nivel, config]) in nivelesOrdenados" :key="nivel">
+                        <td>
+                          <div class="d-flex align-center">
+                            <div class="level-dot" :style="`background: ${nivelColor(nivel)}`"></div>
+                            <span class="font-weight-bold text-white">{{ nivel.toUpperCase() }}</span>
+                          </div>
+                        </td>
+                        <td class="text-white" style="opacity: 0.7;">
+                          {{ config.min_score }} - {{ config.max_score }}
+                        </td>
+                        <td>
+                          <v-text-field
+                            v-model="config.monto_max_usd"
+                            type="number"
+                            density="compact"
+                            hide-details
+                            variant="outlined"
+                            prefix="$"
+                            class="premium-input"
+                            dark
+                          ></v-text-field>
+                        </td>
+                        <td>
+                          <v-text-field
+                            v-model="config.entrada_pct"
+                            type="number"
+                            density="compact"
+                            hide-details
+                            variant="outlined"
+                            suffix="%"
+                            class="premium-input"
+                            dark
+                          ></v-text-field>
+                        </td>
+                        <td>
+                          <v-text-field
+                            v-model="config.financia_pct"
+                            type="number"
+                            density="compact"
+                            hide-details
+                            variant="outlined"
+                            suffix="%"
+                            class="premium-input"
+                            dark
+                          ></v-text-field>
+                        </td>
+                        <td>
+                          <v-text-field
+                            v-model="config.cuotas_base"
+                            type="number"
+                            density="compact"
+                            hide-details
+                            variant="outlined"
+                            class="premium-input"
+                            dark
+                          ></v-text-field>
+                        </td>
+                        <td>
+                          <v-text-field
+                            v-model="config.cuotas_max"
+                            type="number"
+                            density="compact"
+                            hide-details
+                            variant="outlined"
+                            class="premium-input"
+                            dark
+                          ></v-text-field>
+                        </td>
+                        <td>
+                          <v-text-field
+                            v-model="config.mora_diaria"
+                            type="number"
+                            density="compact"
+                            hide-details
+                            variant="outlined"
+                            suffix="%"
+                            class="premium-input"
+                            dark
+                            step="0.1"
+                          ></v-text-field>
+                        </td>
+                        <td class="text-center">
+                          <v-checkbox
+                            v-model="config.aprobacion_extra"
+                            density="compact"
+                            hide-details
+                            color="#4facfe"
+                          ></v-checkbox>
+                        </td>
+                        <td class="text-center">
+                          <v-btn 
+                            color="#4caf50" 
+                            size="small"
+                            @click="guardarNivel(nivel)"
+                            :loading="cargandoNivel === nivel"
+                            class="rounded-xl"
+                          >
+                            <v-icon size="18">mdi-content-save</v-icon>
+                          </v-btn>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </v-table>
+                </div>
+              </v-card-text>
+            </v-card>
+          </v-col>
+        </v-row>
+
+        <!-- ✅ RESUMEN VISUAL -->
+        <v-row class="mt-4">
+          <v-col cols="12">
+            <v-card class="glass-card rounded-xl" elevation="0">
+              <v-card-title class="text-h6 font-weight-bold text-white pa-4">
+                <v-icon color="#FFD700" class="mr-2">mdi-chart-pie</v-icon>
+                Resumen de Límites por Nivel
+              </v-card-title>
+              <v-card-text class="pa-4">
+                <v-row>
+                  <v-col 
+                    v-for="([nivel, config]) in nivelesOrdenados" 
+                    :key="nivel"
+                    cols="6" 
+                    sm="4" 
+                    md="3" 
+                    lg="2"
+                  >
+                    <div class="level-summary-card" :style="`border-color: ${nivelColor(nivel)}`">
+                      <div class="level-summary-icon" :style="`background: ${nivelColor(nivel)}20`">
+                        <v-icon :color="nivelColor(nivel)">{{ nivelIcono(nivel) }}</v-icon>
+                      </div>
+                      <div class="level-summary-name text-white">{{ nivel.toUpperCase() }}</div>
+                      <div class="level-summary-amount">${{ config.monto_max_usd }}</div>
+                      <div class="level-summary-details">
+                        {{ config.entrada_pct }}% entrada · {{ config.cuotas_base }}-{{ config.cuotas_max }} cuotas
+                      </div>
                     </div>
-                  </v-card-text>
-                </v-card>
-              </v-col>
-            </v-row>
-          </v-card-text>
-        </v-card>
+                  </v-col>
+                </v-row>
+              </v-card-text>
+            </v-card>
+          </v-col>
+        </v-row>
       </v-col>
     </v-row>
   </v-container>
@@ -199,7 +220,6 @@ const cargandoReset = ref(false)
 const errorMsg = ref('')
 const successMsg = ref('')
 
-// 🔥 ORDENAR: "nuevo" primero, luego por min_score
 const nivelesOrdenados = computed(() => {
   const entries = Object.entries(niveles.value)
   return entries.sort((a, b) => a[1].min_score - b[1].min_score)
@@ -207,13 +227,24 @@ const nivelesOrdenados = computed(() => {
 
 const nivelColor = (nivel) => {
   const colores = { 
-    nuevo: 'grey darken-2', 
-    bronce: 'brown darken-2', 
-    plata: 'blue-grey darken-2', 
-    oro: 'amber darken-2', 
-    platino: 'deep-purple darken-2' 
+    nuevo: '#78909C', 
+    bronce: '#8D6E63', 
+    plata: '#90A4AE', 
+    oro: '#FFD700', 
+    platino: '#7E57C2' 
   }
-  return colores[nivel] || 'grey'
+  return colores[nivel] || '#78909C'
+}
+
+const nivelIcono = (nivel) => {
+  const iconos = { 
+    nuevo: 'mdi-star-outline', 
+    bronce: 'mdi-medal-outline', 
+    plata: 'mdi-silverware', 
+    oro: 'mdi-gold', 
+    platino: 'mdi-diamond-stone'
+  }
+  return iconos[nivel] || 'mdi-star'
 }
 
 const cargarNiveles = async () => {
@@ -235,8 +266,7 @@ const guardarNivel = async (nivel) => {
   try {
     const config = niveles.value[nivel]
     
-    // ✅ SOLO ENVIAR LOS CAMPOS QUE ESPERA EL BACKEND
-    // NO incluir min_score, max_score, creado_en, actualizado_en, id
+    // ✅ SOLO LOS CAMPOS QUE ESPERA EL BACKEND
     const payload = {
       monto_max_usd: parseFloat(config.monto_max_usd) || 100,
       entrada_pct: parseFloat(config.entrada_pct) || 30,
@@ -247,32 +277,21 @@ const guardarNivel = async (nivel) => {
       aprobacion_extra: config.aprobacion_extra || false
     }
     
-    console.log(`📤 Guardando ${nivel}:`, payload)
+    console.log(`📤 Guardando ${nivel}:`, JSON.stringify(payload, null, 2))
     
-    const response = await api.put(`/config/niveles/${nivel}`, payload)
+    await api.put(`/config/niveles/${nivel}`, payload)
     
-    console.log(`✅ Respuesta para ${nivel}:`, response)
     successMsg.value = `✅ Nivel ${nivel.toUpperCase()} actualizado correctamente`
-    
-    // Recargar datos para asegurar consistencia
     await cargarNiveles()
     
   } catch (e) {
     console.error(`❌ Error guardando ${nivel}:`, e)
     
-    // Mostrar mensaje de error más detallado
     let errorDetail = 'Error guardando nivel'
-    if (e.response) {
-      console.error('❌ Response status:', e.response.status)
-      console.error('❌ Response data:', e.response.data)
-      
-      if (e.response.data?.detail) {
-        errorDetail = e.response.data.detail
-      } else if (e.response.data?.message) {
-        errorDetail = e.response.data.message
-      } else {
-        errorDetail = `Error ${e.response.status}: ${JSON.stringify(e.response.data)}`
-      }
+    if (e.response?.data?.detail) {
+      errorDetail = e.response.data.detail
+    } else if (e.response?.data?.message) {
+      errorDetail = e.response.data.message
     } else if (e.message) {
       errorDetail = e.message
     }
@@ -309,26 +328,191 @@ onMounted(cargarNiveles)
 </script>
 
 <style scoped>
+/* ✅ FONDO MODERNO */
+.background-gradient {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(ellipse at 20% 50%, rgba(79, 172, 254, 0.12), transparent 70%),
+              radial-gradient(ellipse at 80% 50%, rgba(99, 102, 241, 0.08), transparent 70%),
+              #0a0e1a;
+  z-index: 0;
+}
+
+/* ✅ HEADER PREMIUM */
+.header-premium {
+  position: relative;
+  z-index: 1;
+  padding: 16px 24px;
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(20px);
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.icon-wrapper {
+  width: 48px;
+  height: 48px;
+  background: linear-gradient(135deg, #4facfe, #6366f1);
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pulse-animation {
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+/* ✅ GLASS EFFECT */
+.glass-effect {
+  background: rgba(255, 255, 255, 0.05) !important;
+  backdrop-filter: blur(16px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.03) !important;
+  backdrop-filter: blur(24px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+  border-radius: 24px !important;
+}
+
 .rounded-xl {
   border-radius: 16px !important;
   overflow: hidden;
 }
 
-.v-table {
-  border-radius: 12px !important;
-  overflow: hidden;
+/* ✅ TABLA PREMIUM */
+.table-wrapper {
+  overflow-x: auto;
 }
 
-.v-table thead th {
-  background: rgba(0, 0, 0, 0.03) !important;
+.premium-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.premium-table thead th {
+  background: rgba(255, 255, 255, 0.03) !important;
+  color: rgba(255, 255, 255, 0.5) !important;
   font-weight: 600 !important;
-  font-size: 0.75rem !important;
+  font-size: 0.7rem !important;
   text-transform: uppercase !important;
-  letter-spacing: 0.5px !important;
-  color: rgba(0,0,0,0.6) !important;
+  letter-spacing: 0.8px !important;
+  padding: 12px 8px !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
 }
 
-.v-alert {
-  border-radius: 12px !important;
+.premium-table tbody td {
+  padding: 8px 6px !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03) !important;
+}
+
+.premium-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.02) !important;
+}
+
+.level-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 10px;
+  flex-shrink: 0;
+}
+
+/* ✅ INPUTS PREMIUM */
+.premium-input :deep(.v-field) {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border-radius: 10px !important;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+}
+
+.premium-input :deep(.v-field--focused) {
+  border-color: #4facfe !important;
+  box-shadow: 0 0 0 3px rgba(79, 172, 254, 0.15) !important;
+}
+
+.premium-input :deep(.v-field__input) {
+  color: white !important;
+  font-size: 0.9rem !important;
+}
+
+.premium-input :deep(.v-field__input::placeholder) {
+  color: rgba(255, 255, 255, 0.2) !important;
+}
+
+/* ✅ RESUMEN DE NIVELES */
+.level-summary-card {
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 16px;
+  padding: 16px;
+  text-align: center;
+  border: 2px solid transparent;
+  transition: all 0.3s ease;
+}
+
+.level-summary-card:hover {
+  transform: translateY(-4px);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.level-summary-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 8px;
+}
+
+.level-summary-name {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  opacity: 0.5;
+}
+
+.level-summary-amount {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: white;
+}
+
+.level-summary-details {
+  font-size: 0.65rem;
+  opacity: 0.4;
+  margin-top: 4px;
+}
+
+/* ✅ RESPONSIVE */
+@media (max-width: 600px) {
+  .header-premium {
+    flex-direction: column;
+    gap: 12px;
+    align-items: stretch !important;
+  }
+  
+  .premium-table thead th,
+  .premium-table tbody td {
+    font-size: 0.7rem !important;
+    padding: 4px !important;
+  }
+  
+  .level-summary-card {
+    padding: 12px;
+  }
+  
+  .level-summary-amount {
+    font-size: 1.2rem;
+  }
 }
 </style>

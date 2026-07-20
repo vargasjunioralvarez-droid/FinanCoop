@@ -16,7 +16,6 @@ router = APIRouter(prefix="/financiamientos", tags=["Financiamientos"])
 
 MAX_CREDITOS_ACTIVOS = 3
 
-
 @router.post("")
 def crear_financiamiento(
     f: FinanciamientoCreate, 
@@ -69,7 +68,6 @@ def crear_financiamiento(
             raise HTTPException(status_code=400, detail=f"Monto excede disponible: ${disponible['disponible_usd']:.2f}")
         
         # ✅ VALIDACIÓN 8: No exceder límite del nivel
-        logger.info(f"🔍 DEBUG: cliente={cliente.nombre}, nivel={nivel}, monto_usd={monto_total_usd:.2f}, limite={config['monto_max_usd']:.2f}")
         if monto_total_usd > config["monto_max_usd"]:
             raise HTTPException(status_code=400, detail=f"❌ Monto excede límite de nivel {nivel}: ${config['monto_max_usd']:.2f} USD (solicitado: ${monto_total_usd:.2f})")
         
@@ -85,12 +83,12 @@ def crear_financiamiento(
         cuotas_aprobadas = f.cuotas_solicitadas if not requiere_aprobacion else config["cuotas_base"]
         
         # ✅ CALCULAR MONTOS
-        # entrada_pct y financia_pct vienen como enteros (30, 70, etc.) desde config.py
-        entrada_pct = config["entrada_pct"] / 100  # 30/100 = 0.30
-        financia_pct = config["financia_pct"] / 100  # 70/100 = 0.70
+        # Los porcentajes vienen como enteros (30, 70, etc.)
+        entrada_pct = config["entrada_pct"] / 100
+        financia_pct = config["financia_pct"] / 100
         
-        entrada_bs = f.monto_total_bs * entrada_pct  # 1000 * 0.30 = 300
-        financia_bs = f.monto_total_bs * financia_pct  # 1000 * 0.70 = 700
+        entrada_bs = f.monto_total_bs * entrada_pct
+        financia_bs = f.monto_total_bs * financia_pct
         monto_cuota_bs = financia_bs / cuotas_aprobadas if cuotas_aprobadas > 0 else 0
         
         entrada_usd_ref = entrada_bs / tasa if tasa > 0 else 0
@@ -255,15 +253,12 @@ def listar_financiamientos(
     try:
         query = db.query(Financiamiento)
         
-        # ✅ FILTRO POR TIENDA
         if tienda_id:
             query = query.filter(Financiamiento.tienda_id == tienda_id)
         
-        # ✅ FILTRO POR CLIENTE
         if cliente_id:
             query = query.filter(Financiamiento.cliente_id == cliente_id)
         
-        # ✅ FILTRO POR ESTADO
         if estado:
             query = query.filter(Financiamiento.estado == estado)
         
@@ -274,7 +269,6 @@ def listar_financiamientos(
         for fin in financiamientos:
             cliente = db.query(Cliente).filter(Cliente.id == fin.cliente_id).first()
             
-            # ✅ CONTAR CUOTAS PAGADAS
             cuotas_pagadas = db.query(Cuota).filter(
                 Cuota.financiamiento_id == fin.id,
                 Cuota.estado == "pagada"
