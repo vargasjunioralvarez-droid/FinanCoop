@@ -291,6 +291,7 @@
 import { ref, reactive, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera'
+import { buildApiUrl } from '@/config'
 
 const router = useRouter()
 
@@ -326,7 +327,6 @@ const telefonoReferenciaCompleto = computed(() => `${codigoPaisReferencia.value}
 const puedeEnviar = computed(() => aceptoTerminos.value && aceptoDatos.value && aceptoDeuda.value && aceptoMora.value)
 
 // Validación de email
-// ✅ CORRECTO
 watch(() => registro.email, (val) => {
   if (!val || val.length === 0) {
     emailError.value = 'El email es obligatorio'
@@ -438,7 +438,7 @@ const guardarRegistroLocal = async () => {
       formData.append('cedula_foto_base64', fotoCedula.value)
     }
 
-    const response = await fetch('https://financoop.onrender.com/api/v1/clientes', { method: 'POST', body: formData })
+    const response = await fetch(buildApiUrl('/clientes'), { method: 'POST', body: formData })
     let data
     const contentType = response.headers.get('content-type')
     if (contentType && contentType.includes('application/json')) {

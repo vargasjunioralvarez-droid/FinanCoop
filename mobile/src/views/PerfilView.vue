@@ -148,6 +148,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useFinanCash } from '@/composables/useFinanCash'
+import { buildApiUrl } from '@/config'
 
 const { 
   token, usuario, financiamientos, nivelActual, lineaUsada,
@@ -177,8 +178,7 @@ const guardarNuevoPin = async () => {
   cambiandoPin.value = true
   try {
     const tokenStr = localStorage.getItem('financoop_token')
-    const API_URL = 'https://financoop.onrender.com/api/v1'
-    const response = await fetch(`${API_URL}/app/cambiar-pin`, {
+    const response = await fetch(buildApiUrl('/app/cambiar-pin'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tokenStr}` },
       body: JSON.stringify({ pin_actual: pinActual.value, pin_nuevo: pinNuevo.value })

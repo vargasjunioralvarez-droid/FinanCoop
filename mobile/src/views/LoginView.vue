@@ -85,6 +85,11 @@
               />
             </div>
 
+            <!-- ✅ BOTÓN "OLVIDÉ MI PIN" -->
+            <div class="forgot-pin-link">
+              <span @click="mostrarRecuperarPin = true">¿Olvidaste tu PIN?</span>
+            </div>
+
             <v-alert
               v-if="error"
               type="error"
@@ -152,15 +157,161 @@
         <span>v2.0 • FinanCoop</span>
       </div>
     </div>
+
+    <!-- ✅ DIÁLOGO DE RECUPERACIÓN DE PIN -->
+    <v-dialog v-model="mostrarRecuperarPin" max-width="400" persistent>
+      <v-card class="recuperar-card">
+        <v-card-title class="pa-4 pb-2">
+          <div class="d-flex align-center">
+            <v-icon color="#4facfe" class="mr-2">mdi-lock-reset</v-icon>
+            <span class="recuperar-title">Recuperar PIN</span>
+          </div>
+        </v-card-title>
+
+        <v-card-text class="pa-4 pt-2">
+          <!-- Paso 1: Ingresar cédula -->
+          <div v-if="pasoRecuperacion === 1">
+            <p class="recuperar-text">
+              Ingresa tu número de cédula y te enviaremos un código de verificación por SMS.
+            </p>
+
+            <v-text-field
+              v-model="recuperacion.cedula"
+              label="Número de Cédula"
+              prepend-inner-icon="mdi-card-account-details"
+              variant="outlined"
+              class="recuperar-input"
+              hide-details
+              placeholder="Ej: 12345678"
+            />
+
+            <v-alert v-if="errorRecuperacion" type="error" variant="tonal" density="compact" class="mt-3">
+              {{ errorRecuperacion }}
+            </v-alert>
+
+            <v-alert v-if="exitoRecuperacion" type="success" variant="tonal" density="compact" class="mt-3">
+              {{ exitoRecuperacion }}
+            </v-alert>
+
+            <div class="d-flex gap-2 mt-4">
+              <v-btn variant="text" @click="cerrarRecuperacion" class="flex-grow-1">Cancelar</v-btn>
+              <v-btn color="#4facfe" @click="solicitarCodigo" class="flex-grow-1" :loading="enviandoCodigo" :disabled="!recuperacion.cedula">
+                <v-icon start>mdi-send</v-icon>Enviar código
+              </v-btn>
+            </div>
+          </div>
+
+          <!-- Paso 2: Verificar código -->
+          <div v-if="pasoRecuperacion === 2">
+            <v-alert type="info" variant="tonal" density="compact" class="mb-3">
+              📱 Código enviado al teléfono asociado a la cédula {{ recuperacion.cedula }}
+            </v-alert>
+
+            <v-text-field
+              v-model="recuperacion.codigo"
+              label="Código de verificación"
+              prepend-inner-icon="mdi-key"
+              variant="outlined"
+              class="recuperar-input"
+              hide-details
+              maxlength="6"
+              placeholder="000000"
+            />
+
+            <v-alert v-if="errorRecuperacion" type="error" variant="tonal" density="compact" class="mt-3">
+              {{ errorRecuperacion }}
+            </v-alert>
+
+            <div class="d-flex gap-2 mt-4">
+              <v-btn variant="text" @click="pasoRecuperacion = 1" class="flex-grow-1">Atrás</v-btn>
+              <v-btn color="#4facfe" @click="verificarCodigo" class="flex-grow-1" :loading="verificandoCodigo" :disabled="!recuperacion.codigo">
+                <v-icon start>mdi-check</v-icon>Verificar
+              </v-btn>
+            </div>
+
+            <div class="text-center mt-3">
+              <v-btn variant="text" size="small" @click="solicitarCodigo" :disabled="reintentos >= 3">
+                <v-icon size="14" class="mr-1">mdi-refresh</v-icon>
+                Reenviar código {{ reintentos >= 3 ? '(máx. 3 intentos)' : '' }}
+              </v-btn>
+            </div>
+          </div>
+
+          <!-- Paso 3: Nuevo PIN -->
+          <div v-if="pasoRecuperacion === 3">
+            <v-alert type="success" variant="tonal" density="compact" class="mb-3">
+              ✅ Código verificado correctamente
+            </v-alert>
+
+            <p class="recuperar-text">Ingresa tu nuevo PIN de 4 dígitos</p>
+
+            <v-text-field
+              v-model="recuperacion.nuevoPin"
+              label="Nuevo PIN"
+              prepend-inner-icon="mdi-lock"
+              variant="outlined"
+              type="password"
+              class="recuperar-input"
+              hide-details
+              maxlength="4"
+              placeholder="••••"
+            />
+
+            <v-text-field
+              v-model="recuperacion.confirmarPin"
+              label="Confirmar PIN"
+              prepend-inner-icon="mdi-lock-check"
+              variant="outlined"
+              type="password"
+              class="recuperar-input mt-3"
+              hide-details
+              maxlength="4"
+              placeholder="••••"
+            />
+
+            <v-alert v-if="errorRecuperacion" type="error" variant="tonal" density="compact" class="mt-3">
+              {{ errorRecuperacion }}
+            </v-alert>
+
+            <div class="d-flex gap-2 mt-4">
+              <v-btn variant="text" @click="cerrarRecuperacion" class="flex-grow-1">Cancelar</v-btn>
+              <v-btn color="#4caf50" @click="cambiarPin" class="flex-grow-1" :loading="cambiandoPin" :disabled="!recuperacion.nuevoPin || !recuperacion.confirmarPin">
+                <v-icon start>mdi-check</v-icon>Guardar PIN
+              </v-btn>
+            </div>
+          </div>
+        </v-card-text>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
 <script setup>
+import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { useFinanCash } from '@/composables/useFinanCash'
+import { buildApiUrl } from '@/config'
 
 const { loginForm, error, cargando, iniciarSesion } = useFinanCash()
 const router = useRouter()
+
+// ✅ Estados de recuperación de PIN
+const mostrarRecuperarPin = ref(false)
+const pasoRecuperacion = ref(1)
+const reintentos = ref(0)
+const enviandoCodigo = ref(false)
+const verificandoCodigo = ref(false)
+const cambiandoPin = ref(false)
+const errorRecuperacion = ref('')
+const exitoRecuperacion = ref('')
+
+const recuperacion = reactive({
+  cedula: '',
+  codigo: '',
+  nuevoPin: '',
+  confirmarPin: '',
+  tokenTemp: ''
+})
 
 const handleLogin = async () => {
   console.log('🔑 Intentando login...')
@@ -182,6 +333,122 @@ const handleLogin = async () => {
 
 const irARegistro = () => {
   router.push('/registro')
+}
+
+// ✅ Funciones de recuperación de PIN
+const cerrarRecuperacion = () => {
+  mostrarRecuperarPin.value = false
+  pasoRecuperacion.value = 1
+  reintentos.value = 0
+  errorRecuperacion.value = ''
+  exitoRecuperacion.value = ''
+  recuperacion.cedula = ''
+  recuperacion.codigo = ''
+  recuperacion.nuevoPin = ''
+  recuperacion.confirmarPin = ''
+  recuperacion.tokenTemp = ''
+}
+
+const solicitarCodigo = async () => {
+  if (!recuperacion.cedula || recuperacion.cedula.length < 6) {
+    errorRecuperacion.value = 'Ingresa un número de cédula válido'
+    return
+  }
+
+  if (reintentos.value >= 3) {
+    errorRecuperacion.value = 'Has alcanzado el límite de intentos'
+    return
+  }
+
+  enviandoCodigo.value = true
+  errorRecuperacion.value = ''
+  exitoRecuperacion.value = ''
+
+  try {
+    const response = await fetch(buildApiUrl('/auth/recuperar-pin/solicitar-codigo'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cedula: recuperacion.cedula.trim() })
+    })
+
+    const data = await response.json()
+    if (!response.ok) throw new Error(data.detail || 'Error al enviar el código')
+
+    exitoRecuperacion.value = 'Código enviado correctamente'
+    pasoRecuperacion.value = 2
+    reintentos.value++
+  } catch (err) {
+    errorRecuperacion.value = err.message || 'Error de conexión'
+  } finally {
+    enviandoCodigo.value = false
+  }
+}
+
+const verificarCodigo = async () => {
+  if (!recuperacion.codigo || recuperacion.codigo.length < 4) {
+    errorRecuperacion.value = 'Ingresa el código de verificación'
+    return
+  }
+
+  verificandoCodigo.value = true
+  errorRecuperacion.value = ''
+
+  try {
+    const response = await fetch(buildApiUrl('/auth/recuperar-pin/verificar-codigo'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        cedula: recuperacion.cedula.trim(),
+        codigo: recuperacion.codigo.trim()
+      })
+    })
+
+    const data = await response.json()
+    if (!response.ok) throw new Error(data.detail || 'Código inválido')
+
+    recuperacion.tokenTemp = data.token_temp || data.access_token
+    pasoRecuperacion.value = 3
+    errorRecuperacion.value = ''
+  } catch (err) {
+    errorRecuperacion.value = err.message || 'Código incorrecto'
+  } finally {
+    verificandoCodigo.value = false
+  }
+}
+
+const cambiarPin = async () => {
+  if (recuperacion.nuevoPin.length < 4) {
+    errorRecuperacion.value = 'El PIN debe tener 4 dígitos'
+    return
+  }
+  if (recuperacion.nuevoPin !== recuperacion.confirmarPin) {
+    errorRecuperacion.value = 'Los PINs no coinciden'
+    return
+  }
+
+  cambiandoPin.value = true
+  errorRecuperacion.value = ''
+
+  try {
+    const response = await fetch(buildApiUrl('/auth/recuperar-pin/cambiar'), {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${recuperacion.tokenTemp}`
+      },
+      body: JSON.stringify({ nuevo_pin: recuperacion.nuevoPin })
+    })
+
+    const data = await response.json()
+    if (!response.ok) throw new Error(data.detail || 'Error al cambiar PIN')
+
+    alert('✅ PIN actualizado correctamente. Ahora puedes iniciar sesión.')
+    cerrarRecuperacion()
+  } catch (err) {
+    errorRecuperacion.value = err.message || 'Error al cambiar PIN'
+  } finally {
+    cambiandoPin.value = false
+  }
 }
 </script>
 
@@ -436,6 +703,24 @@ const irARegistro = () => {
   color: rgba(255,255,255,0.3) !important;
 }
 
+/* ============ OLVIDÉ MI PIN ============ */
+.forgot-pin-link {
+  text-align: right;
+  margin-top: -10px;
+  margin-bottom: -6px;
+}
+
+.forgot-pin-link span {
+  font-size: 12px;
+  color: rgba(255,255,255,0.5);
+  cursor: pointer;
+  transition: color 0.3s ease;
+}
+
+.forgot-pin-link span:hover {
+  color: #4facfe;
+}
+
 /* ============ BOTONES ============ */
 .login-btn {
   background: linear-gradient(135deg, #4facfe, #6366f1) !important;
@@ -545,6 +830,42 @@ const irARegistro = () => {
   letter-spacing: 1px;
 }
 
+/* ============ DIÁLOGO RECUPERACIÓN ============ */
+.recuperar-card {
+  background: #1a1f3a !important;
+  border: 1px solid rgba(255,255,255,0.08) !important;
+  border-radius: 20px !important;
+}
+
+.recuperar-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.recuperar-text {
+  color: rgba(255,255,255,0.6);
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+.recuperar-input :deep(.v-field) {
+  background: rgba(255,255,255,0.04) !important;
+  border-radius: 12px !important;
+}
+
+.recuperar-input :deep(.v-field__input) {
+  color: #ffffff !important;
+}
+
+.recuperar-input :deep(.v-label) {
+  color: rgba(255,255,255,0.6) !important;
+}
+
+.gap-2 {
+  gap: 8px;
+}
+
 /* ============ RESPONSIVE ============ */
 @media (max-width: 480px) {
   .login-wrapper {
@@ -623,7 +944,7 @@ const irARegistro = () => {
   }
 }
 
-/* ============ TEMA OSCURO (opcional) ============ */
+/* ============ TEMA OSCURO ============ */
 @media (prefers-color-scheme: dark) {
   .login-card {
     background: rgba(10, 14, 26, 0.8) !important;

@@ -1,16 +1,23 @@
 // src/config.js
 // Configuración centralizada de la API
-export const API_URL = 'https://financoop.onrender.com'
+
+// ✅ SIEMPRE CONECTAR A RENDER
+export const API_URL = 'https://financoop.onrender.com/api/v1'
+
+console.log('🌐 API URL configurada:', API_URL)
 
 // ✅ FIX: Helper para construir URLs de API
 export function buildApiUrl(endpoint) {
-  return `${API_URL}${endpoint}`
+  // Asegurarse de que el endpoint empiece con /
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`
+  return `${API_URL}${cleanEndpoint}`
 }
 
 // ✅ FIX: Helper para obtener headers comunes
 export function getCommonHeaders(token = null) {
   const headers = {
-    'Accept': 'application/json'
+    'Accept': 'application/json',
+    'Content-Type': 'application/json'
   }
 
   if (token) {
@@ -24,7 +31,8 @@ export function getCommonHeaders(token = null) {
 export function isCapacitor() {
   return window.Capacitor !== undefined || 
          navigator.userAgent.includes('Capacitor') ||
-         document.URL.includes('capacitor://')
+         document.URL.includes('capacitor://') ||
+         document.URL.includes('localhost')
 }
 
 // ✅ FIX: Verificar conexión a internet

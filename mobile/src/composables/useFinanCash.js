@@ -1,9 +1,8 @@
 // mobile/src/composables/useFinanCash.js
 import { ref, computed } from 'vue'
 import { CapacitorHttp } from '@capacitor/core'
+import { buildApiUrl } from '@/config'
 
-// ✅ URL con /api/v1
-const API_URL = import.meta.env.VITE_API_URL || 'https://financoop.onrender.com/api/v1'
 // ============ TIMEOUT DE INACTIVIDAD ============
 const INACTIVITY_TIMEOUT = 15 * 60 * 1000
 let inactivityTimer = null
@@ -239,7 +238,7 @@ function copiarAlPortapapeles(texto) {
 
 // ============ API CALLS CON CapacitorHttp ============
 async function apiCall(endpoint, options = {}) {
-  const url = `${API_URL}${endpoint}`
+  const url = buildApiUrl(endpoint)
   const currentToken = localStorage.getItem('financoop_token') || token.value
 
   const headers = {
@@ -399,7 +398,7 @@ async function registrarCliente(formData) {
       return { success: false, error: error.value }
     }
 
-    const response = await fetch(`${API_URL}/clientes`, {
+    const response = await fetch(buildApiUrl('/clientes'), {
       method: 'POST',
       body: formData
     })

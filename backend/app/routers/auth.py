@@ -7,9 +7,11 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, Field, validator
 from sqlalchemy.orm import Session
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import logging
 import re
+import random
+from jose import jwt, JWTError, ExpiredSignatureError
 
 from app.database import get_db
 from app.models import Usuario, Cliente
@@ -18,7 +20,8 @@ from app.auth import (
     get_current_cliente, get_current_admin, get_current_user,
     hash_password, hash_pin, verify_password, verify_pin,
     _check_rate_limit, _record_failed_attempt, _record_successful_attempt,
-    _hash_token, blacklist_token, ACCESS_TOKEN_EXPIRE_MINUTES
+    _hash_token, blacklist_token, ACCESS_TOKEN_EXPIRE_MINUTES,
+    SECRET_KEY, ALGORITHM
 )
 
 logger = logging.getLogger(__name__)
@@ -81,6 +84,23 @@ class RegistroAdminRequest(BaseModel):
     email: str = Field(default="", max_length=200)
     tienda_id: int = None
 
+# ✅ MODELOS PARA RECUPERACIÓN DE PIN
+class SolicitarCodigoRequest(BaseModel):
+    """Solicitar código de recuperación por SMS"""
+    cedula: str = Field(..., min_length=6, max_length=20, pattern=r"^[0-9Vv-]+$")
+
+class VerificarCodigoRequest(BaseModel):
+    """Verificar código de recuperación"""
+    cedula: str = Field(..., min_length=6, max_length=20)
+    codigo: str = Field(..., min_length=4, max_length=6)
+
+class CambiarPinRequest(BaseModel):
+    """Cambiar PIN después de verificar código"""
+    nuevo_pin: str = Field(..., min_length=4, max_length=6, pattern=r"^[0-9]+$")
+
+# Almacenamiento temporal de códigos (en producción usa Redis)
+codigos_recuperacion = {}
+
 # ============================================================
 # 🔐 LOGIN ADMIN - JSON (RECOMENDADO PARA FRONTEND VUE)
 # ============================================================
@@ -108,7 +128,6 @@ def login_admin_json(
     
     usuario = db.query(Usuario).filter(Usuario.username == username).first()
     
-    # Timing-safe: verificar contra hash dummy si usuario no existe
     if not usuario:
         verify_password(password, DUMMY_HASH)
         _record_failed_attempt(rate_key)
@@ -385,11 +404,180 @@ def logout(
     token = auth_header.replace("Bearer ", "")
     
     try:
-        from app.auth import SECRET_KEY, ALGORITHM
-        from jose import jwt
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM], 
                             audience="financoop-api", issuer="financoop-backend")
         blacklist_token(payload["jti"], datetime.fromtimestamp(payload["exp"], tz=timezone.utc), db)
         return {"mensaje": "Sesión cerrada"}
     except:
         return {"mensaje": "Sesión cerrada"}
+
+# ============================================================
+# 🔑 RECUPERACIÓN DE PIN (App Móvil)
+# ============================================================
+
+@router.post("/recuperar-pin/solicitar-codigo")
+def solicitar_codigo_recuperacion(
+    request_data: SolicitarCodigoRequest,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """
+    Solicitar código de recuperación de PIN.
+    Envía un código de 6 dígitos por SMS al número registrado.
+    """
+    cedula = request_data.cedula.strip().upper()
+    
+    client_ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "unknown")
+    rate_key = f"recuperar_pin:{cedula}:{client_ip}"
+    
+    if not _check_rate_limit(rate_key):
+        raise HTTPException(status_code=429, detail="Demasiados intentos. Intente en 15 minutos.")
+    
+    cliente = db.query(Cliente).filter(Cliente.cedula == cedula).first()
+    
+    if not cliente:
+        import time
+        time.sleep(0.5)
+        return {"mensaje": "Si la cédula está registrada, recibirás un código por SMS", "success": True}
+    
+    codigo = str(random.randint(100000, 999999))
+    
+    codigos_recuperacion[cedula] = {
+        "codigo": codigo,
+        "cliente_id": cliente.id,
+        "expiracion": datetime.now(timezone.utc) + timedelta(minutes=30),
+        "intentos": 0
+    }
+    
+    try:
+        logger.info(f"📱 Código de recuperación para {cliente.nombre}: {codigo}")
+        print(f"\n{'='*50}")
+        print(f"📱 RECUPERACIÓN PIN - {cliente.nombre}")
+        print(f"📱 Teléfono: {cliente.telefono}")
+        print(f"🔑 Código: {codigo}")
+        print(f"{'='*50}\n")
+    except Exception as e:
+        logger.error(f"Error enviando SMS: {e}")
+    
+    _record_failed_attempt(rate_key)
+    
+    return {
+        "mensaje": "Si la cédula está registrada, recibirás un código por SMS",
+        "success": True
+    }
+
+
+@router.post("/recuperar-pin/verificar-codigo")
+def verificar_codigo_recuperacion(
+    request_data: VerificarCodigoRequest,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """
+    Verificar código de recuperación y devolver token temporal.
+    """
+    cedula = request_data.cedula.strip().upper()
+    codigo = request_data.codigo.strip()
+    
+    datos = codigos_recuperacion.get(cedula)
+    
+    if not datos:
+        raise HTTPException(status_code=400, detail="Código no solicitado o expirado")
+    
+    if datetime.now(timezone.utc) > datos["expiracion"]:
+        del codigos_recuperacion[cedula]
+        raise HTTPException(status_code=400, detail="Código expirado. Solicite uno nuevo.")
+    
+    if datos["intentos"] >= 3:
+        del codigos_recuperacion[cedula]
+        raise HTTPException(status_code=400, detail="Demasiados intentos. Solicite un nuevo código.")
+    
+    datos["intentos"] += 1
+    
+    if datos["codigo"] != codigo:
+        raise HTTPException(status_code=400, detail="Código incorrecto")
+    
+    cliente = db.query(Cliente).filter(Cliente.id == datos["cliente_id"]).first()
+    
+    if not cliente:
+        raise HTTPException(status_code=400, detail="Cliente no encontrado")
+    
+    token_temp = create_access_token(
+        data={
+            "sub": str(cliente.id),
+            "rol": "cliente",
+            "type": "pin_reset",
+            "cedula": cedula
+        },
+        expires_delta=timedelta(minutes=5)
+    )
+    
+    del codigos_recuperacion[cedula]
+    
+    logger.info(f"✅ Código verificado para {cliente.nombre}")
+    
+    return {
+        "mensaje": "Código verificado correctamente",
+        "token_temp": token_temp,
+        "success": True
+    }
+
+
+@router.post("/recuperar-pin/cambiar")
+def cambiar_pin_recuperacion(
+    request_data: CambiarPinRequest,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """
+    Cambiar PIN usando token temporal de recuperación.
+    """
+    auth_header = request.headers.get("Authorization", "")
+    token = auth_header.replace("Bearer ", "")
+    
+    if not token:
+        raise HTTPException(status_code=401, detail="Token requerido")
+    
+    try:
+        payload = jwt.decode(
+            token, SECRET_KEY, algorithms=[ALGORITHM],
+            audience="financoop-api", issuer="financoop-backend"
+        )
+        
+        if payload.get("type") != "pin_reset":
+            raise HTTPException(status_code=401, detail="Token no válido para esta operación")
+        
+        cliente_id = payload.get("sub")
+        
+        if not cliente_id:
+            raise HTTPException(status_code=401, detail="Token inválido")
+        
+        cliente = db.query(Cliente).filter(Cliente.id == int(cliente_id)).first()
+        
+        if not cliente:
+            raise HTTPException(status_code=404, detail="Cliente no encontrado")
+        
+        nuevo_pin = request_data.nuevo_pin.strip()
+        cliente.pin_hash = hash_pin(nuevo_pin)
+        db.commit()
+        
+        logger.info(f"🔐 PIN actualizado para {cliente.nombre}")
+        
+        blacklist_token(
+            payload["jti"], 
+            datetime.fromtimestamp(payload["exp"], tz=timezone.utc), 
+            db
+        )
+        
+        return {
+            "mensaje": "PIN actualizado correctamente",
+            "success": True
+        }
+        
+    except ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expirado. Solicite un nuevo código.")
+    except JWTError as e:
+        raise HTTPException(status_code=401, detail="Token inválido")
+    except Exception as e:
+        logger.error(f"Error cambiando PIN: {e}")
+        raise HTTPException(status_code=500, detail="Error interno")
