@@ -93,18 +93,18 @@
 
     <!-- DIALOG: Crear/Editar Usuario -->
     <v-dialog v-model="dialogUsuario" max-width="500">
-      <v-card class="glass-card">
+      <v-card class="dialog-card">
         <v-card-title class="text-white pa-4" :style="`background: linear-gradient(135deg, ${usuarioEditando ? '#ffd54f, #f9a825' : '#4caf50, #2e7d32'});`">
           <v-icon start>{{ usuarioEditando ? 'mdi-pencil' : 'mdi-account-plus' }}</v-icon>
           {{ usuarioEditando ? 'Editar Usuario' : 'Nuevo Usuario' }}
         </v-card-title>
-        <v-card-text class="pa-4">
-          <v-text-field v-model="formUsuario.username" label="Usuario *" :disabled="!!usuarioEditando" variant="outlined" density="comfortable" dark class="custom-input mb-2" placeholder="Ej: ana" />
-          <v-text-field v-model="formUsuario.password" label="Contraseña" type="password" variant="outlined" density="comfortable" dark class="custom-input mb-2" :placeholder="usuarioEditando ? '••••••••' : 'Mínimo 8 caracteres'" />
-          <v-text-field v-model="formUsuario.nombre" label="Nombre completo" variant="outlined" density="comfortable" dark class="custom-input mb-2" placeholder="Ej: Ana García" />
-          <v-text-field v-model="formUsuario.email" label="Email" variant="outlined" density="comfortable" dark class="custom-input mb-2" placeholder="Ej: ana@coop.com" />
-          <v-select v-model="formUsuario.rol" :items="rolesDisponibles" label="Rol *" variant="outlined" density="comfortable" dark class="custom-input mb-2" />
-          <v-select v-if="formUsuario.rol !== 'admin'" v-model="formUsuario.tienda_id" :items="tiendas" item-title="nombre" item-value="id" label="Asignar a Tienda/Cooperativa *" variant="outlined" density="comfortable" dark class="custom-input mb-2" />
+        <v-card-text class="pa-5">
+          <v-text-field v-model="formUsuario.username" label="Usuario *" :disabled="!!usuarioEditando" variant="solo-filled" density="comfortable" dark class="custom-input mb-4" placeholder="Ej: ana" />
+          <v-text-field v-model="formUsuario.password" label="Contraseña" type="password" variant="solo-filled" density="comfortable" dark class="custom-input mb-4" :placeholder="usuarioEditando ? '••••••••' : 'Mínimo 8 caracteres'" />
+          <v-text-field v-model="formUsuario.nombre" label="Nombre completo" variant="solo-filled" density="comfortable" dark class="custom-input mb-4" placeholder="Ej: Ana García" />
+          <v-text-field v-model="formUsuario.email" label="Email" variant="solo-filled" density="comfortable" dark class="custom-input mb-4" placeholder="Ej: ana@coop.com" />
+          <v-select v-model="formUsuario.rol" :items="rolesDisponibles" label="Rol *" variant="solo-filled" density="comfortable" dark class="custom-input mb-4" />
+          <v-select v-if="formUsuario.rol !== 'admin'" v-model="formUsuario.tienda_id" :items="tiendas" item-title="nombre" item-value="id" label="Asignar a Tienda/Cooperativa *" variant="solo-filled" density="comfortable" dark class="custom-input mb-4" />
           <v-switch v-model="formUsuario.activo" label="Usuario activo" color="#4caf50" hide-details class="mt-2" />
         </v-card-text>
         <v-card-actions class="pa-4">
@@ -119,7 +119,7 @@
 
     <!-- DIALOG: Eliminar -->
     <v-dialog v-model="dialogEliminar" max-width="400">
-      <v-card class="glass-card">
+      <v-card class="dialog-card">
         <v-card-title class="text-white pa-4" style="background: linear-gradient(135deg, #f44336, #c62828);">
           <v-icon start>mdi-delete</v-icon>¿Eliminar usuario?
         </v-card-title>
@@ -152,7 +152,6 @@ const usuarioAEliminar = ref(null)
 
 const formUsuario = ref({ username: '', password: '', nombre: '', email: '', rol: 'cajero', tienda_id: null, activo: true })
 
-// ✅ Solo admin_central puede editar/eliminar
 const esAdmin = computed(() => {
   const rol = localStorage.getItem('admin_rol')
   return rol === 'admin_central'
@@ -233,16 +232,24 @@ onMounted(() => {
 .step-chip { background: rgba(255,255,255,0.08) !important; padding: 8px 16px !important; border-radius: 50px !important; }
 .glass-effect { background: rgba(255,255,255,0.05) !important; backdrop-filter: blur(16px) !important; border: 1px solid rgba(255,255,255,0.08) !important; border-radius: 12px !important; }
 .glass-card { background: rgba(255,255,255,0.03) !important; backdrop-filter: blur(24px) !important; border: 1px solid rgba(255,255,255,0.06) !important; border-radius: 24px !important; }
+.dialog-card { background: #1a1f2e !important; border: 1px solid rgba(255,255,255,0.08) !important; border-radius: 16px !important; }
 .table-wrapper { overflow-x: auto; }
 .premium-table { background: transparent !important; }
 .premium-table :deep(th) { color: rgba(255,255,255,0.7) !important; font-weight: 700 !important; font-size: 0.75rem !important; text-transform: uppercase; padding: 12px 8px !important; border-bottom: 1px solid rgba(255,255,255,0.06) !important; }
 .premium-table :deep(td) { color: rgba(255,255,255,0.9) !important; padding: 10px 8px !important; border-bottom: 1px solid rgba(255,255,255,0.03) !important; }
 .premium-table :deep(tr:hover) { background: rgba(255,255,255,0.02) !important; }
-.custom-input :deep(.v-field) { background: rgba(255,255,255,0.05) !important; border-radius: 12px !important; border: 1px solid rgba(255,255,255,0.08) !important; }
-.custom-input :deep(.v-field--focused) { border-color: #4facfe !important; }
-.custom-input :deep(.v-label) { color: rgba(255,255,255,0.5) !important; }
-.custom-input :deep(.v-field__input) { color: white !important; }
-.custom-input :deep(.v-field__input::placeholder) { color: rgba(255,255,255,0.6) !important; font-weight: 500 !important; opacity: 1 !important; }
+
+/* ✅ CAMPOS ESPACIADOS Y LABEL FIJO ARRIBA */
+.custom-input :deep(.v-field) { background: rgba(255,255,255,0.06) !important; border-radius: 12px !important; border: 1px solid rgba(255,255,255,0.12) !important; min-height: 52px !important; padding-top: 8px !important; }
+.custom-input :deep(.v-field--focused) { border-color: #4facfe !important; background: rgba(255,255,255,0.08) !important; }
+.custom-input :deep(.v-label) { color: rgba(255,255,255,0.8) !important; font-weight: 600 !important; font-size: 12px !important; top: 8px !important; transform: none !important; position: absolute !important; }
+.custom-input :deep(.v-field--focused .v-label) { color: #4facfe !important; }
+.custom-input :deep(.v-field__input) { color: white !important; padding-top: 20px !important; padding-bottom: 6px !important; min-height: auto !important; }
+.custom-input :deep(.v-field__input::placeholder) { color: rgba(255,255,255,0.3) !important; font-weight: 400 !important; opacity: 1 !important; }
+.custom-input :deep(.v-field__outline) { display: none; }
+.custom-input :deep(.v-select__selection-text) { color: white !important; }
+.custom-input :deep(.v-select__selection) { color: white !important; padding-top: 20px !important; }
+
 .empty-state { padding: 24px; text-align: center; border: 1px dashed rgba(255,255,255,0.08); }
 .gap-1 { gap: 4px; }
 @media (max-width: 600px) { .header-premium { flex-direction: column; gap: 12px; align-items: stretch !important; } }
