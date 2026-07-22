@@ -177,6 +177,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 # ─────────────────────────────────────────────────────────────
 Base.metadata.create_all(bind=engine)
 
+
 # ─────────────────────────────────────────────────────────────
 # 📊 INICIALIZAR DATOS
 # ─────────────────────────────────────────────────────────────
