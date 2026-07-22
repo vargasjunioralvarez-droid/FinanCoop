@@ -12,9 +12,7 @@ import logging
 import re
 import random
 import os
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+import requests
 from jose import jwt, JWTError, ExpiredSignatureError
 
 from app.database import get_db
@@ -35,12 +33,9 @@ router = APIRouter(prefix="/auth", tags=["Autenticación"])
 DUMMY_HASH = "$2b$12$LJ3m4ys3GZfnYMz8kVsKaOmLp1GpGmB0qJX3PzV3QXjKtHqKw8m5u"
 
 # ============================================================
-# 📧 CONFIGURACIÓN DE CORREO
+# 📧 CONFIGURACIÓN DE RESEND
 # ============================================================
-SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
-SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-SMTP_USER = os.getenv("SMTP_USER", "")
-SMTP_PASS = os.getenv("SMTP_PASS", "")
+RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
 
 # ============================================================
 # 📋 MODELOS Pydantic
@@ -110,8 +105,71 @@ class CambiarPinRequest(BaseModel):
     """Cambiar PIN después de verificar código"""
     nuevo_pin: str = Field(..., min_length=4, max_length=6, pattern=r"^[0-9]+$")
 
-# Almacenamiento temporal de códigos (en producción usa Redis)
+# Almacenamiento temporal de códigos
 codigos_recuperacion = {}
+
+# ============================================================
+# 📧 FUNCIÓN DE ENVÍO DE CORREO (RESEND API)
+# ============================================================
+
+def enviar_correo_recuperacion(destinatario: str, nombre: str, codigo: str) -> bool:
+    """Envía un correo con el código de recuperación usando Resend API"""
+    try:
+        if not RESEND_API_KEY:
+            logger.error("❌ RESEND_API_KEY no configurada")
+            return False
+        
+        html_content = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif; background: #0a0e1a; padding: 20px; margin: 0;">
+            <div style="max-width: 400px; margin: auto; background: #1a1f3a; border-radius: 20px; overflow: hidden; border: 1px solid rgba(255,255,255,0.08);">
+                <div style="background: linear-gradient(135deg, #4facfe, #6366f1); padding: 20px; text-align: center;">
+                    <h1 style="color: white; margin: 0; font-size: 22px;">🔐 FinanCoop</h1>
+                    <p style="color: rgba(255,255,255,0.8); margin: 5px 0 0; font-size: 13px;">Recuperación de PIN</p>
+                </div>
+                <div style="padding: 25px;">
+                    <p style="color: #fff; font-size: 14px;">Hola <strong>{nombre}</strong>,</p>
+                    <p style="color: #ccc; font-size: 13px;">Has solicitado recuperar tu PIN de acceso a la app FinanCoop.</p>
+                    <div style="background: #0a0e1a; padding: 20px; border-radius: 12px; text-align: center; margin: 20px 0; border: 1px solid rgba(79,172,254,0.2);">
+                        <p style="color: #888; font-size: 11px; margin: 0 0 8px;">TU CÓDIGO DE RECUPERACIÓN</p>
+                        <span style="font-size: 36px; font-weight: bold; color: #4facfe; letter-spacing: 8px;">{codigo}</span>
+                    </div>
+                    <p style="color: #888; font-size: 11px;">⏰ Este código expira en <strong style="color: #ffd54f;">30 minutos</strong>.</p>
+                    <p style="color: #666; font-size: 10px; margin-top: 20px;">Si no solicitaste esto, ignora este mensaje.</p>
+                </div>
+                <div style="background: rgba(0,0,0,0.2); padding: 12px; text-align: center;">
+                    <p style="color: #555; font-size: 10px; margin: 0;">FinanCoop • Cecosesola • v2.0</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        response = requests.post(
+            "https://api.resend.com/emails",
+            headers={
+                "Authorization": f"Bearer {RESEND_API_KEY}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "from": "FinanCoop <onboarding@resend.dev>",
+                "to": [destinatario],
+                "subject": "🔐 Recuperación de PIN - FinanCoop",
+                "html": html_content
+            },
+            timeout=10
+        )
+        
+        if response.status_code == 200:
+            logger.info(f"📧 Correo enviado a {destinatario}")
+            return True
+        else:
+            logger.error(f"❌ Error Resend: {response.status_code} - {response.text}")
+            return False
+            
+    except Exception as e:
+        logger.error(f"❌ Error enviando correo: {e}")
+        return False
 
 # ============================================================
 # 🔐 LOGIN ADMIN - JSON
@@ -392,55 +450,6 @@ def logout(
 # 📧 RECUPERACIÓN DE PIN POR CORREO
 # ============================================================
 
-def enviar_correo_recuperacion(destinatario: str, nombre: str, codigo: str) -> bool:
-    """Envía un correo con el código de recuperación"""
-    try:
-        msg = MIMEMultipart()
-        msg["From"] = f"FinanCoop <{SMTP_USER}>"
-        msg["To"] = destinatario
-        msg["Subject"] = "🔐 Recuperación de PIN - FinanCoop"
-        
-        body = f"""
-        <html>
-        <body style="font-family: Arial, sans-serif; background: #0a0e1a; padding: 20px; margin: 0;">
-            <div style="max-width: 400px; margin: auto; background: #1a1f3a; border-radius: 20px; overflow: hidden; border: 1px solid rgba(255,255,255,0.08);">
-                <div style="background: linear-gradient(135deg, #4facfe, #6366f1); padding: 20px; text-align: center;">
-                    <h1 style="color: white; margin: 0; font-size: 22px;">🔐 FinanCoop</h1>
-                    <p style="color: rgba(255,255,255,0.8); margin: 5px 0 0; font-size: 13px;">Recuperación de PIN</p>
-                </div>
-                <div style="padding: 25px;">
-                    <p style="color: #fff; font-size: 14px;">Hola <strong>{nombre}</strong>,</p>
-                    <p style="color: #ccc; font-size: 13px;">Has solicitado recuperar tu PIN de acceso a la app FinanCoop.</p>
-                    <div style="background: #0a0e1a; padding: 20px; border-radius: 12px; text-align: center; margin: 20px 0; border: 1px solid rgba(79,172,254,0.2);">
-                        <p style="color: #888; font-size: 11px; margin: 0 0 8px;">TU CÓDIGO DE RECUPERACIÓN</p>
-                        <span style="font-size: 36px; font-weight: bold; color: #4facfe; letter-spacing: 8px;">{codigo}</span>
-                    </div>
-                    <p style="color: #888; font-size: 11px;">⏰ Este código expira en <strong style="color: #ffd54f;">30 minutos</strong>.</p>
-                    <p style="color: #666; font-size: 10px; margin-top: 20px;">Si no solicitaste esto, ignora este mensaje. Nadie más tiene acceso a tu cuenta.</p>
-                </div>
-                <div style="background: rgba(0,0,0,0.2); padding: 12px; text-align: center;">
-                    <p style="color: #555; font-size: 10px; margin: 0;">FinanCoop • Cecosesola • v2.0</p>
-                </div>
-            </div>
-        </body>
-        </html>
-        """
-        
-        msg.attach(MIMEText(body, "html"))
-        
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-            server.starttls()
-            server.login(SMTP_USER, SMTP_PASS)
-            server.send_message(msg)
-        
-        logger.info(f"📧 Correo enviado a {destinatario}")
-        return True
-        
-    except Exception as e:
-        logger.error(f"❌ Error enviando correo: {e}")
-        return False
-
-
 @router.post("/recuperar-pin/solicitar-codigo")
 def solicitar_codigo_recuperacion(
     request_data: SolicitarCodigoRequest,
@@ -478,11 +487,10 @@ def solicitar_codigo_recuperacion(
         "intentos": 0
     }
     
-    # Enviar por correo
+    # Enviar por correo con Resend
     correo_enviado = enviar_correo_recuperacion(cliente.email, cliente.nombre, codigo)
     
     if not correo_enviado:
-        # Si falla el correo, mostrar en logs para desarrollo
         logger.warning(f"⚠️ No se pudo enviar correo. Código para {cliente.nombre}: {codigo}")
         print(f"\n{'='*50}")
         print(f"📧 RECUPERACIÓN PIN - {cliente.nombre}")
@@ -492,7 +500,6 @@ def solicitar_codigo_recuperacion(
     
     _record_failed_attempt(rate_key)
     
-    # Por seguridad, no revelamos el email completo
     email_mascarado = cliente.email[0:3] + "***" + cliente.email[cliente.email.index("@")-2:]
     
     return {
