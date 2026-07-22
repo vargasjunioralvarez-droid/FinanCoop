@@ -11,6 +11,10 @@ from datetime import datetime, timezone, timedelta
 import logging
 import re
 import random
+import os
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from jose import jwt, JWTError, ExpiredSignatureError
 
 from app.database import get_db
@@ -27,8 +31,16 @@ from app.auth import (
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["Autenticación"])
 
-# ✅ Hash bcrypt VÁLIDO para timing-safe (hash de "dummy_password_value_123")
+# ✅ Hash bcrypt VÁLIDO para timing-safe
 DUMMY_HASH = "$2b$12$LJ3m4ys3GZfnYMz8kVsKaOmLp1GpGmB0qJX3PzV3QXjKtHqKw8m5u"
+
+# ============================================================
+# 📧 CONFIGURACIÓN DE CORREO
+# ============================================================
+SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USER = os.getenv("SMTP_USER", "")
+SMTP_PASS = os.getenv("SMTP_PASS", "")
 
 # ============================================================
 # 📋 MODELOS Pydantic
@@ -86,7 +98,7 @@ class RegistroAdminRequest(BaseModel):
 
 # ✅ MODELOS PARA RECUPERACIÓN DE PIN
 class SolicitarCodigoRequest(BaseModel):
-    """Solicitar código de recuperación por SMS"""
+    """Solicitar código de recuperación por correo"""
     cedula: str = Field(..., min_length=6, max_length=20, pattern=r"^[0-9Vv-]+$")
 
 class VerificarCodigoRequest(BaseModel):
@@ -102,7 +114,7 @@ class CambiarPinRequest(BaseModel):
 codigos_recuperacion = {}
 
 # ============================================================
-# 🔐 LOGIN ADMIN - JSON (RECOMENDADO PARA FRONTEND VUE)
+# 🔐 LOGIN ADMIN - JSON
 # ============================================================
 
 @router.post("/login-json")
@@ -111,10 +123,7 @@ def login_admin_json(
     request: Request,
     db: Session = Depends(get_db)
 ):
-    """
-    Login para administradores del panel web (JSON).
-    Protegido contra brute force y timing attacks.
-    """
+    """Login para administradores del panel web (JSON)."""
     username = request_data.username.lower().strip()
     password = request_data.password
     
@@ -123,8 +132,6 @@ def login_admin_json(
     
     if not _check_rate_limit(rate_key):
         raise HTTPException(status_code=429, detail="Demasiados intentos fallidos. Intente más tarde.")
-    
-    logger.info(f"🔑 [Admin Login JSON] Intento: {username}")
     
     usuario = db.query(Usuario).filter(Usuario.username == username).first()
     
@@ -139,32 +146,25 @@ def login_admin_json(
     
     if not usuario.activo:
         _record_failed_attempt(rate_key)
-        raise HTTPException(status_code=403, detail="Usuario inactivo. Contacte al administrador.")
+        raise HTTPException(status_code=403, detail="Usuario inactivo")
     
     _record_successful_attempt(rate_key)
-    
     usuario.ultimo_acceso = datetime.now(timezone.utc)
     db.commit()
     
     access_token = create_access_token(data={"sub": usuario.username, "rol": usuario.rol})
     refresh_token = create_refresh_token(usuario.username, usuario.rol)
     
-    logger.info(f"✅ [Admin Login] Exitoso: {usuario.username} (rol: {usuario.rol})")
-    
     return {
-        "access_token": access_token,
-        "token_type": "bearer",
-        "expires_in": ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        "refresh_token": refresh_token,
-        "rol": usuario.rol,
-        "username": usuario.username,
-        "nombre": usuario.nombre,
+        "access_token": access_token, "token_type": "bearer",
+        "expires_in": ACCESS_TOKEN_EXPIRE_MINUTES * 60, "refresh_token": refresh_token,
+        "rol": usuario.rol, "username": usuario.username, "nombre": usuario.nombre,
         "tienda_id": usuario.tienda_id,
         "tienda_nombre": usuario.tienda.nombre if usuario.tienda else None
     }
 
 # ============================================================
-# 🔐 LOGIN ADMIN - FORM (COMPATIBILIDAD)
+# 🔐 LOGIN ADMIN - FORM
 # ============================================================
 
 @router.post("/login")
@@ -199,7 +199,6 @@ def login_admin_form(
         raise HTTPException(status_code=403, detail="Usuario inactivo")
     
     _record_successful_attempt(rate_key)
-    
     usuario.ultimo_acceso = datetime.now(timezone.utc)
     db.commit()
     
@@ -207,13 +206,9 @@ def login_admin_form(
     refresh_token = create_refresh_token(usuario.username, usuario.rol)
     
     return {
-        "access_token": access_token,
-        "token_type": "bearer",
-        "expires_in": ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        "refresh_token": refresh_token,
-        "rol": usuario.rol,
-        "username": usuario.username,
-        "nombre": usuario.nombre,
+        "access_token": access_token, "token_type": "bearer",
+        "expires_in": ACCESS_TOKEN_EXPIRE_MINUTES * 60, "refresh_token": refresh_token,
+        "rol": usuario.rol, "username": usuario.username, "nombre": usuario.nombre,
         "tienda_id": usuario.tienda_id,
         "tienda_nombre": usuario.tienda.nombre if usuario.tienda else None
     }
@@ -263,27 +258,19 @@ def login_cliente(
             raise HTTPException(status_code=401, detail="Credenciales incorrectas")
     
     _record_successful_attempt(rate_key)
-    
     cliente.ultimo_acceso = datetime.now(timezone.utc)
     db.commit()
     
     access_token = create_access_token(data={"sub": str(cliente.id), "rol": "cliente"})
     refresh_token = create_refresh_token(str(cliente.id), "cliente")
     
-    logger.info(f"✅ [Cliente Login] {cliente.nombre} (ID: {cliente.id})")
-    
     return {
-        "access_token": access_token,
-        "token_type": "bearer",
-        "expires_in": ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        "refresh_token": refresh_token,
+        "access_token": access_token, "token_type": "bearer",
+        "expires_in": ACCESS_TOKEN_EXPIRE_MINUTES * 60, "refresh_token": refresh_token,
         "cliente": {
-            "id": cliente.id,
-            "nombre": cliente.nombre,
-            "cedula": cliente.cedula[:4] + "****",
-            "nivel": cliente.nivel,
-            "score": cliente.score,
-            "telefono": cliente.telefono
+            "id": cliente.id, "nombre": cliente.nombre,
+            "cedula": cliente.cedula[:4] + "****", "nivel": cliente.nivel,
+            "score": cliente.score, "telefono": cliente.telefono
         }
     }
 
@@ -312,10 +299,8 @@ def refresh_token(request_data: RefreshTokenRequest, db: Session = Depends(get_d
     new_refresh = create_refresh_token(sub, rol)
     
     return {
-        "access_token": new_access,
-        "token_type": "bearer",
-        "expires_in": ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        "refresh_token": new_refresh
+        "access_token": new_access, "token_type": "bearer",
+        "expires_in": ACCESS_TOKEN_EXPIRE_MINUTES * 60, "refresh_token": new_refresh
     }
 
 # ============================================================
@@ -325,10 +310,8 @@ def refresh_token(request_data: RefreshTokenRequest, db: Session = Depends(get_d
 @router.get("/verificar")
 def verificar_token(current_user: Usuario = Depends(get_current_admin)):
     return {
-        "valid": True,
-        "username": current_user.username,
-        "rol": current_user.rol,
-        "nombre": current_user.nombre,
+        "valid": True, "username": current_user.username,
+        "rol": current_user.rol, "nombre": current_user.nombre,
         "tienda_id": current_user.tienda_id,
         "tienda_nombre": current_user.tienda.nombre if current_user.tienda else None
     }
@@ -350,23 +333,17 @@ def registrar_admin(
     nuevo = Usuario(
         username=request_data.username.lower(),
         password=hash_password(request_data.password),
-        rol=request_data.rol,
-        nombre=request_data.nombre,
-        email=request_data.email,
-        tienda_id=request_data.tienda_id,
-        activo=True,
-        creado_por=current_admin.username
+        rol=request_data.rol, nombre=request_data.nombre,
+        email=request_data.email, tienda_id=request_data.tienda_id,
+        activo=True, creado_por=current_admin.username
     )
     db.add(nuevo)
     db.commit()
     db.refresh(nuevo)
     
     return {
-        "mensaje": "Usuario creado",
-        "username": nuevo.username,
-        "rol": nuevo.rol,
-        "nombre": nuevo.nombre,
-        "tienda_id": nuevo.tienda_id
+        "mensaje": "Usuario creado", "username": nuevo.username,
+        "rol": nuevo.rol, "nombre": nuevo.nombre, "tienda_id": nuevo.tienda_id
     }
 
 # ============================================================
@@ -412,8 +389,57 @@ def logout(
         return {"mensaje": "Sesión cerrada"}
 
 # ============================================================
-# 🔑 RECUPERACIÓN DE PIN (App Móvil)
+# 📧 RECUPERACIÓN DE PIN POR CORREO
 # ============================================================
+
+def enviar_correo_recuperacion(destinatario: str, nombre: str, codigo: str) -> bool:
+    """Envía un correo con el código de recuperación"""
+    try:
+        msg = MIMEMultipart()
+        msg["From"] = f"FinanCoop <{SMTP_USER}>"
+        msg["To"] = destinatario
+        msg["Subject"] = "🔐 Recuperación de PIN - FinanCoop"
+        
+        body = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif; background: #0a0e1a; padding: 20px; margin: 0;">
+            <div style="max-width: 400px; margin: auto; background: #1a1f3a; border-radius: 20px; overflow: hidden; border: 1px solid rgba(255,255,255,0.08);">
+                <div style="background: linear-gradient(135deg, #4facfe, #6366f1); padding: 20px; text-align: center;">
+                    <h1 style="color: white; margin: 0; font-size: 22px;">🔐 FinanCoop</h1>
+                    <p style="color: rgba(255,255,255,0.8); margin: 5px 0 0; font-size: 13px;">Recuperación de PIN</p>
+                </div>
+                <div style="padding: 25px;">
+                    <p style="color: #fff; font-size: 14px;">Hola <strong>{nombre}</strong>,</p>
+                    <p style="color: #ccc; font-size: 13px;">Has solicitado recuperar tu PIN de acceso a la app FinanCoop.</p>
+                    <div style="background: #0a0e1a; padding: 20px; border-radius: 12px; text-align: center; margin: 20px 0; border: 1px solid rgba(79,172,254,0.2);">
+                        <p style="color: #888; font-size: 11px; margin: 0 0 8px;">TU CÓDIGO DE RECUPERACIÓN</p>
+                        <span style="font-size: 36px; font-weight: bold; color: #4facfe; letter-spacing: 8px;">{codigo}</span>
+                    </div>
+                    <p style="color: #888; font-size: 11px;">⏰ Este código expira en <strong style="color: #ffd54f;">30 minutos</strong>.</p>
+                    <p style="color: #666; font-size: 10px; margin-top: 20px;">Si no solicitaste esto, ignora este mensaje. Nadie más tiene acceso a tu cuenta.</p>
+                </div>
+                <div style="background: rgba(0,0,0,0.2); padding: 12px; text-align: center;">
+                    <p style="color: #555; font-size: 10px; margin: 0;">FinanCoop • Cecosesola • v2.0</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        msg.attach(MIMEText(body, "html"))
+        
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASS)
+            server.send_message(msg)
+        
+        logger.info(f"📧 Correo enviado a {destinatario}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ Error enviando correo: {e}")
+        return False
+
 
 @router.post("/recuperar-pin/solicitar-codigo")
 def solicitar_codigo_recuperacion(
@@ -421,10 +447,7 @@ def solicitar_codigo_recuperacion(
     request: Request,
     db: Session = Depends(get_db)
 ):
-    """
-    Solicitar código de recuperación de PIN.
-    Envía un código de 6 dígitos por SMS al número registrado.
-    """
+    """Solicitar código de recuperación de PIN por correo electrónico."""
     cedula = request_data.cedula.strip().upper()
     
     client_ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "unknown")
@@ -438,7 +461,13 @@ def solicitar_codigo_recuperacion(
     if not cliente:
         import time
         time.sleep(0.5)
-        return {"mensaje": "Si la cédula está registrada, recibirás un código por SMS", "success": True}
+        return {"mensaje": "Si la cédula está registrada, recibirás un código en tu correo", "success": True}
+    
+    if not cliente.email:
+        raise HTTPException(
+            status_code=400, 
+            detail="No tienes un correo electrónico registrado. Visita tu cooperativa más cercana para recuperar tu PIN."
+        )
     
     codigo = str(random.randint(100000, 999999))
     
@@ -449,20 +478,25 @@ def solicitar_codigo_recuperacion(
         "intentos": 0
     }
     
-    try:
-        logger.info(f"📱 Código de recuperación para {cliente.nombre}: {codigo}")
+    # Enviar por correo
+    correo_enviado = enviar_correo_recuperacion(cliente.email, cliente.nombre, codigo)
+    
+    if not correo_enviado:
+        # Si falla el correo, mostrar en logs para desarrollo
+        logger.warning(f"⚠️ No se pudo enviar correo. Código para {cliente.nombre}: {codigo}")
         print(f"\n{'='*50}")
-        print(f"📱 RECUPERACIÓN PIN - {cliente.nombre}")
-        print(f"📱 Teléfono: {cliente.telefono}")
+        print(f"📧 RECUPERACIÓN PIN - {cliente.nombre}")
+        print(f"📧 Email: {cliente.email}")
         print(f"🔑 Código: {codigo}")
         print(f"{'='*50}\n")
-    except Exception as e:
-        logger.error(f"Error enviando SMS: {e}")
     
     _record_failed_attempt(rate_key)
     
+    # Por seguridad, no revelamos el email completo
+    email_mascarado = cliente.email[0:3] + "***" + cliente.email[cliente.email.index("@")-2:]
+    
     return {
-        "mensaje": "Si la cédula está registrada, recibirás un código por SMS",
+        "mensaje": f"Código enviado a {email_mascarado}. Revisa tu bandeja de entrada.",
         "success": True
     }
 
@@ -473,9 +507,7 @@ def verificar_codigo_recuperacion(
     request: Request,
     db: Session = Depends(get_db)
 ):
-    """
-    Verificar código de recuperación y devolver token temporal.
-    """
+    """Verificar código de recuperación y devolver token temporal."""
     cedula = request_data.cedula.strip().upper()
     codigo = request_data.codigo.strip()
     
@@ -514,8 +546,6 @@ def verificar_codigo_recuperacion(
     
     del codigos_recuperacion[cedula]
     
-    logger.info(f"✅ Código verificado para {cliente.nombre}")
-    
     return {
         "mensaje": "Código verificado correctamente",
         "token_temp": token_temp,
@@ -529,9 +559,7 @@ def cambiar_pin_recuperacion(
     request: Request,
     db: Session = Depends(get_db)
 ):
-    """
-    Cambiar PIN usando token temporal de recuperación.
-    """
+    """Cambiar PIN usando token temporal de recuperación."""
     auth_header = request.headers.get("Authorization", "")
     token = auth_header.replace("Bearer ", "")
     
@@ -576,7 +604,7 @@ def cambiar_pin_recuperacion(
         
     except ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expirado. Solicite un nuevo código.")
-    except JWTError as e:
+    except JWTError:
         raise HTTPException(status_code=401, detail="Token inválido")
     except Exception as e:
         logger.error(f"Error cambiando PIN: {e}")

@@ -172,7 +172,8 @@
           <!-- Paso 1: Ingresar cédula -->
           <div v-if="pasoRecuperacion === 1">
             <p class="recuperar-text">
-              Ingresa tu número de cédula y te enviaremos un código de verificación por SMS.
+              Ingresa tu número de cédula y te enviaremos un código de verificación
+              a tu <strong style="color: #4facfe;">correo electrónico</strong> registrado.
             </p>
 
             <v-text-field
@@ -204,7 +205,7 @@
           <!-- Paso 2: Verificar código -->
           <div v-if="pasoRecuperacion === 2">
             <v-alert type="info" variant="tonal" density="compact" class="mb-3">
-              📱 Código enviado al teléfono asociado a la cédula {{ recuperacion.cedula }}
+               📧 Código enviado al <strong>correo electrónico</strong> asociado a la cédula {{ recuperacion.cedula }}
             </v-alert>
 
             <v-text-field
