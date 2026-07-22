@@ -230,11 +230,27 @@ def ver_cuotas(id: int, db: Session = Depends(get_db), current_user = Depends(ge
 def eliminar_financiamiento(id: int, db: Session = Depends(get_db), current_admin = Depends(get_current_admin)):
     try:
         financiamiento = db.query(Financiamiento).filter(Financiamiento.id == id).first()
-        if not financiamiento: raise HTTPException(status_code=404, detail="Financiamiento no encontrado")
-        if financiamiento.estado == "completado": raise HTTPException(status_code=400, detail="No se puede eliminar un financiamiento completado")
-        db.query(Pago).filter(Pago.financiamiento_id == id).delete(synchronize_session=False)
-        db.query(Cuota).filter(Cuota.financiamiento_id == id).delete(synchronize_session=False)
-        db.delete(financiamiento); db.commit()
+        if not financiamiento: 
+            raise HTTPException(status_code=404, detail="Financiamiento no encontrado")
+        if financiamiento.estado == "completado": 
+            raise HTTPException(status_code=400, detail="No se puede eliminar un financiamiento completado")
+        
+        # 1. Eliminar pagos
+        db.query(Pago).filter(Pago.financiamiento_id == id).delete(synchronize_session='fetch')
+        
+        # 2. Desasociar cuotas del financiamiento antes de eliminarlas
+        cuotas = db.query(Cuota).filter(Cuota.financiamiento_id == id).all()
+        for cuota in cuotas:
+            db.delete(cuota)
+        
+        # 3. Eliminar financiamiento
+        db.delete(financiamiento)
+        db.commit()
+        
         return {"success": True, "mensaje": f"Financiamiento #{id} eliminado"}
-    except HTTPException: raise
-    except Exception as e: db.rollback(); raise HTTPException(status_code=500, detail=str(e))
+    except HTTPException: 
+        raise
+    except Exception as e: 
+        logger.error(f"❌ Error eliminando financiamiento {id}: {e}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
