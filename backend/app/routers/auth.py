@@ -91,7 +91,7 @@ class PasswordChangeRequest(BaseModel):
 class RegistroAdminRequest(BaseModel):
     username: str = Field(..., min_length=3, max_length=50, pattern=r"^[a-zA-Z0-9_]+$")
     password: str = Field(..., min_length=12, max_length=128)
-    rol: str = Field(default="usuario", pattern=r"^(admin|cajero|usuario|tienda)$")
+    rol: str = Field(default="cajero", pattern=r"^(admin_central|admin_tienda|cajero)$")
     nombre: str = Field(..., min_length=2, max_length=100)
     email: str = Field(default="", max_length=200)
     tienda_id: int = None

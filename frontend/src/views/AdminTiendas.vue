@@ -237,9 +237,9 @@ const esAdmin = computed(() => {
 })
 
 const rolesDisponibles = [
-  { title: 'Administrador Central (ve todo)', value: 'admin' },
-  { title: 'Tienda/Cooperativa (ve solo su tienda)', value: 'tienda' },
-  { title: 'Cajero (ve solo su tienda)', value: 'cajero' }
+  { title: 'Administrador Central (ve todo)', value: 'admin_central' },
+  { title: 'Administrador Tienda', value: 'admin_tienda' },
+  { title: 'Cajero', value: 'cajero' }
 ]
 
 const tiendasSelect = computed(() => tiendas.value.filter(t => t.activo).map(t => ({ id: t.id, nombre: t.nombre })))
