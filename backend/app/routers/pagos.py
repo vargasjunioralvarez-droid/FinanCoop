@@ -2,11 +2,12 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
+from typing import Optional
 from app.database import get_db
 from app.models import Cuota, Pago, Financiamiento, Cliente
 from app.schemas import PagoReporte, ConciliacionPago
 from app.utils import actualizar_score_cliente, calcular_nivel, obtener_tasa_actual, enviar_notificacion_generica
-from app.auth import get_current_admin, get_current_user
+from app.auth import get_current_admin, get_current_user, get_current_tienda
 import json
 import logging
 
@@ -193,11 +194,19 @@ async def reportar_pago(request: Request, db: Session = Depends(get_db)):
 @router.get("/pendientes")
 def pagos_pendientes_conciliacion(
     db: Session = Depends(get_db), 
-    current_admin = Depends(get_current_admin)
+    current_admin = Depends(get_current_admin),
+    tienda_id: Optional[int] = Depends(get_current_tienda)
 ):
-    """Lista pagos pendientes de conciliación (solo admin)."""
+    """Lista pagos pendientes de conciliación (solo admin, filtrado por tienda)."""
     try:
-        pagos = db.query(Pago).filter(Pago.estado == "pendiente").order_by(Pago.fecha_reporte.desc()).all()
+        query = db.query(Pago).filter(Pago.estado == "pendiente")
+        
+        # ✅ FILTRAR POR TIENDA
+        if tienda_id:
+            query = query.join(Financiamiento, Pago.financiamiento_id == Financiamiento.id)
+            query = query.filter(Financiamiento.tienda_id == tienda_id)
+        
+        pagos = query.order_by(Pago.fecha_reporte.desc()).all()
         resultado = []
         
         for p in pagos:
@@ -236,7 +245,8 @@ def pagos_pendientes_conciliacion(
                 "modo_pago": p.modo_pago or "cuota",
                 "cuotas_incluidas": cuotas_incl,
                 "es_pago_padre": p.pago_padre_id is None,
-                "monto_original_bs": p.monto_original_bs
+                "monto_original_bs": p.monto_original_bs,
+                "tienda_nombre": fin.tienda.nombre if fin and fin.tienda else None
             })
         
         return {"total": len(resultado), "pagos": resultado}

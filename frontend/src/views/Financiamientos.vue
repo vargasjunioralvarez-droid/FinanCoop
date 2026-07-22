@@ -206,6 +206,10 @@
                         <v-btn v-if="item.estado === 'activo'" size="x-small" color="#4caf50" variant="tonal" @click="abrirPagoEfectivo(item)" rounded="pill">
                           <v-icon start size="16">mdi-cash</v-icon>Pagar
                         </v-btn>
+                        <!-- ✅ SOLO ADMIN CENTRAL PUEDE ELIMINAR -->
+                        <v-btn v-if="esAdminCentral" size="x-small" color="error" variant="tonal" @click="confirmarEliminar(item)" rounded="pill">
+                          <v-icon start size="16">mdi-delete</v-icon>
+                        </v-btn>
                       </div>
                     </template>
                   </v-data-table>
@@ -260,6 +264,9 @@ let chartInstance = null
 const filtros = ref({ busqueda: '', estado: 'todos', nivel: 'todos', morosidad: 'todos' })
 const stats = ref({ total: 0, total_entrada: 0, total_financiado: 0, total_pendiente: 0 })
 
+// ✅ Solo admin central
+const esAdminCentral = computed(() => localStorage.getItem('admin_rol') === 'admin_central')
+
 const headers = [
   { title: 'Código', key: 'codigo', width: '100px' },
   { title: 'Cliente', key: 'cliente', width: '200px' },
@@ -270,7 +277,7 @@ const headers = [
   { title: 'Progreso', key: 'progreso', width: '150px' },
   { title: 'Morosidad', key: 'morosidad', width: '130px' },
   { title: 'Estado', key: 'estado', width: '100px' },
-  { title: 'Acciones', key: 'acciones', width: '200px' }
+  { title: 'Acciones', key: 'acciones', width: '250px' }
 ]
 
 const colorEstado = (estado) => ({ activo: 'primary', completado: 'success', cancelado: 'grey', mora: 'error' })[estado] || 'grey'
@@ -364,6 +371,22 @@ const abrirPagoEfectivo = async (fin) => {
 
 const confirmarPagoEfectivo = async () => {
   try { await api.post(`/cuotas/${cuotaSeleccionada.value}/pagar-efectivo`); alert('✅ Pago registrado'); dialogPago.value = false; await cargarDatos() } catch (e) { alert('Error registrando pago') }
+}
+
+// ✅ Eliminar financiamiento (solo admin central)
+const confirmarEliminar = (item) => {
+  if (!confirm(`¿Eliminar el financiamiento ${item.codigo} de ${item.cliente_nombre}?`)) return
+  eliminarFinanciamiento(item.id)
+}
+
+const eliminarFinanciamiento = async (id) => {
+  try {
+    await api.delete(`/financiamientos/${id}`)
+    alert('✅ Financiamiento eliminado')
+    await cargarDatos()
+  } catch (e) {
+    alert('❌ Error: ' + (e.response?.data?.detail || e.message))
+  }
 }
 
 const exportarExcel = () => {
