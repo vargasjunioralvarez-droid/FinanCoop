@@ -68,6 +68,8 @@ ALLOWED_ORIGINS = [
     "https://financoop.onrender.com",
     "https://financoop-frontend.onrender.com",
     "https://financoop-backend.onrender.com",
+    "https://financoop-agd5.onrender.com",
+    "https://financoop-frontend-2hvc.onrender.com",
 ]
 
 app.add_middleware(
