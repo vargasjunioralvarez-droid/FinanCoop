@@ -50,6 +50,13 @@
                         </div>
                         <div class="ml-3">
                           <h2 class="text-h5 font-weight-bold text-white">{{ clienteEncontrado.nombre }}</h2>
+                          
+                          <!-- ✅ TIENDA -->
+                          <p class="text-caption text-white mt-1" style="opacity: 0.6;" v-if="clienteEncontrado.tienda_nombre">
+                            <v-icon size="14" color="rgba(255,255,255,0.5)">mdi-store</v-icon>
+                            Tienda: {{ clienteEncontrado.tienda_nombre }}
+                          </p>
+                          
                           <div class="d-flex align-center flex-wrap mt-1" style="gap: 8px;">
                             <div class="info-pill"><v-icon size="14" color="rgba(255,255,255,0.7)">mdi-star</v-icon><span class="text-white" style="opacity: 0.9; font-size: 0.8rem;">Score: {{ clienteEncontrado.score }}</span></div>
                             <div class="info-pill"><v-icon size="14" color="rgba(255,255,255,0.7)">mdi-phone</v-icon><span class="text-white" style="opacity: 0.9; font-size: 0.8rem;">{{ clienteEncontrado.telefono }}</span></div>
@@ -65,6 +72,7 @@
                   </v-row>
                 </div>
 
+                <!-- BARRAS DE PROGRESO -->
                 <div class="limite-card glass-effect mt-3">
                   <div class="d-flex justify-space-between align-center flex-wrap" style="gap: 8px;">
                     <div class="d-flex align-center" style="gap: 16px; flex-wrap: wrap;">
@@ -74,30 +82,72 @@
                       <div class="metric-divider"></div>
                       <div class="metric-item"><span class="metric-label">Disponible</span><span class="metric-value text-success">${{ clienteEncontrado.limite_disponible?.disponible_usd || 0 }}</span></div>
                     </div>
-                    <v-chip :color="clienteEncontrado.limite_disponible?.disponible_usd > 0 ? 'success' : 'error'" size="small" class="status-chip">{{ clienteEncontrado.limite_disponible?.disponible_usd > 0 ? '✅ Puede comprar' : '❌ Sin saldo' }}</v-chip>
+                    <v-chip :color="clienteEncontrado.limite_disponible?.disponible_usd > 0 ? 'success' : 'error'" size="small" class="status-chip">
+                      {{ clienteEncontrado.limite_disponible?.disponible_usd > 0 ? '✅ Puede comprar' : '❌ Sin saldo' }}
+                    </v-chip>
                   </div>
                   <div class="progress-wrapper mt-2">
                     <v-progress-linear :model-value="porcentajeUsado" :color="porcentajeUsado > 80 ? 'error' : porcentajeUsado > 50 ? 'warning' : 'success'" height="8" rounded class="progress-bar-custom" />
                   </div>
                 </div>
 
+                <!-- COMPRAS ACTIVAS -->
                 <div v-if="clienteEncontrado.financiamientos_activos?.length" class="mt-3">
-                  <div class="financiamientos-header d-flex align-center"><v-icon color="#FFD700" class="mr-2">mdi-clock-outline</v-icon><h4 class="text-subtitle-1 font-weight-bold text-white">Compras Activas</h4><v-chip size="small" color="#FFD700" class="ml-2">{{ clienteEncontrado.financiamientos_activos.length }}</v-chip></div>
+                  <div class="financiamientos-header d-flex align-center">
+                    <v-icon color="#FFD700" class="mr-2">mdi-clock-outline</v-icon>
+                    <h4 class="text-subtitle-1 font-weight-bold text-white">Compras Activas</h4>
+                    <v-chip size="small" color="#FFD700" class="ml-2">{{ clienteEncontrado.financiamientos_activos.length }}</v-chip>
+                  </div>
                   <div class="financiamientos-grid mt-2">
                     <div v-for="fin in clienteEncontrado.financiamientos_activos" :key="fin.id" class="financiamiento-item glass-effect">
                       <div class="d-flex justify-space-between align-center flex-wrap" style="gap: 8px;">
-                        <span class="text-white font-weight-bold">{{ fin.descripcion || 'Sin descripción' }}</span>
-                        <v-chip size="x-small" :color="fin.estado === 'activo' ? 'success' : 'warning'" variant="flat">{{ fin.estado }}</v-chip>
+                        <div class="d-flex align-center flex-wrap" style="gap: 6px;">
+                          <!-- ✅ TIENDA EN CADA COMPRA -->
+                          <v-chip v-if="fin.tienda_nombre" size="x-small" color="info" variant="flat">
+                            <v-icon start size="12">mdi-store</v-icon>{{ fin.tienda_nombre }}
+                          </v-chip>
+                          <span class="text-white font-weight-bold">{{ fin.descripcion || 'Sin descripción' }}</span>
+                          <v-chip size="x-small" variant="outlined" class="text-white">{{ fin.codigo }}</v-chip>
+                        </div>
+                        <div class="d-flex align-center" style="gap: 8px;">
+                          <v-chip size="x-small" :color="fin.cuotas_pagadas === fin.cuotas_aprobadas ? 'success' : 'primary'" variant="tonal">
+                            {{ fin.cuotas_pagadas || 0 }}/{{ fin.cuotas_aprobadas }} cuotas
+                          </v-chip>
+                          <v-chip size="x-small" :color="fin.estado === 'activo' ? 'success' : 'warning'" variant="flat">{{ fin.estado }}</v-chip>
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
+                <div v-else class="mt-3">
+                  <div class="empty-state glass-effect">
+                    <v-icon color="rgba(255,255,255,0.3)" size="32">mdi-check-circle</v-icon>
+                    <div class="text-caption" style="color: rgba(255,255,255,0.4);">No tiene compras activas</div>
+                  </div>
+                </div>
 
+                <!-- BOTÓN CONTINUAR O ALERTA -->
                 <div class="mt-4">
-                  <v-btn v-if="clienteEncontrado.limite_disponible?.disponible_usd > 0 && (clienteEncontrado?.cuotas_vencidas || 0) === 0" color="#4facfe" @click="paso = 2" size="x-large" block elevation="0" class="btn-continuar rounded-xl"><span class="font-weight-bold">Continuar con la venta</span><v-icon end>mdi-arrow-right</v-icon></v-btn>
+                  <v-btn v-if="clienteEncontrado.limite_disponible?.disponible_usd > 0 && (clienteEncontrado?.cuotas_vencidas || 0) === 0" 
+                    color="#4facfe" @click="paso = 2" size="x-large" block elevation="0" class="btn-continuar rounded-xl">
+                    <span class="font-weight-bold">Continuar con la venta</span>
+                    <v-icon end>mdi-arrow-right</v-icon>
+                  </v-btn>
+                  
+                  <!-- ✅ ALERTA DETALLADA -->
                   <v-alert v-else type="error" variant="tonal" class="rounded-xl" border="start">
-                    <div class="d-flex align-center"><v-icon color="error" size="28" class="mr-2">mdi-alert-circle</v-icon>
-                      <div><strong class="text-white">No puede comprar</strong></div>
+                    <div class="d-flex align-center">
+                      <v-icon color="error" size="28" class="mr-2">mdi-alert-circle</v-icon>
+                      <div>
+                        <strong class="text-white" v-if="(clienteEncontrado?.cuotas_vencidas || 0) > 0">
+                          ⚠️ Cliente moroso - {{ clienteEncontrado.cuotas_vencidas }} cuota(s) vencida(s)
+                        </strong>
+                        <strong class="text-white" v-else>Cliente sin saldo disponible</strong>
+                        <div class="text-caption" style="color: rgba(255,255,255,0.6);">
+                          <span v-if="(clienteEncontrado?.cuotas_vencidas || 0) > 0">Debe ponerse al día antes de comprar</span>
+                          <span v-else>Ha alcanzado el límite máximo de crédito</span>
+                        </div>
+                      </div>
                     </div>
                   </v-alert>
                 </div>
@@ -192,7 +242,7 @@
             <v-card-title class="text-h5 pa-4 text-white"><v-icon start color="#FFD700">mdi-check-circle</v-icon>3. Confirmar Venta</v-card-title>
             <v-card-text class="pa-4">
               
-              <!-- ✅ CATEGORÍAS -->
+              <!-- CATEGORÍAS -->
               <div class="mb-4">
                 <h4 class="text-subtitle-1 font-weight-bold text-white mb-3"><v-icon color="#4facfe" class="mr-1">mdi-shape</v-icon>¿Qué estás comprando?</h4>
                 <div class="categorias-grid">
@@ -206,7 +256,7 @@
                 </div>
               </div>
 
-              <!-- ✅ DESCRIPCIÓN SIMPLE -->
+              <!-- DESCRIPCIÓN -->
               <div class="glass-effect pa-4 mb-3 rounded-lg">
                 <div class="d-flex align-center mb-2">
                   <v-icon color="#4facfe" class="mr-2">mdi-clipboard-text</v-icon>
@@ -221,7 +271,7 @@
                 <p v-else class="text-caption" style="color: rgba(255,255,255,0.4);">Selecciona una categoría arriba</p>
               </div>
 
-              <!-- ✅ NÚMERO DE FACTURA -->
+              <!-- NÚMERO DE FACTURA -->
               <div class="glass-effect pa-4 mb-3 rounded-lg">
                 <div class="d-flex align-center mb-2">
                   <v-icon color="#FFD700" class="mr-2">mdi-receipt</v-icon>
@@ -232,7 +282,7 @@
                 <v-text-field v-model="numeroFactura" label="Número de factura / control" placeholder="Ej: FAC-001-12345" variant="outlined" density="comfortable" prepend-inner-icon="mdi-numeric" dark class="custom-input" clearable />
               </div>
 
-              <!-- ✅ RESUMEN -->
+              <!-- RESUMEN -->
               <div class="glass-effect pa-4 mb-3 rounded-lg">
                 <h3 class="text-h6 mb-2 text-white">📋 Resumen</h3>
                 <v-row>
@@ -289,7 +339,6 @@ const cuotasSeleccionadas = ref(null)
 const numeroFactura = ref('')
 const resultado = ref({})
 const tasaDolar = ref(40.0)
-const requiereAprobacion = ref(false)
 const excedeLimite = ref(false)
 const cargando = ref(false)
 const categoriaSeleccionada = ref(null)
@@ -299,7 +348,6 @@ const nuevoCliente = ref({
   direccion: '', referencia_nombre: '', referencia_telefono: '', referencia_parentesco: ''
 })
 
-// ✅ CATEGORÍAS SIMPLES
 const categorias = [
   { title: 'Salud', icon: 'mdi-hospital-box', color: '#EF5350' },
   { title: 'Ropa', icon: 'mdi-tshirt-crew', color: '#42A5F5' },
@@ -329,15 +377,13 @@ const opcionesCuotas = computed(() => {
   const fb = p.financia_bs || propuesta.value.monto_financia_bs || 0
   const o = []
   for (let i = cb; i <= cm; i++) {
-    const mc = fb / i
-    o.push({ value: i, monto: mc })
+    o.push({ value: i, monto: fb / i })
   }
   return o
 })
 
 const montoCuotaSeleccionada = computed(() => {
-  const op = opcionesCuotas.value.find(o => o.value === cuotasSeleccionadas.value)
-  return op?.monto || 0
+  return opcionesCuotas.value.find(o => o.value === cuotasSeleccionadas.value)?.monto || 0
 })
 
 const registroValido = computed(() =>
@@ -347,40 +393,57 @@ const registroValido = computed(() =>
 )
 
 const formatearNumero = (num) => num ? Number(num).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0,00'
-const nivelColor = (nivel) => ({ nuevo: 'grey darken-2', bronce: 'brown darken-2', plata: 'blue-grey darken-2', oro: 'amber darken-2', platino: 'deep-purple darken-2' })[nivel] || 'grey'
-const nivelGradiente = (nivel) => ({ nuevo: 'linear-gradient(135deg, #78909C, #546E7A)', bronce: 'linear-gradient(135deg, #A1887F, #6D4C41)', plata: 'linear-gradient(135deg, #90A4AE, #546E7A)', oro: 'linear-gradient(135deg, #FFD54F, #F9A825)', platino: 'linear-gradient(135deg, #7E57C2, #4A148C)' })[nivel] || 'linear-gradient(135deg, #78909C, #546E7A)'
-const nivelIcono = (nivel) => ({ nuevo: 'mdi-star-outline', bronce: 'mdi-medal-outline', plata: 'mdi-silverware', oro: 'mdi-gold', platino: 'mdi-diamond-stone' })[nivel] || 'mdi-star'
+const nivelColor = (n) => ({ nuevo: 'grey', bronce: 'brown', plata: 'blue-grey', oro: 'amber', platino: 'deep-purple' })[n] || 'grey'
+const nivelGradiente = (n) => ({ nuevo: 'linear-gradient(135deg, #78909C, #546E7A)', bronce: 'linear-gradient(135deg, #A1887F, #6D4C41)', plata: 'linear-gradient(135deg, #90A4AE, #546E7A)', oro: 'linear-gradient(135deg, #FFD54F, #F9A825)', platino: 'linear-gradient(135deg, #7E57C2, #4A148C)' })[n] || ''
+const nivelIcono = (n) => ({ nuevo: 'mdi-star-outline', bronce: 'mdi-medal-outline', plata: 'mdi-silverware', oro: 'mdi-gold', platino: 'mdi-diamond-stone' })[n] || 'mdi-star'
 
 onMounted(async () => { try { const d = await api.get('/config/tasa-dolar'); tasaDolar.value = d.tasa } catch (e) {} })
 
 const buscarCliente = async () => {
-  if (!busquedaCedula.value) return; cargando.value = true
+  if (!busquedaCedula.value) return
+  cargando.value = true
   try {
     const data = await api.get(`/clientes/buscar/${busquedaCedula.value}`)
-    if (data.error || !data.encontrado) { clienteEncontrado.value = null; clienteNoEncontrado.value = true; nuevoCliente.value.cedula = busquedaCedula.value }
-    else {
-      const financiamientos = await api.get(`/financiamientos?cliente_id=${data.id}&estado=activo`)
-      const lista = Array.isArray(financiamientos) ? financiamientos : (financiamientos.financiamientos || [])
-      clienteEncontrado.value = { ...data, financiamientos_activos: lista }; clienteNoEncontrado.value = false
+    if (data.error || !data.encontrado) {
+      clienteEncontrado.value = null
+      clienteNoEncontrado.value = true
+      nuevoCliente.value.cedula = busquedaCedula.value
+    } else {
+      clienteEncontrado.value = data
+      clienteNoEncontrado.value = false
     }
-  } catch (e) { clienteEncontrado.value = null; clienteNoEncontrado.value = true }
-  finally { cargando.value = false }
+  } catch (e) {
+    clienteEncontrado.value = null
+    clienteNoEncontrado.value = true
+  } finally {
+    cargando.value = false
+  }
 }
 
 const registrarCliente = async () => {
   if (!registroValido.value) { alert('Complete todos los campos'); return }
-  try { await api.post('/clientes', { ...nuevoCliente.value, cedula: busquedaCedula.value }); alert('✅ Cliente registrado'); await buscarCliente() } catch (e) { alert('Error registrando') }
+  try {
+    await api.post('/clientes', { ...nuevoCliente.value, cedula: busquedaCedula.value })
+    alert('✅ Cliente registrado')
+    await buscarCliente()
+  } catch (e) { alert('Error registrando') }
 }
 
 const calcularPropuesta = async () => {
-  if (!montoTotalBS.value || parseFloat(montoTotalBS.value) <= 0 || !clienteEncontrado.value) { propuesta.value = null; cuotasSeleccionadas.value = null; excedeLimite.value = false; return }
-  const tasa = tasaDolar.value || 40; const montoUSD = parseFloat(montoTotalBS.value) / tasa; const disponibleUSD = clienteEncontrado.value?.limite_disponible?.disponible_usd || 0
+  if (!montoTotalBS.value || parseFloat(montoTotalBS.value) <= 0 || !clienteEncontrado.value) {
+    propuesta.value = null; cuotasSeleccionadas.value = null; excedeLimite.value = false; return
+  }
+  const tasa = tasaDolar.value || 40
+  const montoUSD = parseFloat(montoTotalBS.value) / tasa
+  const disponibleUSD = clienteEncontrado.value?.limite_disponible?.disponible_usd || 0
   if (montoUSD > disponibleUSD) { excedeLimite.value = true; return }
   excedeLimite.value = false
-  try { const data = await api.get(`/clientes/${clienteEncontrado.value.id}/nivel-propuesta?monto_total_bs=${montoTotalBS.value}`); propuesta.value = data; cuotasSeleccionadas.value = data.propuesta?.cuotas_base || 4 } catch (e) { propuesta.value = null }
+  try {
+    const data = await api.get(`/clientes/${clienteEncontrado.value.id}/nivel-propuesta?monto_total_bs=${montoTotalBS.value}`)
+    propuesta.value = data
+    cuotasSeleccionadas.value = data.propuesta?.cuotas_base || 4
+  } catch (e) { propuesta.value = null }
 }
-
-const fechaCuota = (n) => { const f = new Date(); f.setDate(f.getDate() + (15 * n)); return f.toLocaleDateString('es-VE') }
 
 const crearFinanciamiento = async () => {
   try {
@@ -392,7 +455,8 @@ const crearFinanciamiento = async () => {
       numero_factura: numeroFactura.value || null
     })
     if (data.error) { alert('Error: ' + data.error); return }
-    resultado.value = data; paso.value = 4
+    resultado.value = data
+    paso.value = 4
   } catch (e) { alert('Error creando financiamiento') }
 }
 
@@ -438,15 +502,16 @@ const resetear = () => {
 .financiamientos-header { padding: 4px 0; }
 .financiamientos-grid { display: flex; flex-direction: column; gap: 8px; }
 .financiamiento-item { padding: 12px 16px; border-radius: 12px; transition: all 0.3s ease; }
+.empty-state { padding: 24px; text-align: center; border: 1px dashed rgba(255,255,255,0.08); }
 .btn-continuar { background: linear-gradient(135deg, #4facfe, #6366f1) !important; color: white !important; font-weight: 700 !important; font-size: 1.1rem !important; transition: all 0.3s ease !important; height: 56px !important; }
 .btn-registrar { background: linear-gradient(135deg, #4caf50, #2e7d32) !important; color: white !important; font-weight: 700 !important; }
 .custom-input :deep(.v-field) { background: rgba(255,255,255,0.05) !important; border-radius: 12px !important; border: 1px solid rgba(255,255,255,0.1) !important; }
-.custom-input :deep(.v-field--focused) { border-color: #4facfe !important; box-shadow: 0 0 0 3px rgba(79,172,254,0.15) !important; }
+.custom-input :deep(.v-field--focused) { border-color: #4facfe !important; }
 .custom-input :deep(.v-label) { color: rgba(255,255,255,0.6) !important; }
 .custom-input :deep(.v-field__input) { color: white !important; }
 .categorias-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
 .categoria-item { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 14px 8px; border-radius: 16px; cursor: pointer; transition: all 0.3s ease; min-height: 80px; }
-.categoria-item:hover { transform: translateY(-4px); border-color: rgba(255,255,255,0.2) !important; }
+.categoria-item:hover { transform: translateY(-4px); }
 .categoria-seleccionada { transform: translateY(-4px); box-shadow: 0 8px 24px rgba(0,0,0,0.3); }
 .fade-in { animation: fadeIn 0.5s ease; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }

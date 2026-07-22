@@ -246,6 +246,7 @@ async function apiCall(endpoint, options = {}) {
     ...options.headers
   }
 
+  // ❌ NO agregar Content-Type si es FormData
   if (!(options.body instanceof FormData)) {
     headers['Content-Type'] = 'application/json'
   }
@@ -263,11 +264,17 @@ async function apiCall(endpoint, options = {}) {
 
     if (options.body) {
       if (options.body instanceof FormData) {
-        const formDataObj = {}
-        options.body.forEach((value, key) => {
-          formDataObj[key] = value
+        // ✅ Para FormData, usar fetch nativo en lugar de CapacitorHttp
+        const response = await fetch(url, {
+          method: options.method || 'POST',
+          headers: headers,
+          body: options.body
         })
-        httpOptions.data = formDataObj
+        const data = await response.json()
+        if (response.status < 200 || response.status >= 300) {
+          throw new Error(data?.detail || data?.error || `Error ${response.status}`)
+        }
+        return data
       } else {
         httpOptions.data = options.body
       }

@@ -185,17 +185,17 @@
             hide-details
           />
 
-          <v-file-input
-            v-model="pagoForm.comprobante"
-            label="Foto del Comprobante (opcional)"
-            accept="image/*"
-            capture="camera"
-            prepend-icon="mdi-camera"
-            variant="outlined"
-            class="input-field"
-            show-size
-            chips
-          />
+          <!-- ✅ Así muestra Cámara Y Galería -->
+<v-file-input
+  v-model="pagoForm.comprobante"
+  label="Foto del Comprobante (opcional)"
+  accept="image/*"
+  prepend-icon="mdi-camera"
+  variant="outlined"
+  class="input-field"
+  show-size
+  chips
+/>
 
           <v-alert v-if="error" type="error" variant="tonal" class="error-alert" density="compact">
             {{ error }}

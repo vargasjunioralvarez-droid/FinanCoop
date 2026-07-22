@@ -4,7 +4,7 @@
 
 import os
 import logging
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse, HTMLResponse
@@ -49,6 +49,21 @@ app = FastAPI(
 )
 
 # ─────────────────────────────────────────────────────────────
+# ✅ CORS PREFLIGHT - DEBE IR ANTES QUE OTROS MIDDLEWARES
+# ─────────────────────────────────────────────────────────────
+@app.middleware("http")
+async def cors_preflight_handler(request: Request, call_next):
+    if request.method == "OPTIONS":
+        response = Response()
+        response.headers["Access-Control-Allow-Origin"] = request.headers.get("origin", "*")
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, PATCH, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type, X-Request-ID, X-Requested-With, Accept, Origin, Cache-Control, Pragma, Expires"
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Access-Control-Max-Age"] = "86400"
+        return response
+    return await call_next(request)
+
+# ─────────────────────────────────────────────────────────────
 # 🌐 CORS: SIEMPRE PERMITIR ORÍGENES DE RENDER Y LOCAL
 # ─────────────────────────────────────────────────────────────
 ALLOWED_ORIGINS = [
@@ -71,15 +86,16 @@ ALLOWED_ORIGINS = [
     "https://financoop-agd5.onrender.com",
     "https://financoop-frontend-2hvc.onrender.com",
     "http://192.168.100.26:5175",
+    "*",  # Temporal para debug - permite todo
 ]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-Request-ID", "X-Requested-With", "Accept", "Origin", "Cache-Control", "Pragma", "Expires"],
-    expose_headers=["X-Request-ID"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["*"],
     max_age=86400
 )
 
@@ -96,18 +112,6 @@ async def security_headers(request: Request, call_next):
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
-    
-    csp = (
-        "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
-        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
-        "img-src 'self' data: https: blob:; "
-        "connect-src 'self' https://*.onrender.com https: http://localhost:*; "
-        "frame-ancestors 'none'; "
-        "base-uri 'self'; "
-        "form-action 'self'"
-    )
-    response.headers["Content-Security-Policy"] = csp
     
     if IS_PROD:
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
@@ -158,6 +162,8 @@ if IS_PROD:
             "financoop.onrender.com",
             "financoop-backend.onrender.com",
             "financoop-frontend.onrender.com",
+            "financoop-agd5.onrender.com",
+            "financoop-frontend-2hvc.onrender.com",
             "localhost",
             "*.onrender.com"
         ]
@@ -176,7 +182,7 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 # ─────────────────────────────────────────────────────────────
-# 🗄️ CREAR TABLAS (checkfirst=True evita error de duplicados)
+# 🗄️ CREAR TABLAS
 # ─────────────────────────────────────────────────────────────
 Base.metadata.create_all(bind=engine, checkfirst=True)
 
