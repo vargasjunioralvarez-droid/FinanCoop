@@ -148,11 +148,11 @@
           <v-icon start>{{ tiendaEdit ? 'mdi-pencil' : 'mdi-store' }}</v-icon>
           {{ tiendaEdit ? 'Editar' : 'Nueva' }} Tienda
         </v-card-title>
-        <v-card-text class="pa-4">
-          <v-text-field v-model="tiendaForm.nombre" label="Nombre de la tienda/cooperativa *" variant="outlined" density="comfortable" dark class="custom-input mb-2" placeholder="Ej: Cecosesola Barquisimeto" />
-          <v-text-field v-model="tiendaForm.codigo" label="Código único *" variant="outlined" density="comfortable" dark class="custom-input mb-2" placeholder="Ej: CCS-BQTO" />
-          <v-text-field v-model="tiendaForm.direccion" label="Dirección" variant="outlined" density="comfortable" dark class="custom-input mb-2" placeholder="Ej: Av. Principal, Centro" />
-          <v-text-field v-model="tiendaForm.telefono" label="Teléfono" variant="outlined" density="comfortable" dark class="custom-input" placeholder="Ej: +584121234567" />
+        <v-card-text class="pa-5">
+          <v-text-field v-model="tiendaForm.nombre" label="Nombre de la tienda/cooperativa *" variant="solo-filled" density="comfortable" dark class="custom-input mb-4" placeholder="Ej: Cecosesola Barquisimeto" />
+          <v-text-field v-model="tiendaForm.codigo" label="Código único *" variant="solo-filled" density="comfortable" dark class="custom-input mb-4" placeholder="Ej: CCS-BQTO" />
+          <v-text-field v-model="tiendaForm.direccion" label="Dirección" variant="solo-filled" density="comfortable" dark class="custom-input mb-4" placeholder="Ej: Av. Principal, Centro" />
+          <v-text-field v-model="tiendaForm.telefono" label="Teléfono" variant="solo-filled" density="comfortable" dark class="custom-input" placeholder="Ej: +584121234567" />
         </v-card-text>
         <v-card-actions class="pa-4">
           <v-btn @click="dialogTienda = false" variant="text" color="grey">Cancelar</v-btn>
@@ -169,13 +169,13 @@
           <v-icon start>{{ usuarioEditando ? 'mdi-pencil' : 'mdi-account-plus' }}</v-icon>
           {{ usuarioEditando ? 'Editar Usuario' : 'Nuevo Usuario' }}
         </v-card-title>
-        <v-card-text class="pa-4">
-          <v-text-field v-model="usuarioForm.username" label="Usuario *" :disabled="!!usuarioEditando" variant="outlined" density="comfortable" dark class="custom-input mb-2" placeholder="Ej: ana" />
-          <v-text-field v-model="usuarioForm.password" label="Contraseña" type="password" variant="outlined" density="comfortable" dark class="custom-input mb-2" :placeholder="usuarioEditando ? '••••••••' : 'Mínimo 8 caracteres'" />
-          <v-text-field v-model="usuarioForm.nombre" label="Nombre completo" variant="outlined" density="comfortable" dark class="custom-input mb-2" placeholder="Ej: Ana García" />
-          <v-text-field v-model="usuarioForm.email" label="Email" variant="outlined" density="comfortable" dark class="custom-input mb-2" placeholder="Ej: ana@coop.com" />
-          <v-select v-model="usuarioForm.rol" :items="rolesDisponibles" label="Rol *" variant="outlined" density="comfortable" dark class="custom-input mb-2" />
-          <v-select v-if="usuarioForm.rol !== 'admin'" v-model="usuarioForm.tienda_id" :items="tiendasSelect" item-title="nombre" item-value="id" label="Asignar a Tienda/Cooperativa *" variant="outlined" density="comfortable" dark class="custom-input" />
+        <v-card-text class="pa-5">
+          <v-text-field v-model="usuarioForm.username" label="Usuario *" :disabled="!!usuarioEditando" variant="solo-filled" density="comfortable" dark class="custom-input mb-4" placeholder="Ej: ana" />
+          <v-text-field v-model="usuarioForm.password" label="Contraseña" type="password" variant="solo-filled" density="comfortable" dark class="custom-input mb-4" :placeholder="usuarioEditando ? '••••••••' : 'Mínimo 8 caracteres'" />
+          <v-text-field v-model="usuarioForm.nombre" label="Nombre completo" variant="solo-filled" density="comfortable" dark class="custom-input mb-4" placeholder="Ej: Ana García" />
+          <v-text-field v-model="usuarioForm.email" label="Email" variant="solo-filled" density="comfortable" dark class="custom-input mb-4" placeholder="Ej: ana@coop.com" />
+          <v-select v-model="usuarioForm.rol" :items="rolesDisponibles" label="Rol *" variant="solo-filled" density="comfortable" dark class="custom-input mb-4" />
+          <v-select v-if="usuarioForm.rol !== 'admin'" v-model="usuarioForm.tienda_id" :items="tiendasSelect" item-title="nombre" item-value="id" label="Asignar a Tienda/Cooperativa *" variant="solo-filled" density="comfortable" dark class="custom-input" />
         </v-card-text>
         <v-card-actions class="pa-4">
           <v-btn @click="dialogUsuario = false" variant="text" color="grey">Cancelar</v-btn>
@@ -343,18 +343,17 @@ onMounted(() => { cargarTiendas(); cargarUsuarios() })
 .premium-table :deep(td) { color: rgba(255,255,255,0.9) !important; padding: 10px 8px !important; border-bottom: 1px solid rgba(255,255,255,0.03) !important; }
 .premium-table :deep(tr:hover) { background: rgba(255,255,255,0.02) !important; }
 
-/* ✅ LABELS Y PLACEHOLDERS CORREGIDOS */
-.custom-input :deep(.v-field) { background: rgba(255,255,255,0.05) !important; border-radius: 12px !important; border: 1px solid rgba(255,255,255,0.15) !important; }
-.custom-input :deep(.v-field--focused) { border-color: #4facfe !important; }
-.custom-input :deep(.v-label) { color: rgba(255,255,255,0.8) !important; font-weight: 500 !important; }
+/* ✅ CAMPOS ESPACIADOS Y LABEL FIJO ARRIBA */
+.custom-input { margin-bottom: 4px; }
+.custom-input :deep(.v-field) { background: rgba(255,255,255,0.06) !important; border-radius: 12px !important; border: 1px solid rgba(255,255,255,0.12) !important; min-height: 52px !important; padding-top: 8px !important; }
+.custom-input :deep(.v-field--focused) { border-color: #4facfe !important; background: rgba(255,255,255,0.08) !important; }
+.custom-input :deep(.v-label) { color: rgba(255,255,255,0.8) !important; font-weight: 600 !important; font-size: 12px !important; top: 8px !important; transform: none !important; position: absolute !important; }
 .custom-input :deep(.v-field--focused .v-label) { color: #4facfe !important; }
-.custom-input :deep(.v-field__input) { color: white !important; }
+.custom-input :deep(.v-field__input) { color: white !important; padding-top: 20px !important; padding-bottom: 6px !important; min-height: auto !important; }
 .custom-input :deep(.v-field__input::placeholder) { color: rgba(255,255,255,0.3) !important; font-weight: 400 !important; opacity: 1 !important; }
-.custom-input :deep(.v-field__outline) { --v-field-border-opacity: 0.3 !important; }
-
-/* ✅ SELECT IGUAL QUE TEXTFIELD */
+.custom-input :deep(.v-field__outline) { display: none; }
 .custom-input :deep(.v-select__selection-text) { color: white !important; }
-.custom-input :deep(.v-select__selection) { color: white !important; }
+.custom-input :deep(.v-select__selection) { color: white !important; padding-top: 20px !important; }
 
 .empty-state { padding: 24px; text-align: center; border: 1px dashed rgba(255,255,255,0.08); }
 .gap-1 { gap: 4px; }
