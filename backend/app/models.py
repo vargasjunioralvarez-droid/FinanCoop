@@ -273,16 +273,6 @@ class TokenBlacklist(Base):
     expira_en = Column(DateTime(timezone=True), nullable=False)
     creado_en = Column(DateTime(timezone=True), server_default=func.now())
 
-class LogsConciliacion(Base):
-    __tablename__ = "logs_conciliacion"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    referencia = Column(String(100))
-    monto_banco = Column(Float)
-    monto_reportado = Column(Float)
-    estado = Column(String(50))
-    respuesta_banco = Column(Text)
-    fecha = Column(DateTime(timezone=True), server_default=func.now())
 
 # ============================================================
 # MODELO: LOGS CONCILIACION (NUEVO)
