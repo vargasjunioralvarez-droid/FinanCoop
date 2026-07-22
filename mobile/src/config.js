@@ -2,7 +2,7 @@
 // Configuración centralizada de la API
 
 // ✅ SIEMPRE CONECTAR A RENDER
-export const API_URL = 'https://financoop.onrender.com/api/v1'
+export const API_URL = 'https://financoop-agd5.onrender.com/api/v1'
 
 console.log('🌐 API URL configurada:', API_URL)
 
