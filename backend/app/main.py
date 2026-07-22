@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse, HTMLResponse
 from app.database import engine, Base, get_db
 from app.models import NivelConfig, TasaDolar, ConfiguracionPago
 from app.config import NIVELES_CONFIG_DEFAULT
+from app.utils import get_niveles_config
 from app.routers import bancos_router
 from app.routers import (
     clientes_router, 
@@ -86,7 +87,7 @@ ALLOWED_ORIGINS = [
     "https://financoop-agd5.onrender.com",
     "https://financoop-frontend-2hvc.onrender.com",
     "http://192.168.100.26:5175",
-    "*",  # Temporal para debug - permite todo
+    "*",
 ]
 
 app.add_middleware(
@@ -260,6 +261,12 @@ app.include_router(bancos_router, prefix=API_PREFIX)
 def startup():
     logger.info(f"🚀 FinanCoop API iniciando | Entorno: {ENV}")
     init_db()
+    # ✅ Cargar niveles desde BD al iniciar
+    try:
+        get_niveles_config(next(get_db()))
+        logger.info("✅ Niveles cargados desde BD")
+    except Exception as e:
+        logger.warning(f"⚠️ No se pudieron cargar niveles: {e}")
 
 # ─────────────────────────────────────────────────────────────
 # ▶️ EJECUCIÓN

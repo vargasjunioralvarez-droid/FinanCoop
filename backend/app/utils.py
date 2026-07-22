@@ -195,7 +195,27 @@ def enviar_notificacion_generica(telefono: str, mensaje: str):
 
 # ============ FUNCIONES DE NEGOCIO ============
 
-def calcular_nivel(score: int):
+def calcular_nivel(score: int, db=None):
+    # ✅ Si hay db, leer de la BD directamente (valores actualizados por admin central)
+    if db:
+        from app.models import NivelConfig
+        niveles_db = db.query(NivelConfig).order_by(NivelConfig.min_score).all()
+        if niveles_db:
+            for n in niveles_db:
+                if n.min_score <= score <= n.max_score:
+                    return n.nivel, {
+                        "min_score": n.min_score,
+                        "max_score": n.max_score,
+                        "monto_max_usd": n.monto_max_usd,
+                        "entrada_pct": n.entrada_pct,
+                        "financia_pct": n.financia_pct,
+                        "cuotas_base": n.cuotas_base,
+                        "cuotas_max": n.cuotas_max,
+                        "mora_diaria": n.mora_diaria,
+                        "aprobacion_extra": n.aprobacion_extra
+                    }
+    
+    # Fallback a variable global
     niveles_ordenados = sorted(NIVELES_CONFIG.items(), key=lambda x: x[1]["min_score"])
     for nivel, config in niveles_ordenados:
         if config["min_score"] <= score <= config["max_score"]:
@@ -221,17 +241,14 @@ def actualizar_score_cliente(cliente: Cliente, db):
     puntos = 0
     
     # === 1. PUNTOS BASE POR COMPRAS COMPLETADAS ===
-    # Solo financiamientos COMPLETADOS (todas las cuotas pagadas) cuentan
     financiamientos_completados = db.query(Financiamiento).filter(
         Financiamiento.cliente_id == cliente.id,
         Financiamiento.estado == "completado"
     ).all()
     
-    # Cada compra completada = ~33.33 pts (3 compras = 100 pts)
     puntos += len(financiamientos_completados) * 33
     
     # === 2. PUNTOS EXTRA POR PAGOS PUNTUALES/ADELANTADOS ===
-    # Esto permite subir de nivel más rápido
     cuotas_pagadas = db.query(Cuota).join(Financiamiento).filter(
         Financiamiento.cliente_id == cliente.id,
         Cuota.estado == "pagada",
@@ -243,13 +260,10 @@ def actualizar_score_cliente(cliente: Cliente, db):
             dias_diferencia = (cuota.fecha_vencimiento.date() - cuota.fecha_pago.date()).days
             
             if dias_diferencia >= 3:
-                # Pagó con más de 3 días de anticipación
                 puntos += 15
             elif dias_diferencia >= 0:
-                # Pagó puntual (mismo día o hasta 2 días antes)
                 puntos += 10
             else:
-                # Pagó con atraso
                 puntos -= 5
     
     # === 3. BONUS POR NO TENER DEUDA VENCIDA ===
@@ -261,16 +275,14 @@ def actualizar_score_cliente(cliente: Cliente, db):
     ).count()
     
     if cuotas_vencidas == 0 and len(financiamientos_completados) > 0:
-        puntos += 5  # Pequeño bonus por buen comportamiento
+        puntos += 5
     
-    # Aplicar límites
     puntos = max(0, int(puntos))
     
-    # Actualizar cliente
     cliente.score = puntos
     cliente.total_compras = len(financiamientos_completados)
     
-    nuevo_nivel, config = calcular_nivel(cliente.score)
+    nuevo_nivel, config = calcular_nivel(cliente.score, db)
     cliente.nivel = nuevo_nivel
     
     db.commit()
@@ -314,7 +326,7 @@ def calcular_usado_disponible(cliente_id: int, db):
     cliente = db.query(Cliente).filter(Cliente.id == cliente_id).first()
     if not cliente:
         return {}
-    nivel, config = calcular_nivel(cliente.score)
+    nivel, config = calcular_nivel(cliente.score, db)
     limite_usd = config["monto_max_usd"]
     limite_bs = limite_usd * tasa
     activos = db.query(Financiamiento).filter(Financiamiento.cliente_id == cliente_id, Financiamiento.estado == "activo").all()
