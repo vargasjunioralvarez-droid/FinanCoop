@@ -23,13 +23,13 @@
         <div class="stat-item"><span class="stat-num" style="color:#ff9800;">{{ adelantosCount }}</span><span class="stat-lbl">Adelantos</span></div>
       </div>
 
-      <!-- Filtros -->
+      <!-- Filtros VISIBLES -->
       <div class="filtros-row mb-3">
-        <v-chip :color="filtroModo==='todos'?'primary':undefined" :variant="filtroModo==='todos'?'flat':'outlined'" @click="filtroModo='todos'" size="x-small">Todos</v-chip>
-        <v-chip :color="filtroModo==='cuota'?'primary':undefined" :variant="filtroModo==='cuota'?'flat':'outlined'" @click="filtroModo='cuota'" size="x-small">Cuotas</v-chip>
-        <v-chip :color="filtroModo==='abono'?'info':undefined" :variant="filtroModo==='abono'?'flat':'outlined'" @click="filtroModo='abono'" size="x-small">Abonos</v-chip>
-        <v-chip :color="filtroModo==='adelantar'?'warning':undefined" :variant="filtroModo==='adelantar'?'flat':'outlined'" @click="filtroModo='adelantar'" size="x-small">Adelantos</v-chip>
-        <v-chip :color="filtroModo==='liquidar'?'success':undefined" :variant="filtroModo==='liquidar'?'flat':'outlined'" @click="filtroModo='liquidar'" size="x-small">Liquidac.</v-chip>
+        <v-btn :color="filtroModo==='todos'?'primary':'grey-darken-1'" :variant="filtroModo==='todos'?'flat':'tonal'" @click="filtroModo='todos'" size="x-small" class="filtro-btn">Todos</v-btn>
+        <v-btn :color="filtroModo==='cuota'?'primary':'grey-darken-1'" :variant="filtroModo==='cuota'?'flat':'tonal'" @click="filtroModo='cuota'" size="x-small" class="filtro-btn">Cuotas</v-btn>
+        <v-btn :color="filtroModo==='abono'?'info':'grey-darken-1'" :variant="filtroModo==='abono'?'flat':'tonal'" @click="filtroModo='abono'" size="x-small" class="filtro-btn">Abonos</v-btn>
+        <v-btn :color="filtroModo==='adelantar'?'warning':'grey-darken-1'" :variant="filtroModo==='adelantar'?'flat':'tonal'" @click="filtroModo='adelantar'" size="x-small" class="filtro-btn">Adelantos</v-btn>
+        <v-btn :color="filtroModo==='liquidar'?'success':'grey-darken-1'" :variant="filtroModo==='liquidar'?'flat':'tonal'" @click="filtroModo='liquidar'" size="x-small" class="filtro-btn">Liquidac.</v-btn>
       </div>
 
       <!-- Lista de pagos -->
@@ -46,7 +46,7 @@
                   <div class="cliente-nombre">{{ pago.cliente_nombre }}</div>
                   <div class="cliente-cedula">{{ pago.cliente_cedula }}</div>
                 </div>
-                <v-chip :color="modoPagoColor(pago.modo_pago)" size="x-small" variant="flat">{{ modoPagoTexto(pago.modo_pago) }}</v-chip>
+                <v-chip :color="modoPagoColor(pago.modo_pago)" size="x-small" variant="flat" class="text-white">{{ modoPagoTexto(pago.modo_pago) }}</v-chip>
               </div>
               <div class="text-right">
                 <div class="monto-valor">BS {{ formatearNumero(pago.monto_reportado_bs) }}</div>
@@ -56,13 +56,13 @@
 
             <!-- Alerta de abono -->
             <v-alert v-if="pago.modo_pago === 'abono'" type="warning" variant="tonal" density="compact" class="mb-2 abono-alert">
-              <div class="d-flex justify-space-between"><span>💰 Abono parcial</span><span>Saldo: BS {{ formatearNumero((pago.monto_original_bs||0)-(pago.monto_reportado_bs||0)) }}</span></div>
+              <div class="d-flex justify-space-between"><span style="color:#ffd54f;">💰 Abono parcial</span><span style="color:#ffd54f;">Saldo: BS {{ formatearNumero((pago.monto_original_bs||0)-(pago.monto_reportado_bs||0)) }}</span></div>
             </v-alert>
 
             <!-- FILA 2: Detalles -->
             <div class="detalle-inline">
               <span>#{{ pago.cuota_numero }}</span><span>·</span>
-              <v-chip :color="colorMetodo(pago.metodo)" size="x-small" variant="tonal">{{ formatoMetodo(pago.metodo) }}</v-chip><span>·</span>
+              <v-chip :color="colorMetodo(pago.metodo)" size="x-small" variant="tonal" class="text-white">{{ formatoMetodo(pago.metodo) }}</v-chip><span>·</span>
               <span class="font-mono">{{ pago.referencia || 'N/A' }}</span><span>·</span>
               <span>{{ formatearFecha(pago.fecha_reporte) }}</span>
             </div>
@@ -70,7 +70,7 @@
             <!-- Comprobante miniatura -->
             <div v-if="pago.comprobante || pago.comprobante_url" class="comprobante-mini mt-2" @click="verComprobante(pago.comprobante || pago.comprobante_url)">
               <v-img :src="pago.comprobante || pago.comprobante_url" max-height="80" max-width="120" cover class="rounded-lg" />
-              <span class="text-caption ml-2">📸 Ver</span>
+              <span class="text-caption ml-2" style="color:#4facfe;">📸 Ver comprobante</span>
             </div>
 
             <!-- Botones -->
@@ -96,31 +96,31 @@
         {{ accionAprobar?'Aprobar Pago':'Rechazar Pago' }}
       </v-card-title>
       <v-card-text class="pt-4">
-        <p><strong>Cliente:</strong> {{ pagoSeleccionado?.cliente_nombre }}</p>
-        <p><strong>Cédula:</strong> {{ pagoSeleccionado?.cliente_cedula }}</p>
-        <p><strong>Cuota:</strong> #{{ pagoSeleccionado?.cuota_numero }}</p>
+        <p class="text-white"><strong>Cliente:</strong> {{ pagoSeleccionado?.cliente_nombre }}</p>
+        <p class="text-white"><strong>Cédula:</strong> {{ pagoSeleccionado?.cliente_cedula }}</p>
+        <p class="text-white"><strong>Cuota:</strong> #{{ pagoSeleccionado?.cuota_numero }}</p>
         <template v-if="pagoSeleccionado?.modo_pago==='abono'">
           <v-alert type="warning" variant="tonal" density="compact" class="mb-2">
-            <div class="d-flex justify-space-between"><span>Total cuota:</span><span>BS {{ formatearNumero(pagoSeleccionado?.monto_original_bs) }}</span></div>
-            <div class="d-flex justify-space-between"><span>Abonado:</span><span style="color:#4caf50;">BS {{ formatearNumero(pagoSeleccionado?.monto_reportado_bs) }}</span></div>
+            <div class="d-flex justify-space-between"><span style="color:#ffd54f;">Total cuota:</span><span style="color:#fff;">BS {{ formatearNumero(pagoSeleccionado?.monto_original_bs) }}</span></div>
+            <div class="d-flex justify-space-between"><span style="color:#ffd54f;">Abonado:</span><span style="color:#4caf50;">BS {{ formatearNumero(pagoSeleccionado?.monto_reportado_bs) }}</span></div>
             <v-divider class="my-1" />
-            <div class="d-flex justify-space-between"><span>Saldo:</span><span style="color:#ffd54f;">BS {{ formatearNumero((pagoSeleccionado?.monto_original_bs||0)-(pagoSeleccionado?.monto_reportado_bs||0)) }}</span></div>
+            <div class="d-flex justify-space-between"><span style="color:#ffd54f;">Saldo:</span><span style="color:#ffd54f;">BS {{ formatearNumero((pagoSeleccionado?.monto_original_bs||0)-(pagoSeleccionado?.monto_reportado_bs||0)) }}</span></div>
           </v-alert>
         </template>
         <template v-else>
-          <p><strong>Monto:</strong> BS {{ formatearNumero(pagoSeleccionado?.monto_reportado_bs) }}</p>
+          <p class="text-white"><strong>Monto:</strong> BS {{ formatearNumero(pagoSeleccionado?.monto_reportado_bs) }}</p>
         </template>
-        <p><strong>Ref:</strong> {{ pagoSeleccionado?.referencia || 'N/A' }}</p>
-        <p><strong>Método:</strong> {{ formatoMetodo(pagoSeleccionado?.metodo) }}</p>
-        <p><strong>Banco:</strong> {{ pagoSeleccionado?.banco_origen || 'N/A' }}</p>
+        <p class="text-white"><strong>Ref:</strong> {{ pagoSeleccionado?.referencia || 'N/A' }}</p>
+        <p class="text-white"><strong>Método:</strong> {{ formatoMetodo(pagoSeleccionado?.metodo) }}</p>
+        <p class="text-white"><strong>Banco:</strong> {{ pagoSeleccionado?.banco_origen || 'N/A' }}</p>
         <div v-if="pagoSeleccionado?.comprobante" class="mt-2">
           <v-img :src="pagoSeleccionado.comprobante" max-height="200" contain class="rounded-lg" @click="verComprobante(pagoSeleccionado.comprobante)" />
         </div>
-        <v-text-field v-if="accionAprobar" v-model.number="montoConfirmado" label="Monto a confirmar (BS)" type="number" prefix="BS" variant="outlined" density="comfortable" class="mt-3" />
+        <v-text-field v-if="accionAprobar" v-model.number="montoConfirmado" label="Monto a confirmar (BS)" type="number" prefix="BS" variant="outlined" density="comfortable" class="mt-3" hide-details />
         <v-alert v-else type="warning" class="mt-3" variant="tonal">El pago será rechazado.</v-alert>
       </v-card-text>
       <v-card-actions class="pa-4">
-        <v-btn variant="text" @click="dialogConfirmar=false">Cancelar</v-btn>
+        <v-btn variant="text" @click="dialogConfirmar=false" style="color:rgba(255,255,255,0.5);">Cancelar</v-btn>
         <v-spacer />
         <v-btn :color="accionAprobar?'success':'error'" @click="confirmarAccion" :loading="cargando" variant="flat">
           {{ accionAprobar?'Aprobar':'Rechazar' }}
@@ -207,7 +207,12 @@ onUnmounted(()=>{ if(refreshInterval) clearInterval(refreshInterval) })
 .stat-item{flex:1;text-align:center;background:rgba(255,255,255,0.04);border-radius:12px;padding:8px 4px;border:1px solid rgba(255,255,255,0.06)}
 .stat-num{font-size:18px;font-weight:700;color:#4facfe;display:block}
 .stat-lbl{font-size:10px;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:.5px}
-.filtros-row{display:flex;gap:4px;flex-wrap:wrap}
+
+/* Filtros visibles */
+.filtros-row{display:flex;gap:6px;flex-wrap:wrap}
+.filtro-btn{min-width:auto!important;padding:0 10px!important;height:28px!important;font-size:11px!important;font-weight:600!important;letter-spacing:0!important;text-transform:none!important}
+.filtro-btn :deep(.v-btn__content){color:white!important}
+
 .pago-item{transition:transform .15s ease}
 .pago-item:hover{transform:translateY(-1px)}
 .cliente-nombre{font-size:14px;font-weight:600;color:#fff}
@@ -217,8 +222,10 @@ onUnmounted(()=>{ if(refreshInterval) clearInterval(refreshInterval) })
 .abono-alert{border-radius:10px!important;background:rgba(255,193,7,0.1)!important;border:1px solid rgba(255,193,7,0.2)!important;font-size:11px}
 .detalle-inline{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:11px;color:rgba(255,255,255,0.5)}
 .font-mono{font-family:monospace;font-size:11px}
-.comprobante-mini{display:flex;align-items:center;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px}
+.comprobante-mini{display:flex;align-items:center;cursor:pointer;font-size:12px}
 .gap-2{gap:8px}
+.text-white{color:#fff!important}
+
 .dialog-card{background:#1a1f2e!important;border:1px solid rgba(255,255,255,0.08);border-radius:16px!important}
 .dialog-title{font-size:16px;font-weight:600;padding:16px 20px}
 @media(min-width:768px){.page-content{padding:24px 24px 80px;max-width:900px;margin:0 auto}}
