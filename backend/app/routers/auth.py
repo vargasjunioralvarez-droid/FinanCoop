@@ -140,7 +140,7 @@ def enviar_correo_recuperacion(destinatario: str, nombre: str, codigo: str) -> b
                 <div style="background: rgba(0,0,0,0.2); padding: 12px; text-align: center;">
                     <p style="color: #555; font-size: 10px; margin: 0;">FinanCoop • Cecosesola • v2.0</p>
                 </div>
-            </div>
+            </div
         </body>
         </html>
         """
