@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse, HTMLResponse
 from app.database import engine, Base, get_db
 from app.models import NivelConfig, TasaDolar, ConfiguracionPago
 from app.config import NIVELES_CONFIG_DEFAULT
-from app.routers import bancos_router  # ← Agregar
+from app.routers import bancos_router
 from app.routers import (
     clientes_router, 
     financiamientos_router, 
@@ -173,10 +173,9 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 # ─────────────────────────────────────────────────────────────
-# 🗄️ CREAR TABLAS
+# 🗄️ CREAR TABLAS (checkfirst=True evita error de duplicados)
 # ─────────────────────────────────────────────────────────────
-Base.metadata.create_all(bind=engine)
-
+Base.metadata.create_all(bind=engine, checkfirst=True)
 
 # ─────────────────────────────────────────────────────────────
 # 📊 INICIALIZAR DATOS
