@@ -409,7 +409,10 @@ const buscarCliente = async () => {
       clienteNoEncontrado.value = true
       nuevoCliente.value.cedula = busquedaCedula.value
     } else {
-      clienteEncontrado.value = data
+      // ✅ Cargar financiamientos activos
+      const financiamientos = await api.get(`/financiamientos?cliente_id=${data.id}&estado=activo`)
+      const lista = Array.isArray(financiamientos) ? financiamientos : (financiamientos.financiamientos || [])
+      clienteEncontrado.value = { ...data, financiamientos_activos: lista }
       clienteNoEncontrado.value = false
     }
   } catch (e) {
