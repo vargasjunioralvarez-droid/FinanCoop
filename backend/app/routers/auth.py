@@ -12,7 +12,9 @@ import logging
 import re
 import random
 import os
-import httpx
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from jose import jwt, JWTError, ExpiredSignatureError
 
 from app.database import get_db
@@ -33,9 +35,12 @@ router = APIRouter(prefix="/auth", tags=["Autenticación"])
 DUMMY_HASH = "$2b$12$LJ3m4ys3GZfnYMz8kVsKaOmLp1GpGmB0qJX3PzV3QXjKtHqKw8m5u"
 
 # ============================================================
-# 📧 CONFIGURACIÓN DE RESEND
+# 📧 CONFIGURACIÓN SMTP
 # ============================================================
-RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
+SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USER = os.getenv("SMTP_USER", "")
+SMTP_PASS = os.getenv("SMTP_PASS", "")
 
 # ============================================================
 # 📋 MODELOS Pydantic
@@ -109,17 +114,22 @@ class CambiarPinRequest(BaseModel):
 codigos_recuperacion = {}
 
 # ============================================================
-# 📧 FUNCIÓN DE ENVÍO DE CORREO (RESEND API)
+# 📧 FUNCIÓN DE ENVÍO DE CORREO (SMTP GMAIL)
 # ============================================================
 
 def enviar_correo_recuperacion(destinatario: str, nombre: str, codigo: str) -> bool:
-    """Envía un correo con el código de recuperación usando Resend API"""
+    """Envía un correo con el código de recuperación usando SMTP Gmail"""
     try:
-        if not RESEND_API_KEY:
-            logger.error("❌ RESEND_API_KEY no configurada")
+        if not SMTP_USER or not SMTP_PASS:
+            logger.error("❌ SMTP no configurado (SMTP_USER o SMTP_PASS vacíos)")
             return False
         
-        html_content = f"""
+        msg = MIMEMultipart()
+        msg["From"] = f"FinanCoop <{SMTP_USER}>"
+        msg["To"] = destinatario
+        msg["Subject"] = "🔐 Recuperación de PIN - FinanCoop"
+        
+        body = f"""
         <html>
         <body style="font-family: Arial, sans-serif; background: #0a0e1a; padding: 20px; margin: 0;">
             <div style="max-width: 400px; margin: auto; background: #1a1f3a; border-radius: 20px; overflow: hidden; border: 1px solid rgba(255,255,255,0.08);">
@@ -140,33 +150,21 @@ def enviar_correo_recuperacion(destinatario: str, nombre: str, codigo: str) -> b
                 <div style="background: rgba(0,0,0,0.2); padding: 12px; text-align: center;">
                     <p style="color: #555; font-size: 10px; margin: 0;">FinanCoop • Cecosesola • v2.0</p>
                 </div>
-            </div
+            </div>
         </body>
         </html>
         """
         
-        response = httpx.post(
-            "https://api.resend.com/emails",
-            headers={
-                "Authorization": f"Bearer {RESEND_API_KEY}",
-                "Content-Type": "application/json"
-            },
-            json={
-                "from": "FinanCoop <onboarding@resend.dev>",
-                "to": [destinatario],
-                "subject": "🔐 Recuperación de PIN - FinanCoop",
-                "html": html_content
-            },
-            timeout=10
-        )
+        msg.attach(MIMEText(body, "html"))
         
-        if response.status_code == 200:
-            logger.info(f"📧 Correo enviado a {destinatario}")
-            return True
-        else:
-            logger.error(f"❌ Error Resend: {response.status_code} - {response.text}")
-            return False
-            
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASS)
+            server.send_message(msg)
+        
+        logger.info(f"📧 Correo enviado a {destinatario}")
+        return True
+        
     except Exception as e:
         logger.error(f"❌ Error enviando correo: {e}")
         return False
@@ -487,7 +485,7 @@ def solicitar_codigo_recuperacion(
         "intentos": 0
     }
     
-    # Enviar por correo con Resend
+    # Enviar por correo SMTP
     correo_enviado = enviar_correo_recuperacion(cliente.email, cliente.nombre, codigo)
     
     if not correo_enviado:
