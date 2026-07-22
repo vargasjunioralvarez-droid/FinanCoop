@@ -215,7 +215,7 @@
                 
                 <v-checkbox v-model="aceptoDatos" color="#4facfe" hide-details density="compact" class="terminos-check mt-1">
                   <template v-slot:label>
-                    <span class="text-caption text-white">Autorizo el tratamiento de mis <a href="#" @click.prevent="verPolitica" style="color: #4facfe; text-decoration: underline;">datos personales</a></span>
+                    <span class="text-caption text-white">Autorizo la verificacion de mis <a href="#" @click.prevent="verPolitica" style="color: #4facfe; text-decoration: underline;">datos personales</a></span>
                   </template>
                 </v-checkbox>
                 
@@ -265,13 +265,13 @@
               </div>
               <div class="info-item mb-3">
                 <v-icon size="20" color="#ffc107" class="mr-2">mdi-clock</v-icon>
-                <span class="text-body-1 text-white font-weight-medium">En espera de aprobación</span>
+                <span class="text-body-1 text-white font-weight-medium">En espera de verificación de datos</span>
                 <p class="text-body-2 text-white mt-1 ml-7" style="opacity: 0.8;">Un administrador revisará tus datos y te aprobará en la plataforma.</p>
               </div>
               <div class="info-item">
                 <v-icon size="20" color="#4caf50" class="mr-2">mdi-phone-message</v-icon>
                 <span class="text-body-1 text-white font-weight-medium">Notificación por SMS</span>
-                <p class="text-body-2 text-white mt-1 ml-7" style="opacity: 0.8;">Cuando seas aprobado, recibirás un SMS al número <strong class="text-white">{{ telefonoCompleto }}</strong> con tu PIN de acceso.</p>
+                <p class="text-body-2 text-white mt-1 ml-7" style="opacity: 0.8;">Cuando tus datos sean verificados, recibirás un SMS al número <strong class="text-white">{{ telefonoCompleto }}</strong> con tu PIN de acceso.</p>
               </div>
             </div>
             <v-divider class="my-4" style="border-color: rgba(255,255,255,0.06);" />

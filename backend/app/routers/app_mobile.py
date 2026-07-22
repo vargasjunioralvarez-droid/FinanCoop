@@ -128,6 +128,8 @@ def mis_datos(
                 "id": fin.id,
                 "codigo": fin.codigo,
                 "descripcion": fin.descripcion,
+                "url_factura": fin.url_factura,           # ✅ NUEVO
+                "numero_factura": fin.numero_factura,     # ✅ NUEVO
                 "monto_total_bs": round(fin.monto_total_bs, 2),
                 "monto_total_usd_ref": round(fin.monto_total_usd, 2),
                 "monto_entrada_bs": round(fin.monto_entrada_bs, 2),

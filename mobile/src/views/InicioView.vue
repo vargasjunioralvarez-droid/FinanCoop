@@ -119,6 +119,22 @@
               </div>
               <div class="compra-monto">BS {{ formatearBS(fin.monto_total_bs) }}</div>
               <div class="compra-ref">Ref: ${{ formatearUSD(fin.monto_total_usd_ref) }}</div>
+
+              <!-- 📸 FOTO DE FACTURA -->
+              <div class="factura-section mt-2" @click.stop>
+                <div v-if="fin.url_factura" class="d-flex align-center">
+                  <v-icon size="14" color="success" class="mr-1">mdi-check-circle</v-icon>
+                  <v-btn variant="text" size="x-small" color="info" density="compact" @click.stop="verFactura(fin)">
+                    📸 Ver factura
+                  </v-btn>
+                </div>
+                <div v-else class="d-flex align-center">
+                  <v-btn variant="tonal" size="x-small" color="warning" density="compact" @click.stop="abrirCamaraFactura(fin)">
+                    <v-icon size="14" class="mr-1">mdi-camera</v-icon> Subir factura
+                  </v-btn>
+                </div>
+              </div>
+
               <div class="d-flex justify-space-between compra-progress-text">
                 <span>Pagadas: {{ fin.cuotas_pagadas }}</span>
                 <span>Pendientes: {{ fin.cuotas_pendientes }}</span>
@@ -185,13 +201,28 @@
         </v-card>
       </div>
     </div>
+
+    <!-- DIÁLOGO VER FACTURA -->
+    <v-dialog v-model="dialogoFactura" max-width="500">
+      <v-card class="glass-card">
+        <v-card-title class="d-flex align-center text-white">
+          📸 Factura
+          <v-spacer></v-spacer>
+          <v-btn icon="mdi-close" variant="text" @click="dialogoFactura = false" color="white" />
+        </v-card-title>
+        <v-card-text class="text-center pa-4">
+          <v-img v-if="facturaUrl" :src="facturaUrl" max-height="60vh" contain class="rounded-lg" />
+        </v-card-text>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useFinanCash } from '@/composables/useFinanCash'
+import { buildApiUrl } from '@/config'
 
 const router = useRouter()
 
@@ -209,7 +240,6 @@ const {
   totalDeudaBs,
   totalDeudaUsd,
   historialDolar,
-  notificaciones,
   formatearBS,
   formatearUSD,
   formatearNumero,
@@ -219,6 +249,10 @@ const {
   iconoNivel,
   setCuotaSeleccionada
 } = useFinanCash()
+
+// 📸 ESTADOS DE FACTURA
+const dialogoFactura = ref(false)
+const facturaUrl = ref('')
 
 const variacionDolar = computed(() => {
   if (historialDolar.value.length < 2) return 0
@@ -253,256 +287,97 @@ function estadoCuota(cuota) {
   if (dias <= 3) return 'urgente'
   return 'pendiente'
 }
+
+// 📸 FUNCIONES DE FACTURA
+function abrirCamaraFactura(fin) {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = 'image/*'
+  input.capture = 'environment'
+  input.onchange = (e) => {
+    const file = e.target.files[0]
+    if (file) subirFactura(file, fin)
+  }
+  input.click()
+}
+
+async function subirFactura(file, fin) {
+  try {
+    const formData = new FormData()
+    formData.append('file', file)
+    
+    const token = localStorage.getItem('financoop_token')
+    const response = await fetch(buildApiUrl(`/upload/factura/${fin.id}`), {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` },
+      body: formData
+    })
+    
+    if (response.ok) {
+      const data = await response.json()
+      fin.url_factura = data.url
+    } else {
+      alert('Error al subir la factura')
+    }
+  } catch (e) {
+    console.error('Error:', e)
+  }
+}
+
+function verFactura(fin) {
+  if (fin.url_factura) {
+    facturaUrl.value = fin.url_factura
+    dialogoFactura.value = true
+  }
+}
 </script>
 
 <style scoped>
-.inicio-wrapper {
-  min-height: 100vh;
-  background: #0a0e1a;
-  position: relative;
-}
-
-.bg-gradient {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: radial-gradient(ellipse at 20% 50%, rgba(79, 172, 254, 0.08), transparent 70%),
-              radial-gradient(ellipse at 80% 50%, rgba(99, 102, 241, 0.08), transparent 70%);
-  z-index: 0;
-}
-
-.page-content {
-  position: relative;
-  z-index: 1;
-  padding: 16px 16px 80px;
-}
-
-.glass-card {
-  background: rgba(255,255,255,0.04) !important;
-  backdrop-filter: blur(12px) !important;
-  -webkit-backdrop-filter: blur(12px) !important;
-  border: 1px solid rgba(255,255,255,0.06);
-  border-radius: 16px !important;
-}
-
-.profile-card {
-  margin-bottom: 12px;
-}
-
-.profile-name {
-  font-size: 18px;
-  font-weight: 700;
-  color: #ffffff;
-}
-
-.profile-score {
-  font-size: 12px;
-  color: rgba(255,255,255,0.4);
-}
-
-.progress-labels {
-  font-size: 11px;
-  color: rgba(255,255,255,0.4);
-}
-
-.dolar-card {
-  margin-bottom: 12px;
-}
-
-.dolar-label {
-  font-size: 11px;
-  color: rgba(255,255,255,0.4);
-}
-
-.dolar-value {
-  font-size: 18px;
-  font-weight: 700;
-  color: #ffffff;
-}
-
-.credit-card {
-  margin-bottom: 12px;
-}
-
-.credit-label {
-  font-size: 11px;
-  color: rgba(255,255,255,0.4);
-}
-
-.credit-available {
-  font-size: 24px;
-  font-weight: 700;
-  color: #4caf50;
-}
-
-.credit-used {
-  font-size: 18px;
-  font-weight: 600;
-  color: #ffd54f;
-}
-
-.credit-footer {
-  font-size: 11px;
-  color: rgba(255,255,255,0.3);
-}
-
-.deuda-card {
-  margin-bottom: 12px;
-}
-
-.deuda-label {
-  font-size: 11px;
-  color: rgba(255,255,255,0.4);
-}
-
-.deuda-value {
-  font-size: 22px;
-  font-weight: 700;
-  color: #ffd54f;
-}
-
-.deuda-ref {
-  font-size: 11px;
-  color: rgba(255,255,255,0.3);
-}
-
-.success-alert {
-  background: rgba(76, 175, 80, 0.1) !important;
-  color: #81c784 !important;
-  border: 1px solid rgba(76, 175, 80, 0.15);
-  border-radius: 12px !important;
-  margin-bottom: 12px;
-}
-
-.section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin: 16px 0 12px;
-}
-
-.section-header h3 {
-  font-size: 16px;
-  font-weight: 700;
-  color: #ffffff;
-}
-
-.slide-group {
-  margin-bottom: 8px;
-}
-
-.compra-card {
-  transition: all 0.3s ease;
-  cursor: pointer;
-}
-
-.compra-card:hover {
-  transform: translateY(-4px);
-  background: rgba(255,255,255,0.06) !important;
-}
-
-.compra-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: #ffffff;
-}
-
-.compra-code {
-  font-size: 11px;
-  color: rgba(255,255,255,0.3);
-}
-
-.compra-monto {
-  font-size: 18px;
-  font-weight: 700;
-  color: #4facfe;
-}
-
-.compra-ref {
-  font-size: 11px;
-  color: rgba(255,255,255,0.3);
-}
-
-.compra-progress-text {
-  font-size: 11px;
-  color: rgba(255,255,255,0.4);
-}
-
-.proxima-card {
-  background: rgba(255,255,255,0.02) !important;
-  border-color: rgba(255,255,255,0.06) !important;
-  border-radius: 8px;
-  margin-top: 8px;
-}
-
-.proxima-label {
-  font-size: 10px;
-  color: rgba(255,255,255,0.3);
-}
-
-.proxima-info {
-  font-size: 12px;
-  color: #ffffff;
-}
-
-.proxima-monto {
-  font-size: 13px;
-  font-weight: 600;
-  color: #ffffff;
-}
-
-.proxima-usd {
-  font-size: 10px;
-  color: rgba(255,255,255,0.3);
-}
-
-.cuota-preview {
-  margin-bottom: 8px;
-  transition: all 0.3s ease;
-  cursor: pointer;
-}
-
-.cuota-preview:hover {
-  transform: translateX(4px);
-  background: rgba(255,255,255,0.06) !important;
-}
-
-.cuota-preview.cuota-urgente {
-  border-left: 3px solid #ffd54f;
-}
-
-.cuota-preview-title {
-  font-size: 13px;
-  font-weight: 500;
-  color: #ffffff;
-}
-
-.cuota-preview-date {
-  font-size: 11px;
-  color: rgba(255,255,255,0.4);
-}
-
-.cuota-preview-monto {
-  font-size: 14px;
-  font-weight: 600;
-  color: #ffffff;
-}
-
-.cuota-preview-usd {
-  font-size: 10px;
-  color: rgba(255,255,255,0.3);
-}
-
-.cuota-indicator {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  margin-right: 12px;
-  flex-shrink: 0;
-}
-
+.inicio-wrapper { min-height: 100vh; background: #0a0e1a; position: relative; }
+.bg-gradient { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: radial-gradient(ellipse at 20% 50%, rgba(79, 172, 254, 0.08), transparent 70%), radial-gradient(ellipse at 80% 50%, rgba(99, 102, 241, 0.08), transparent 70%); z-index: 0; }
+.page-content { position: relative; z-index: 1; padding: 16px 16px 80px; }
+.glass-card { background: rgba(255,255,255,0.04) !important; backdrop-filter: blur(12px) !important; -webkit-backdrop-filter: blur(12px) !important; border: 1px solid rgba(255,255,255,0.06); border-radius: 16px !important; }
+.profile-card { margin-bottom: 12px; }
+.profile-name { font-size: 18px; font-weight: 700; color: #ffffff; }
+.profile-score { font-size: 12px; color: rgba(255,255,255,0.4); }
+.progress-labels { font-size: 11px; color: rgba(255,255,255,0.4); }
+.dolar-card { margin-bottom: 12px; }
+.dolar-label { font-size: 11px; color: rgba(255,255,255,0.4); }
+.dolar-value { font-size: 18px; font-weight: 700; color: #ffffff; }
+.credit-card { margin-bottom: 12px; }
+.credit-label { font-size: 11px; color: rgba(255,255,255,0.4); }
+.credit-available { font-size: 24px; font-weight: 700; color: #4caf50; }
+.credit-used { font-size: 18px; font-weight: 600; color: #ffd54f; }
+.credit-footer { font-size: 11px; color: rgba(255,255,255,0.3); }
+.deuda-card { margin-bottom: 12px; }
+.deuda-label { font-size: 11px; color: rgba(255,255,255,0.4); }
+.deuda-value { font-size: 22px; font-weight: 700; color: #ffd54f; }
+.deuda-ref { font-size: 11px; color: rgba(255,255,255,0.3); }
+.success-alert { background: rgba(76, 175, 80, 0.1) !important; color: #81c784 !important; border: 1px solid rgba(76, 175, 80, 0.15); border-radius: 12px !important; margin-bottom: 12px; }
+.section-header { display: flex; align-items: center; justify-content: space-between; margin: 16px 0 12px; }
+.section-header h3 { font-size: 16px; font-weight: 700; color: #ffffff; }
+.slide-group { margin-bottom: 8px; }
+.compra-card { transition: all 0.3s ease; cursor: pointer; }
+.compra-card:hover { transform: translateY(-4px); background: rgba(255,255,255,0.06) !important; }
+.compra-title { font-size: 13px; font-weight: 600; color: #ffffff; }
+.compra-code { font-size: 11px; color: rgba(255,255,255,0.3); }
+.compra-monto { font-size: 18px; font-weight: 700; color: #4facfe; }
+.compra-ref { font-size: 11px; color: rgba(255,255,255,0.3); }
+.compra-progress-text { font-size: 11px; color: rgba(255,255,255,0.4); }
+.factura-section { padding: 4px 0; border-top: 1px solid rgba(255,255,255,0.04); border-bottom: 1px solid rgba(255,255,255,0.04); margin: 4px 0; }
+.proxima-card { background: rgba(255,255,255,0.02) !important; border-color: rgba(255,255,255,0.06) !important; border-radius: 8px; margin-top: 8px; }
+.proxima-label { font-size: 10px; color: rgba(255,255,255,0.3); }
+.proxima-info { font-size: 12px; color: #ffffff; }
+.proxima-monto { font-size: 13px; font-weight: 600; color: #ffffff; }
+.proxima-usd { font-size: 10px; color: rgba(255,255,255,0.3); }
+.cuota-preview { margin-bottom: 8px; transition: all 0.3s ease; cursor: pointer; }
+.cuota-preview:hover { transform: translateX(4px); background: rgba(255,255,255,0.06) !important; }
+.cuota-preview.cuota-urgente { border-left: 3px solid #ffd54f; }
+.cuota-preview-title { font-size: 13px; font-weight: 500; color: #ffffff; }
+.cuota-preview-date { font-size: 11px; color: rgba(255,255,255,0.4); }
+.cuota-preview-monto { font-size: 14px; font-weight: 600; color: #ffffff; }
+.cuota-preview-usd { font-size: 10px; color: rgba(255,255,255,0.3); }
+.cuota-indicator { width: 8px; height: 8px; border-radius: 50%; margin-right: 12px; flex-shrink: 0; }
 .cuota-indicator.pendiente { background: #4facfe; }
 .cuota-indicator.urgente { background: #ffd54f; }
 .cuota-indicator.vencida { background: #f87171; }

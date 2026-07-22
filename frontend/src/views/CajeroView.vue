@@ -107,12 +107,6 @@
                 </div>
                 <div v-else class="mt-3"><div class="empty-state glass-effect"><v-icon color="rgba(255,255,255,0.3)" size="32">mdi-check-circle</v-icon><div class="text-caption" style="color: rgba(255,255,255,0.4);">No tiene compras activas</div></div></div>
 
-                <!-- ALERTA MOROSIDAD -->
-                <v-alert v-if="clienteEncontrado?.cuotas_vencidas > 0" type="error" class="mt-3 rounded-xl" border="start" prominent>
-                  <v-icon start>mdi-alert-octagon</v-icon><strong>⚠️ Cliente con cuotas vencidas</strong>
-                  <div class="text-caption mt-1">Tiene <strong>{{ clienteEncontrado.cuotas_vencidas }}</strong> cuota(s) pendiente(s) por pagar.</div>
-                </v-alert>
-
                 <!-- BOTÓN CONTINUAR -->
                 <div class="mt-4">
                   <v-btn v-if="clienteEncontrado.limite_disponible?.disponible_usd > 0 && (clienteEncontrado?.cuotas_vencidas || 0) === 0" color="#4facfe" @click="paso = 2" size="x-large" block elevation="0" class="btn-continuar rounded-xl"><span class="font-weight-bold">Continuar con la venta</span><v-icon end>mdi-arrow-right</v-icon></v-btn>
@@ -175,11 +169,9 @@
                 <div class="text-caption mt-1">Límite disponible: <strong>${{ clienteEncontrado?.limite_disponible?.disponible_usd || 0 }} USD</strong> | Solicitado: <strong>~${{ ((parseFloat(montoTotalBS) || 0) / (tasaDolar || 40)).toFixed(2) }} USD</strong></div>
               </v-alert>
               
-              <!-- ✅ PROPUESTA CON COLORES MEJORADOS -->
-                            <v-alert v-if="propuesta && !excedeLimite" type="info" class="mt-3 rounded-xl" border="start">
+              <v-alert v-if="propuesta && !excedeLimite" type="info" class="mt-3 rounded-xl" border="start">
                 <h3 class="text-h6 mb-2">📋 Propuesta de Financiamiento</h3>
                 <v-divider class="my-2"></v-divider>
-                
                 <v-row>
                   <v-col cols="12" md="6">
                     <div class="d-flex justify-space-between pa-2 rounded-lg" style="background: rgba(255,255,255,0.05);">
@@ -192,20 +184,16 @@
                     </div>
                   </v-col>
                   <v-col cols="12" md="6">
-                    <!-- ✅ CAMBIO 1: Esta línea -->
                     <div class="d-flex justify-space-between pa-2 rounded-lg" style="background: rgba(0,0,0,0.3);">
                       <span class="text-white" style="opacity: 0.9;">💳 Entrada HOY ({{ propuesta.propuesta?.entrada_pct || propuesta.entrada_pct }}%):</span>
                       <strong class="text-warning">BS {{ formatearNumero(propuesta.propuesta?.entrada_bs || propuesta.monto_entrada_bs) }}</strong>
                     </div>
-                    <!-- ✅ CAMBIO 2: Esta línea -->
                     <div class="d-flex justify-space-between pa-2 mt-1 rounded-lg" style="background: rgba(0,0,0,0.3);">
                       <span class="text-white" style="opacity: 0.9;">📊 A financiar ({{ propuesta.propuesta?.financia_pct || propuesta.financia_pct }}%):</span>
                       <strong class="text-success">BS {{ formatearNumero(propuesta.propuesta?.financia_bs || propuesta.monto_financia_bs) }}</strong>
                     </div>
                   </v-col>
                 </v-row>
-                
-                <!-- ✅ CAMBIO 3: Esta línea -->
                 <div class="d-flex justify-space-between pa-2 mt-2 rounded-lg" style="background: rgba(0,0,0,0.3);">
                   <span class="text-white" style="opacity: 0.9;">💰 Disponible después:</span>
                   <strong class="text-white">${{ formatearNumero(clienteEncontrado?.limite_disponible?.disponible_usd - (propuesta.propuesta?.monto_solicitado_usd || 0)) }}</strong>
@@ -230,17 +218,107 @@
           </v-card>
         </v-col>
 
-        <!-- PASO 3 -->
+        <!-- PASO 3: CONFIRMAR VENTA (CON CATEGORÍAS + FACTURA) -->
         <v-col cols="12" v-if="paso === 3">
           <v-card class="glass-card rounded-xl" elevation="0">
-            <v-card-title class="text-h5 pa-4 text-white"><v-icon start color="#FFD700">mdi-check-circle</v-icon>3. Confirmar Venta</v-card-title>
+            <v-card-title class="text-h5 pa-4 text-white">
+              <v-icon start color="#FFD700">mdi-check-circle</v-icon>
+              3. Confirmar Venta
+            </v-card-title>
             <v-card-text class="pa-4">
-              <div class="glass-effect pa-4 mb-3">
+              
+              <!-- ✅ CATEGORÍAS TIPO CASHEA -->
+              <div class="mb-4">
+                <h4 class="text-subtitle-1 font-weight-bold text-white mb-3">
+                  <v-icon color="#4facfe" class="mr-1">mdi-shape</v-icon>
+                  ¿Qué estás comprando?
+                </h4>
+                <div class="categorias-grid">
+                  <div 
+                    v-for="cat in categorias" 
+                    :key="cat.title"
+                    class="categoria-item glass-effect"
+                    :class="{ 'categoria-seleccionada': categoriaSeleccionada?.title === cat.title }"
+                    :style="categoriaSeleccionada?.title === cat.title ? `border-color: ${cat.color} !important; background: ${cat.color}22 !important;` : ''"
+                    @click="seleccionarCategoria(cat)"
+                  >
+                    <v-icon :color="cat.color" size="28">{{ cat.icon }}</v-icon>
+                    <span class="text-white text-caption mt-1 font-weight-bold">{{ cat.title }}</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ✅ DESCRIPCIÓN -->
+              <div class="glass-effect pa-4 mb-3 rounded-lg">
+                <div class="d-flex align-center mb-2">
+                  <v-icon color="#4facfe" class="mr-2">mdi-clipboard-text</v-icon>
+                  <span class="text-white font-weight-bold">Descripción de la compra</span>
+                  <v-spacer></v-spacer>
+                  <v-chip v-if="categoriaSeleccionada" :color="categoriaSeleccionada.color" size="x-small" variant="tonal">
+                    {{ categoriaSeleccionada.title }}
+                  </v-chip>
+                </div>
+                
+                <div v-if="!descripcionManual && categoriaSeleccionada" class="descripcion-auto pa-3 rounded-lg" 
+                     :style="`background: ${categoriaSeleccionada.color}15; border-left: 3px solid ${categoriaSeleccionada.color};`">
+                  <v-icon :color="categoriaSeleccionada.color" size="16" class="mr-1">{{ categoriaSeleccionada.icon }}</v-icon>
+                  <span class="text-white">{{ categoriaSeleccionada.descripcion }}</span>
+                  <v-btn variant="text" size="x-small" color="grey" class="ml-2" @click="descripcionManual = categoriaSeleccionada.descripcion">
+                    <v-icon size="14">mdi-pencil</v-icon> Editar
+                  </v-btn>
+                </div>
+                
+                <v-text-field 
+                  v-if="descripcionManual || !categoriaSeleccionada"
+                  v-model="descripcionManual"
+                  label="Escribe la descripción de la compra"
+                  placeholder="Ej: iPhone 15 Pro Max 256GB"
+                  variant="outlined"
+                  density="comfortable"
+                  prepend-inner-icon="mdi-pencil"
+                  dark
+                  class="custom-input mt-2"
+                  clearable
+                  @click:clear="descripcionManual = ''"
+                />
+              </div>
+
+              <!-- ✅ NÚMERO DE FACTURA -->
+              <div class="glass-effect pa-4 mb-3 rounded-lg">
+                <div class="d-flex align-center mb-2">
+                  <v-icon color="#FFD700" class="mr-2">mdi-receipt</v-icon>
+                  <span class="text-white font-weight-bold">Número de Factura</span>
+                  <v-spacer></v-spacer>
+                  <span class="text-caption" style="color: rgba(255,255,255,0.4);">Opcional</span>
+                </div>
+                <v-text-field 
+                  v-model="numeroFactura"
+                  label="Número de factura / control"
+                  placeholder="Ej: FAC-001-12345"
+                  variant="outlined"
+                  density="comfortable"
+                  prepend-inner-icon="mdi-numeric"
+                  dark
+                  class="custom-input"
+                  clearable
+                />
+              </div>
+
+              <!-- ✅ RESUMEN -->
+              <div class="glass-effect pa-4 mb-3 rounded-lg">
                 <h3 class="text-h6 mb-2 text-white">📋 Resumen de la Venta</h3>
                 <v-divider class="my-2" style="border-color: rgba(255,255,255,0.1);"></v-divider>
                 <v-row>
-                  <v-col cols="12" md="6"><p class="text-white"><strong>Cliente:</strong> {{ clienteEncontrado?.nombre }}</p><p class="text-white"><strong>Teléfono:</strong> {{ clienteEncontrado?.telefono }}</p><p class="text-white"><strong>Dirección:</strong> {{ clienteEncontrado?.direccion }}</p></v-col>
-                  <v-col cols="12" md="6"><p class="text-white"><strong>Monto Total:</strong> BS {{ formatearNumero(montoTotalBS) }}</p><p style="color: #4facfe;"><strong>💳 Entrada HOY:</strong> BS {{ formatearNumero(propuesta?.propuesta?.entrada_bs || propuesta?.monto_entrada_bs) }}</p><p class="text-white"><strong>📊 Financia:</strong> BS {{ formatearNumero(propuesta?.propuesta?.financia_bs || propuesta?.monto_financia_bs) }}</p></v-col>
+                  <v-col cols="12" md="6">
+                    <p class="text-white"><strong>Cliente:</strong> {{ clienteEncontrado?.nombre }}</p>
+                    <p class="text-white"><strong>Teléfono:</strong> {{ clienteEncontrado?.telefono }}</p>
+                    <p class="text-white" v-if="numeroFactura"><strong>Factura:</strong> {{ numeroFactura }}</p>
+                  </v-col>
+                  <v-col cols="12" md="6">
+                    <p class="text-white"><strong>Monto Total:</strong> BS {{ formatearNumero(montoTotalBS) }}</p>
+                    <p style="color: #FFD54F;"><strong>💳 Entrada HOY:</strong> BS {{ formatearNumero(propuesta?.propuesta?.entrada_bs || propuesta?.monto_entrada_bs) }}</p>
+                    <p class="text-success"><strong>📊 Financia:</strong> BS {{ formatearNumero(propuesta?.propuesta?.financia_bs || propuesta?.monto_financia_bs) }}</p>
+                  </v-col>
                 </v-row>
                 <v-divider class="my-2" style="border-color: rgba(255,255,255,0.1);"></v-divider>
                 <v-row>
@@ -249,8 +327,13 @@
                   <v-col cols="12" md="4"><p class="text-white"><strong>Total a pagar:</strong> BS {{ formatearNumero(parseFloat(montoTotalBS)) }}</p></v-col>
                 </v-row>
               </div>
-              <v-text-field v-model="descripcion" label="Descripción de la compra" placeholder="Ej: iPhone 15, Consulta Dental, etc." variant="outlined" density="comfortable" prepend-inner-icon="mdi-clipboard-text" dark class="custom-input" />
-              <div class="d-flex mt-4" style="gap: 8px;"><v-btn @click="paso = 2" variant="text" color="grey"><v-icon start>mdi-arrow-left</v-icon>Volver</v-btn><v-btn color="#4caf50" @click="crearFinanciamiento" class="flex-grow-1" size="large" elevation="0" rounded="xl"><v-icon start>mdi-cash-check</v-icon>Cobrar Entrada y Crear Financiamiento</v-btn></div>
+
+              <div class="d-flex mt-4" style="gap: 8px;">
+                <v-btn @click="paso = 2" variant="text" color="grey"><v-icon start>mdi-arrow-left</v-icon>Volver</v-btn>
+                <v-btn color="#4caf50" @click="crearFinanciamiento" class="flex-grow-1" size="large" elevation="0" rounded="xl" :disabled="!descripcionFinal">
+                  <v-icon start>mdi-cash-check</v-icon>Cobrar Entrada y Crear Financiamiento
+                </v-btn>
+              </div>
             </v-card-text>
           </v-card>
         </v-col>
@@ -263,7 +346,7 @@
               <h2 class="text-h3 font-weight-bold text-white mt-3">✅ Financiamiento Creado</h2>
               <h3 class="text-h5 mt-2 text-white" style="opacity: 0.8;">{{ resultado?.financiamiento?.codigo }}</h3>
               <p class="text-body-1 mt-2 text-white" style="opacity: 0.7;">{{ resultado?.mensaje }}</p>
-              <p class="text-caption mt-1 text-white" style="opacity: 0.5;">Tasa aplicada: {{ resultado?.financiamiento?.tasa_aplicada }} BS/$</p>
+              <p v-if="numeroFactura" class="text-caption mt-1 text-white" style="opacity: 0.5;">Factura: {{ numeroFactura }}</p>
               <v-divider class="my-4" style="border-color: rgba(255,255,255,0.1);"></v-divider>
               <h4 class="mb-2 text-white">📅 Cuotas Generadas ({{ cuotasSeleccionadas }})</h4>
               <div class="glass-effect pa-3"><div v-for="n in cuotasSeleccionadas" :key="n" class="d-flex justify-space-between py-1" style="border-bottom: 1px solid rgba(255,255,255,0.05);"><span class="text-white font-weight-bold">Cuota #{{ n }}</span><span class="text-white" style="opacity: 0.7;">Vence: {{ fechaCuota(n) }} | BS {{ formatearNumero(resultado?.financiamiento?.monto_cuota_bs) }}</span></div></div>
@@ -280,20 +363,89 @@
 import { ref, computed, onMounted } from 'vue'
 import { api } from '@/config/api'
 
-const paso = ref(1); const busquedaCedula = ref(''); const clienteEncontrado = ref(null); const clienteNoEncontrado = ref(false)
-const nuevoCliente = ref({ nombre: '', telefono: '', email: '', cedula: '', direccion: '', referencia_nombre: '', referencia_telefono: '', referencia_parentesco: '' })
-const montoTotalBS = ref(''); const propuesta = ref(null); const cuotasSeleccionadas = ref(null); const descripcion = ref('')
-const resultado = ref({}); const tasaDolar = ref(40.0); const requiereAprobacion = ref(false); const excedeLimite = ref(false); const cargando = ref(false)
+const paso = ref(1)
+const busquedaCedula = ref('')
+const clienteEncontrado = ref(null)
+const clienteNoEncontrado = ref(false)
+const montoTotalBS = ref('')
+const propuesta = ref(null)
+const cuotasSeleccionadas = ref(null)
+const descripcionManual = ref('')
+const numeroFactura = ref('')
+const resultado = ref({})
+const tasaDolar = ref(40.0)
+const requiereAprobacion = ref(false)
+const excedeLimite = ref(false)
+const cargando = ref(false)
+const categoriaSeleccionada = ref(null)
 
+const nuevoCliente = ref({
+  nombre: '', telefono: '', email: '', cedula: '',
+  direccion: '', referencia_nombre: '', referencia_telefono: '', referencia_parentesco: ''
+})
+
+// ✅ CATEGORÍAS TIPO CASHEA
+const categorias = [
+  { title: 'Salud', icon: 'mdi-hospital-box', color: '#EF5350', descripcion: 'Consulta médica, medicinas, tratamiento' },
+  { title: 'Ropa', icon: 'mdi-tshirt-crew', color: '#42A5F5', descripcion: 'Ropa, calzado, accesorios' },
+  { title: 'Comida', icon: 'mdi-food', color: '#FFA726', descripcion: 'Alimentos, restaurante, mercado' },
+  { title: 'Hogar', icon: 'mdi-home', color: '#66BB6A', descripcion: 'Muebles, electrodomésticos, decoración' },
+  { title: 'Tecnología', icon: 'mdi-laptop', color: '#AB47BC', descripcion: 'Celular, computadora, tablet' },
+  { title: 'Educación', icon: 'mdi-school', color: '#26C6DA', descripcion: 'Útiles, cursos, matrícula' },
+  { title: 'Transporte', icon: 'mdi-car', color: '#78909C', descripcion: 'Repuestos, pasajes, mantenimiento' },
+  { title: 'Belleza', icon: 'mdi-content-cut', color: '#EC407A', descripcion: 'Peluquería, cosméticos, cuidado personal' },
+  { title: 'Deporte', icon: 'mdi-run', color: '#8D6E63', descripcion: 'Equipamiento, ropa deportiva, gimnasio' },
+  { title: 'Otro', icon: 'mdi-dots-horizontal', color: '#B0BEC5', descripcion: 'Otra compra' }
+]
+
+const descripcionFinal = computed(() => {
+  if (descripcionManual.value) return descripcionManual.value
+  if (categoriaSeleccionada.value) return categoriaSeleccionada.value.descripcion
+  return ''
+})
+
+const porcentajeUsado = computed(() => {
+  if (!clienteEncontrado.value) return 0
+  const l = clienteEncontrado.value.limite_disponible?.limite_usd || 0
+  const u = clienteEncontrado.value.limite_disponible?.usado_usd || 0
+  return l > 0 ? (u / l) * 100 : 0
+})
+
+const opcionesCuotas = computed(() => {
+  if (!propuesta.value) return []
+  const p = propuesta.value.propuesta || propuesta.value
+  const config = propuesta.value.configuracion_nivel || {}
+  const cb = p.cuotas_base || config.cuotas_base || 4
+  const cm = p.cuotas_max || config.cuotas_max || 12
+  const fb = p.financia_bs || propuesta.value.monto_financia_bs || 0
+  const o = []
+  for (let i = cb; i <= cm; i++) {
+    const mc = fb / i
+    o.push({ value: i, monto: mc, monto_usd: mc / (propuesta.value.tasa_dolar_actual || tasaDolar.value || 40) })
+  }
+  return o
+})
+
+const montoCuotaSeleccionada = computed(() => {
+  const op = opcionesCuotas.value.find(o => o.value === cuotasSeleccionadas.value)
+  return op?.monto || 0
+})
+
+const registroValido = computed(() =>
+  nuevoCliente.value.nombre && nuevoCliente.value.telefono && nuevoCliente.value.email &&
+  nuevoCliente.value.direccion && nuevoCliente.value.referencia_nombre &&
+  nuevoCliente.value.referencia_telefono && nuevoCliente.value.referencia_parentesco
+)
+
+const formatearNumero = (num) => num ? Number(num).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0,00'
 const nivelColor = (nivel) => ({ nuevo: 'grey darken-2', bronce: 'brown darken-2', plata: 'blue-grey darken-2', oro: 'amber darken-2', platino: 'deep-purple darken-2' })[nivel] || 'grey'
 const nivelGradiente = (nivel) => ({ nuevo: 'linear-gradient(135deg, #78909C, #546E7A)', bronce: 'linear-gradient(135deg, #A1887F, #6D4C41)', plata: 'linear-gradient(135deg, #90A4AE, #546E7A)', oro: 'linear-gradient(135deg, #FFD54F, #F9A825)', platino: 'linear-gradient(135deg, #7E57C2, #4A148C)' })[nivel] || 'linear-gradient(135deg, #78909C, #546E7A)'
 const nivelIcono = (nivel) => ({ nuevo: 'mdi-star-outline', bronce: 'mdi-medal-outline', plata: 'mdi-silverware', oro: 'mdi-gold', platino: 'mdi-diamond-stone' })[nivel] || 'mdi-star'
 
-const porcentajeUsado = computed(() => { if (!clienteEncontrado.value) return 0; const l = clienteEncontrado.value.limite_disponible?.limite_usd || 0; const u = clienteEncontrado.value.limite_disponible?.usado_usd || 0; return l > 0 ? (u / l) * 100 : 0 })
-const opcionesCuotas = computed(() => { if (!propuesta.value) return []; const p = propuesta.value.propuesta || propuesta.value; const config = propuesta.value.configuracion_nivel || {}; const cb = p.cuotas_base || config.cuotas_base || 4; const cm = p.cuotas_max || config.cuotas_max || 12; const fb = p.financia_bs || propuesta.value.monto_financia_bs || 0; const o = []; for (let i = cb; i <= cm; i++) { const mc = fb / i; o.push({ value: i, monto: mc, monto_usd: mc / (propuesta.value.tasa_dolar_actual || tasaDolar.value || 40) }) } return o })
-const montoCuotaSeleccionada = computed(() => { const op = opcionesCuotas.value.find(o => o.value === cuotasSeleccionadas.value); return op?.monto || 0 })
-const registroValido = computed(() => nuevoCliente.value.nombre && nuevoCliente.value.telefono && nuevoCliente.value.email && nuevoCliente.value.direccion && nuevoCliente.value.referencia_nombre && nuevoCliente.value.referencia_telefono && nuevoCliente.value.referencia_parentesco)
-const formatearNumero = (num) => num ? Number(num).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0,00'
+function seleccionarCategoria(cat) {
+  categoriaSeleccionada.value = cat
+  descripcionManual.value = ''
+}
 
 onMounted(async () => { try { const d = await api.get('/config/tasa-dolar'); tasaDolar.value = d.tasa } catch (e) {} })
 
@@ -305,15 +457,16 @@ const buscarCliente = async () => {
     else {
       const financiamientos = await api.get(`/financiamientos?cliente_id=${data.id}&estado=activo`)
       const listaFinanciamientos = Array.isArray(financiamientos) ? financiamientos : (financiamientos.financiamientos || [])
-      const deudaPorTienda = {}
-      listaFinanciamientos.forEach(fin => { const t = fin.tienda_nombre || 'Sin tienda'; if (!deudaPorTienda[t]) deudaPorTienda[t] = { monto_usd: 0, cuotas_restantes: 0 }; deudaPorTienda[t].monto_usd += fin.monto_total_usd || 0; deudaPorTienda[t].cuotas_restantes += (fin.cuotas_aprobadas || 0) - (fin.cuotas_pagadas || 0) })
-      clienteEncontrado.value = { ...data, bloqueado: false, financiamientos_activos: listaFinanciamientos, deuda_por_tienda: deudaPorTienda }; clienteNoEncontrado.value = false
+      clienteEncontrado.value = { ...data, bloqueado: false, financiamientos_activos: listaFinanciamientos }; clienteNoEncontrado.value = false
     }
   } catch (e) { clienteEncontrado.value = null; clienteNoEncontrado.value = true }
   finally { cargando.value = false }
 }
 
-const registrarCliente = async () => { if (!registroValido.value) { alert('Complete todos los campos'); return }; try { await api.post('/clientes', { nombre: nuevoCliente.value.nombre, cedula: busquedaCedula.value, telefono: nuevoCliente.value.telefono, email: nuevoCliente.value.email || '', direccion: nuevoCliente.value.direccion, referencia_nombre: nuevoCliente.value.referencia_nombre, referencia_telefono: nuevoCliente.value.referencia_telefono, referencia_parentesco: nuevoCliente.value.referencia_parentesco }); alert('✅ Cliente registrado'); await buscarCliente() } catch (e) { alert('Error registrando') } }
+const registrarCliente = async () => {
+  if (!registroValido.value) { alert('Complete todos los campos'); return }
+  try { await api.post('/clientes', { nombre: nuevoCliente.value.nombre, cedula: busquedaCedula.value, telefono: nuevoCliente.value.telefono, email: nuevoCliente.value.email || '', direccion: nuevoCliente.value.direccion, referencia_nombre: nuevoCliente.value.referencia_nombre, referencia_telefono: nuevoCliente.value.referencia_telefono, referencia_parentesco: nuevoCliente.value.referencia_parentesco }); alert('✅ Cliente registrado'); await buscarCliente() } catch (e) { alert('Error registrando') }
+}
 
 const calcularPropuesta = async () => {
   if (!montoTotalBS.value || parseFloat(montoTotalBS.value) <= 0 || !clienteEncontrado.value) { propuesta.value = null; cuotasSeleccionadas.value = null; excedeLimite.value = false; return }
@@ -326,10 +479,27 @@ const calcularPropuesta = async () => {
 const fechaCuota = (n) => { const f = new Date(); f.setDate(f.getDate() + (15 * n)); return f.toLocaleDateString('es-VE') }
 
 const crearFinanciamiento = async () => {
-  try { const data = await api.post('/financiamientos', { cliente_id: clienteEncontrado.value.id, descripcion: descripcion.value || 'Compra', monto_total_bs: parseFloat(montoTotalBS.value), cuotas_solicitadas: cuotasSeleccionadas.value }); if (data.error) { alert('Error: ' + data.error); return }; resultado.value = data; paso.value = 4 } catch (e) { alert('Error creando financiamiento') }
+  try {
+    const payload = {
+      cliente_id: clienteEncontrado.value.id,
+      descripcion: descripcionFinal.value || 'Compra',
+      monto_total_bs: parseFloat(montoTotalBS.value),
+      cuotas_solicitadas: cuotasSeleccionadas.value,
+      numero_factura: numeroFactura.value || null
+    }
+    const data = await api.post('/financiamientos', payload)
+    if (data.error) { alert('Error: ' + data.error); return }
+    resultado.value = data; paso.value = 4
+  } catch (e) { alert('Error creando financiamiento') }
 }
 
-const resetear = () => { paso.value = 1; busquedaCedula.value = ''; clienteEncontrado.value = null; clienteNoEncontrado.value = false; nuevoCliente.value = { nombre: '', telefono: '', email: '', cedula: '', direccion: '', referencia_nombre: '', referencia_telefono: '', referencia_parentesco: '' }; montoTotalBS.value = ''; propuesta.value = null; cuotasSeleccionadas.value = null; descripcion.value = ''; resultado.value = {}; requiereAprobacion.value = false; excedeLimite.value = false }
+const resetear = () => {
+  paso.value = 1; busquedaCedula.value = ''; clienteEncontrado.value = null; clienteNoEncontrado.value = false
+  nuevoCliente.value = { nombre: '', telefono: '', email: '', cedula: '', direccion: '', referencia_nombre: '', referencia_telefono: '', referencia_parentesco: '' }
+  montoTotalBS.value = ''; propuesta.value = null; cuotasSeleccionadas.value = null; descripcionManual.value = ''
+  numeroFactura.value = ''; resultado.value = {}; requiereAprobacion.value = false; excedeLimite.value = false
+  categoriaSeleccionada.value = null
+}
 </script>
 
 <style scoped>
@@ -381,9 +551,14 @@ const resetear = () => { paso.value = 1; busquedaCedula.value = ''; clienteEncon
 .custom-input :deep(.v-label) { color: rgba(255,255,255,0.6) !important; }
 .custom-input :deep(.v-field__input) { color: white !important; }
 .custom-input :deep(.v-field__input::placeholder) { color: rgba(255,255,255,0.7) !important; font-weight: 500 !important; opacity: 1 !important; }
+.categorias-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+.categoria-item { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 14px 8px; border-radius: 16px; cursor: pointer; transition: all 0.3s ease; min-height: 80px; }
+.categoria-item:hover { transform: translateY(-4px); border-color: rgba(255,255,255,0.2) !important; }
+.categoria-seleccionada { transform: translateY(-4px); box-shadow: 0 8px 24px rgba(0,0,0,0.3); }
+.descripcion-auto { display: flex; align-items: center; padding: 12px 16px; border-radius: 10px; }
 .fade-in { animation: fadeIn 0.5s ease; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
 .slide-up { animation: slideUp 0.4s ease; }
 @keyframes slideUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
-@media (max-width: 600px) { .header-premium { flex-direction: column; gap: 12px; align-items: stretch !important; } .disponible-number { font-size: 1.6rem; } .metric-item { align-items: center; } .metric-divider { display: none; } .cliente-premium-card .v-row { flex-direction: column !important; } .financiamiento-item { padding: 10px 12px; } }
+@media (max-width: 600px) { .header-premium { flex-direction: column; gap: 12px; align-items: stretch !important; } .disponible-number { font-size: 1.6rem; } .metric-item { align-items: center; } .metric-divider { display: none; } .cliente-premium-card .v-row { flex-direction: column !important; } .financiamiento-item { padding: 10px 12px; } .categorias-grid { grid-template-columns: repeat(3, 1fr); } }
 </style>

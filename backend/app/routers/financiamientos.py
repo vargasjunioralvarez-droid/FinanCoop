@@ -100,7 +100,8 @@ def crear_financiamiento(
             cuotas_solicitadas=f.cuotas_solicitadas, cuotas_aprobadas=cuotas_aprobadas,
             requiere_aprobacion=requiere_aprobacion,
             entrada_pct=config["entrada_pct"], financia_pct=config["financia_pct"],
-            fecha_primera_cuota=fecha_primera, estado="activo", tienda_id=tienda_id
+            fecha_primera_cuota=fecha_primera, estado="activo", tienda_id=tienda_id,
+            numero_factura=f.numero_factura  # ✅ NUEVO
         )
         db.add(fin); db.commit(); db.refresh(fin)
         
@@ -118,7 +119,18 @@ def crear_financiamiento(
         
         return {
             "success": True,
-            "financiamiento": {"id": fin.id, "codigo": fin.codigo, "monto_total_bs": round(fin.monto_total_bs, 2), "monto_total_usd": round(fin.monto_total_usd, 2), "monto_entrada_bs": round(fin.monto_entrada_bs, 2), "monto_cuota_bs": round(fin.monto_cuota_bs, 2), "tasa_aplicada": fin.tasa_aplicada, "cuotas_aprobadas": fin.cuotas_aprobadas, "requiere_aprobacion": fin.requiere_aprobacion, "tienda_id": tienda_id, "estado": fin.estado},
+            "financiamiento": {
+                "id": fin.id, "codigo": fin.codigo,
+                "monto_total_bs": round(fin.monto_total_bs, 2),
+                "monto_total_usd": round(fin.monto_total_usd, 2),
+                "monto_entrada_bs": round(fin.monto_entrada_bs, 2),
+                "monto_cuota_bs": round(fin.monto_cuota_bs, 2),
+                "tasa_aplicada": fin.tasa_aplicada,
+                "cuotas_aprobadas": fin.cuotas_aprobadas,
+                "requiere_aprobacion": fin.requiere_aprobacion,
+                "tienda_id": tienda_id, "estado": fin.estado,
+                "numero_factura": fin.numero_factura  # ✅ NUEVO
+            },
             "score_actualizado": cliente.score, "nivel_actual": cliente.nivel,
             "mensaje": f"Entrada: Bs {entrada_bs:,.2f}. {cuotas_aprobadas} cuotas de Bs {monto_cuota_bs:,.2f}",
             "advertencia": "Requiere aprobación adicional" if requiere_aprobacion else None
@@ -173,7 +185,9 @@ def listar_financiamientos(
                 "estado": fin.estado,
                 "tienda_id": fin.tienda_id,
                 "tienda_nombre": fin.tienda.nombre if fin.tienda else None,
-                "creado_en": fin.creado_en.isoformat() if fin.creado_en else None
+                "creado_en": fin.creado_en.isoformat() if fin.creado_en else None,
+                "url_factura": fin.url_factura,           # ✅ NUEVO
+                "numero_factura": fin.numero_factura      # ✅ NUEVO
             })
         return {"total": total, "skip": skip, "limit": limit, "tienda_filtro": tienda_id, "cliente_filtro": cliente_id, "financiamientos": resultado}
     except Exception as e: logger.error(f"❌ Error: {e}"); raise HTTPException(status_code=500, detail=str(e))
@@ -185,7 +199,19 @@ def obtener_financiamiento(id: int, db: Session = Depends(get_db), current_user 
         if not fin: raise HTTPException(status_code=404, detail="Financiamiento no encontrado")
         cliente = db.query(Cliente).filter(Cliente.id == fin.cliente_id).first()
         cuotas = db.query(Cuota).filter(Cuota.financiamiento_id == fin.id).order_by(Cuota.numero).all()
-        return {"id": fin.id, "codigo": fin.codigo, "cliente": {"id": cliente.id if cliente else None, "nombre": cliente.nombre if cliente else "Desconocido"}, "monto_total_bs": round(fin.monto_total_bs, 2), "monto_total_usd": round(fin.monto_total_usd, 2), "tasa_aplicada": fin.tasa_aplicada, "cuotas_aprobadas": fin.cuotas_aprobadas, "estado": fin.estado, "tienda_nombre": fin.tienda.nombre if fin.tienda else None, "cuotas": [{"id": c.id, "numero": c.numero, "monto_total_bs": round(c.monto_total_bs, 2), "fecha_vencimiento": c.fecha_vencimiento.isoformat() if c.fecha_vencimiento else None, "estado": c.estado} for c in cuotas]}
+        return {
+            "id": fin.id, "codigo": fin.codigo,
+            "cliente": {"id": cliente.id if cliente else None, "nombre": cliente.nombre if cliente else "Desconocido"},
+            "monto_total_bs": round(fin.monto_total_bs, 2),
+            "monto_total_usd": round(fin.monto_total_usd, 2),
+            "tasa_aplicada": fin.tasa_aplicada,
+            "cuotas_aprobadas": fin.cuotas_aprobadas,
+            "estado": fin.estado,
+            "tienda_nombre": fin.tienda.nombre if fin.tienda else None,
+            "url_factura": fin.url_factura,           # ✅ NUEVO
+            "numero_factura": fin.numero_factura,     # ✅ NUEVO
+            "cuotas": [{"id": c.id, "numero": c.numero, "monto_total_bs": round(c.monto_total_bs, 2), "fecha_vencimiento": c.fecha_vencimiento.isoformat() if c.fecha_vencimiento else None, "estado": c.estado} for c in cuotas]
+        }
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=str(e))
 

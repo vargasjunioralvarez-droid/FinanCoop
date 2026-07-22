@@ -43,9 +43,10 @@ class AprobacionExtra(BaseModel):
 
 class FinanciamientoCreate(BaseModel):
     cliente_id: int
-    descripcion: str
+    descripcion: str = ""
     monto_total_bs: float
     cuotas_solicitadas: int
+    numero_factura: Optional[str] = None  # ✅ NUEVO
 
 class NivelConfigUpdate(BaseModel):
     monto_max_usd: float

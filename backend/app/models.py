@@ -136,6 +136,8 @@ class Financiamiento(Base):
     tienda_id = Column(Integer, ForeignKey("tiendas.id"), nullable=True, index=True)
     codigo = Column(String(20), unique=True, nullable=True)
     descripcion = Column(Text, nullable=True)
+    url_factura = Column(String(500), nullable=True)       # ✅ NUEVO
+    numero_factura = Column(String(100), nullable=True)    # ✅ NUEVO
     
     monto_total_bs = Column(Float, nullable=False, default=0)
     monto_entrada_bs = Column(Float, nullable=False, default=0)

@@ -1,6 +1,9 @@
 # backend/app/routers/upload.py
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
-from app.auth import get_current_user  # ← IMPORTAR get_current_user en lugar de get_current_admin
+from app.auth import get_current_user
+from sqlalchemy.orm import Session
+from app.database import get_db
+from app.models import Financiamiento
 import httpx
 import os
 import uuid
@@ -14,7 +17,7 @@ CLOUDFLARE_API_TOKEN = os.getenv("CLOUDFLARE_API_TOKEN", "")
 @router.post("/comprobante")
 async def upload_comprobante(
     file: UploadFile = File(...),
-    current_user = Depends(get_current_user)  # ← Cambiar a get_current_user
+    current_user = Depends(get_current_user)
 ):
     """
     Sube un comprobante de pago a Cloudflare Images
@@ -108,4 +111,61 @@ async def upload_comprobante(
         print(f"❌ Error subiendo comprobante: {e}")
         import traceback
         traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================
+# 📸 SUBIR FACTURA (APP MÓVIL)
+# ============================================================
+
+@router.post("/factura/{financiamiento_id}")
+async def upload_factura(
+    financiamiento_id: int,
+    file: UploadFile = File(...),
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Sube foto de factura desde la app móvil a Cloudflare"""
+    try:
+        fin = db.query(Financiamiento).filter(Financiamiento.id == financiamiento_id).first()
+        if not fin:
+            raise HTTPException(status_code=404, detail="Financiamiento no encontrado")
+        
+        # Verificar que el cliente sea dueño del financiamiento
+        if hasattr(current_user, 'id') and fin.cliente_id != current_user.id:
+            raise HTTPException(status_code=403, detail="No autorizado")
+        
+        contenido = await file.read()
+        if len(contenido) == 0:
+            raise HTTPException(status_code=400, detail="Archivo vacío")
+        
+        # Validar tamaño (máximo 5MB)
+        tamaño_mb = len(contenido) / (1024 * 1024)
+        if tamaño_mb > 5:
+            raise HTTPException(status_code=400, detail="La imagen no puede superar los 5MB")
+        
+        # Subir a Cloudflare
+        nombre = f"factura_{financiamiento_id}_{uuid.uuid4().hex[:8]}.jpg"
+        url = f"https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/images/v1"
+        files = {'file': (nombre, contenido, file.content_type or 'image/jpeg')}
+        headers = {'Authorization': f'Bearer {CLOUDFLARE_API_TOKEN}'}
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(url, headers=headers, files=files)
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result.get('success'):
+                    image_url = result['result']['variants'][0]
+                    fin.url_factura = image_url
+                    db.commit()
+                    print(f"✅ Factura subida: {image_url}")
+                    return {"success": True, "url": image_url}
+        
+        raise HTTPException(status_code=500, detail="Error subiendo factura a Cloudflare")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error subiendo factura: {e}")
         raise HTTPException(status_code=500, detail=str(e))
