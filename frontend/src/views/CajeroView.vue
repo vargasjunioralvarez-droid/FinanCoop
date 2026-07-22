@@ -100,20 +100,29 @@
                   </div>
                   <div class="financiamientos-grid mt-2">
                     <div v-for="fin in clienteEncontrado.financiamientos_activos" :key="fin.id" class="financiamiento-item glass-effect">
-                      <div class="d-flex justify-space-between align-center flex-wrap" style="gap: 8px;">
+                      <div class="d-flex flex-column" style="gap: 4px;">
+                        <!-- FILA 1: Tienda + Categoría + Código -->
                         <div class="d-flex align-center flex-wrap" style="gap: 6px;">
-                          <!-- ✅ TIENDA EN CADA COMPRA -->
                           <v-chip v-if="fin.tienda_nombre" size="x-small" color="info" variant="flat">
                             <v-icon start size="12">mdi-store</v-icon>{{ fin.tienda_nombre }}
                           </v-chip>
-                          <span class="text-white font-weight-bold">{{ fin.descripcion || 'Sin descripción' }}</span>
+                          <v-chip v-if="fin.descripcion" size="x-small" :color="colorCategoria(fin.descripcion)" variant="tonal">
+                            {{ fin.descripcion }}
+                          </v-chip>
                           <v-chip size="x-small" variant="outlined" class="text-white">{{ fin.codigo }}</v-chip>
                         </div>
-                        <div class="d-flex align-center" style="gap: 8px;">
-                          <v-chip size="x-small" :color="fin.cuotas_pagadas === fin.cuotas_aprobadas ? 'success' : 'primary'" variant="tonal">
-                            {{ fin.cuotas_pagadas || 0 }}/{{ fin.cuotas_aprobadas }} cuotas
-                          </v-chip>
-                          <v-chip size="x-small" :color="fin.estado === 'activo' ? 'success' : 'warning'" variant="flat">{{ fin.estado }}</v-chip>
+                        <!-- FILA 2: Factura + Cuotas + Estado -->
+                        <div class="d-flex justify-space-between align-center flex-wrap" style="gap: 8px;">
+                          <span v-if="fin.numero_factura" class="text-caption font-mono" style="color: rgba(255,255,255,0.5);">
+                            🧾 {{ fin.numero_factura }}
+                          </span>
+                          <span v-else></span>
+                          <div class="d-flex align-center" style="gap: 8px;">
+                            <v-chip size="x-small" :color="fin.cuotas_pagadas === fin.cuotas_aprobadas ? 'success' : 'primary'" variant="tonal">
+                              {{ fin.cuotas_pagadas || 0 }}/{{ fin.cuotas_aprobadas }} cuotas
+                            </v-chip>
+                            <v-chip size="x-small" :color="fin.estado === 'activo' ? 'success' : 'warning'" variant="flat">{{ fin.estado }}</v-chip>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -134,7 +143,6 @@
                     <v-icon end>mdi-arrow-right</v-icon>
                   </v-btn>
                   
-                  <!-- ✅ ALERTA DETALLADA -->
                   <v-alert v-else type="error" variant="tonal" class="rounded-xl" border="start">
                     <div class="d-flex align-center">
                       <v-icon color="error" size="28" class="mr-2">mdi-alert-circle</v-icon>
@@ -397,6 +405,15 @@ const nivelColor = (n) => ({ nuevo: 'grey', bronce: 'brown', plata: 'blue-grey',
 const nivelGradiente = (n) => ({ nuevo: 'linear-gradient(135deg, #78909C, #546E7A)', bronce: 'linear-gradient(135deg, #A1887F, #6D4C41)', plata: 'linear-gradient(135deg, #90A4AE, #546E7A)', oro: 'linear-gradient(135deg, #FFD54F, #F9A825)', platino: 'linear-gradient(135deg, #7E57C2, #4A148C)' })[n] || ''
 const nivelIcono = (n) => ({ nuevo: 'mdi-star-outline', bronce: 'mdi-medal-outline', plata: 'mdi-silverware', oro: 'mdi-gold', platino: 'mdi-diamond-stone' })[n] || 'mdi-star'
 
+const colorCategoria = (cat) => {
+  const colores = {
+    'Salud': '#EF5350', 'Ropa': '#42A5F5', 'Comida': '#FFA726',
+    'Hogar': '#66BB6A', 'Tecnología': '#AB47BC', 'Educación': '#26C6DA',
+    'Transporte': '#78909C', 'Belleza': '#EC407A', 'Deporte': '#8D6E63'
+  }
+  return colores[cat] || '#B0BEC5'
+}
+
 onMounted(async () => { try { const d = await api.get('/config/tasa-dolar'); tasaDolar.value = d.tasa } catch (e) {} })
 
 const buscarCliente = async () => {
@@ -409,7 +426,6 @@ const buscarCliente = async () => {
       clienteNoEncontrado.value = true
       nuevoCliente.value.cedula = busquedaCedula.value
     } else {
-      // ✅ Cargar financiamientos activos
       const financiamientos = await api.get(`/financiamientos?cliente_id=${data.id}&estado=activo`)
       const lista = Array.isArray(financiamientos) ? financiamientos : (financiamientos.financiamientos || [])
       clienteEncontrado.value = { ...data, financiamientos_activos: lista }
@@ -434,8 +450,7 @@ const registrarCliente = async () => {
 
 const calcularPropuesta = async () => {
   if (!montoTotalBS.value || parseFloat(montoTotalBS.value) <= 0 || !clienteEncontrado.value) {
-    propuesta.value = null; cuotasSeleccionadas.value = null; excedeLimite.value = false; return
-  }
+    propuesta.value = null; cuotasSeleccionadas.value = null; excedeLimite.value = false; return  }
   const tasa = tasaDolar.value || 40
   const montoUSD = parseFloat(montoTotalBS.value) / tasa
   const disponibleUSD = clienteEncontrado.value?.limite_disponible?.disponible_usd || 0
@@ -516,6 +531,7 @@ const resetear = () => {
 .categoria-item { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 14px 8px; border-radius: 16px; cursor: pointer; transition: all 0.3s ease; min-height: 80px; }
 .categoria-item:hover { transform: translateY(-4px); }
 .categoria-seleccionada { transform: translateY(-4px); box-shadow: 0 8px 24px rgba(0,0,0,0.3); }
+.font-mono { font-family: monospace; font-size: 11px; }
 .fade-in { animation: fadeIn 0.5s ease; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
 .slide-up { animation: slideUp 0.4s ease; }

@@ -91,6 +91,8 @@
                       <tr>
                         <th>Código</th>
                         <th>Cliente</th>
+                        <th>Categoría</th>
+                        <th>Factura</th>
                         <th class="text-right">Monto</th>
                         <th class="text-right">Entrada</th>
                         <th class="text-right">Pendiente</th>
@@ -110,6 +112,16 @@
                             </v-avatar>
                             <span class="text-white">{{ v.cliente_nombre }}</span>
                           </div>
+                        </td>
+                        <td>
+                          <v-chip v-if="v.descripcion" size="x-small" :color="colorCategoria(v.descripcion)" variant="tonal">
+                            {{ v.descripcion }}
+                          </v-chip>
+                          <span v-else class="text-caption" style="color: rgba(255,255,255,0.3);">-</span>
+                        </td>
+                        <td>
+                          <span v-if="v.numero_factura" class="text-caption font-mono text-white">{{ v.numero_factura }}</span>
+                          <span v-else class="text-caption" style="color: rgba(255,255,255,0.3);">-</span>
                         </td>
                         <td class="text-right">
                           <span class="text-white font-weight-bold">BS {{ formatearBS(v.monto_total_bs) }}</span>
@@ -160,6 +172,15 @@ const totalPendiente = computed(() => ventasHoy.value.reduce((s, v) => s + ((v.m
 const formatearBS = (m) => m ? Number(m).toLocaleString('es-VE', { minimumFractionDigits: 2 }) : '0,00'
 const formatearHora = (f) => f ? new Date(f).toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' }) : ''
 
+const colorCategoria = (cat) => {
+  const colores = {
+    'Salud': '#EF5350', 'Ropa': '#42A5F5', 'Comida': '#FFA726',
+    'Hogar': '#66BB6A', 'Tecnología': '#AB47BC', 'Educación': '#26C6DA',
+    'Transporte': '#78909C', 'Belleza': '#EC407A', 'Deporte': '#8D6E63'
+  }
+  return colores[cat] || '#B0BEC5'
+}
+
 const cargarVentas = async () => {
   try {
     const data = await api.get('/financiamientos')
@@ -184,6 +205,8 @@ const imprimirReporte = () => {
     filas += `<tr>
       <td>${v.codigo || '-'}</td>
       <td>${v.cliente_nombre || '-'}</td>
+      <td>${v.descripcion || '-'}</td>
+      <td>${v.numero_factura || '-'}</td>
       <td style="text-align:right;">BS ${formatearBS(v.monto_total_bs)}</td>
       <td style="text-align:right;">BS ${formatearBS(v.monto_entrada_bs)}</td>
       <td style="text-align:right; color:#f44336; font-weight:bold;">BS ${formatearBS((v.monto_total_bs || 0) - (v.monto_entrada_bs || 0))}</td>
@@ -225,7 +248,7 @@ const imprimirReporte = () => {
           <div><div style="color:#f44336;">Pendiente</div><strong>BS ${formatearBS(totalPendiente.value)}</strong></div>
         </div>
         <table>
-          <thead><tr><th>Código</th><th>Cliente</th><th>Monto</th><th>Entrada</th><th>Pendiente</th><th>Cuotas</th><th>Hora</th></tr></thead>
+          <thead><tr><th>Código</th><th>Cliente</th><th>Categoría</th><th>Factura</th><th>Monto</th><th>Entrada</th><th>Pendiente</th><th>Cuotas</th><th>Hora</th></tr></thead>
           <tbody>${filas}</tbody>
         </table>
         <div class="footer"><p>FinanCoop © ${new Date().getFullYear()} - Sistema de Financiamiento</p></div>
@@ -264,6 +287,7 @@ onMounted(() => { cargarVentas(); cargarUsuario() })
 .premium-table :deep(th) { color: rgba(255,255,255,0.7) !important; font-weight: 700 !important; font-size: 0.75rem !important; text-transform: uppercase; padding: 12px 8px !important; border-bottom: 1px solid rgba(255,255,255,0.06) !important; }
 .premium-table :deep(td) { color: rgba(255,255,255,0.9) !important; padding: 10px 8px !important; border-bottom: 1px solid rgba(255,255,255,0.03) !important; }
 .premium-table :deep(tr:hover) { background: rgba(255,255,255,0.02) !important; }
+.font-mono { font-family: monospace; font-size: 11px; }
 .empty-state { padding: 40px; text-align: center; border: 1px dashed rgba(255,255,255,0.08); }
 .fade-in { animation: fadeIn 0.4s ease; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
