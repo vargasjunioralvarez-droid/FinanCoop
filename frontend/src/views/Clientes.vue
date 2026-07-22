@@ -381,20 +381,13 @@ const verDetalle = async (c) => {
   try { const f = await api.get('/financiamientos'); financiamientosCliente.value = f.filter(x => x.cliente_id === c.id) } catch (e) { financiamientosCliente.value = [] }
 }
 
-const verCuotas = async (id) => { try { cuotas.value = await api.get(`/financiamientos/${id}/cuotas`) } catch (e) {} }
-
 const aprobarCliente = (c) => { clienteAprobar.value = c; pinGenerado.value = null; dialogAprobar.value = true }
 
 const confirmarAprobar = async () => {
   if (!clienteAprobar.value) return
   aprobando.value = true; aprobandoId.value = clienteAprobar.value.id
   try {
-    const token = localStorage.getItem('admin_token')
-    const r = await fetch('https://financoop.onrender.com/api/v1/clientes/aprobar', {
-      method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify({ cliente_id: clienteAprobar.value.id })
-    })
-    const d = await r.json()
+    const d = await api.post('/clientes/aprobar', { cliente_id: clienteAprobar.value.id })
     if (d.success && d.cliente?.pin) pinGenerado.value = d.cliente.pin
     mostrarMensaje(`✅ ${clienteAprobar.value.nombre} aprobado`, 'success')
     await cargarTodos(); tabActiva.value = 'verificados'
