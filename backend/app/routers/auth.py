@@ -12,7 +12,7 @@ import logging
 import re
 import random
 import os
-import requests
+import httpx
 from jose import jwt, JWTError, ExpiredSignatureError
 
 from app.database import get_db
@@ -145,7 +145,7 @@ def enviar_correo_recuperacion(destinatario: str, nombre: str, codigo: str) -> b
         </html>
         """
         
-        response = requests.post(
+        response = httpx.post(
             "https://api.resend.com/emails",
             headers={
                 "Authorization": f"Bearer {RESEND_API_KEY}",
