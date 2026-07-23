@@ -87,7 +87,7 @@ ALLOWED_ORIGINS = [
     "https://financoop-agd5.onrender.com",
     "https://financoop-frontend-2hvc.onrender.com",
     "http://192.168.100.26:5175",
-    "*",
+    
 ]
 
 app.add_middleware(
