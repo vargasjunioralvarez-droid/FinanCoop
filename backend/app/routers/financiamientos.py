@@ -30,7 +30,7 @@ def crear_financiamiento(
         if cliente.estado != "aprobado":
             raise HTTPException(status_code=400, detail="Cliente no está aprobado. Debe ser verificado por el administrador.")
         
-        nivel, config = calcular_nivel(cliente.score)
+        nivel, config = calcular_nivel(cliente.score, db)
         
         creditos_activos = db.query(Financiamiento).filter(
             Financiamiento.cliente_id == f.cliente_id,
@@ -101,7 +101,7 @@ def crear_financiamiento(
             requiere_aprobacion=requiere_aprobacion,
             entrada_pct=config["entrada_pct"], financia_pct=config["financia_pct"],
             fecha_primera_cuota=fecha_primera, estado="activo", tienda_id=tienda_id,
-            numero_factura=f.numero_factura  # ✅ NUEVO
+            numero_factura=f.numero_factura
         )
         db.add(fin); db.commit(); db.refresh(fin)
         
@@ -129,7 +129,7 @@ def crear_financiamiento(
                 "cuotas_aprobadas": fin.cuotas_aprobadas,
                 "requiere_aprobacion": fin.requiere_aprobacion,
                 "tienda_id": tienda_id, "estado": fin.estado,
-                "numero_factura": fin.numero_factura  # ✅ NUEVO
+                "numero_factura": fin.numero_factura
             },
             "score_actualizado": cliente.score, "nivel_actual": cliente.nivel,
             "mensaje": f"Entrada: Bs {entrada_bs:,.2f}. {cuotas_aprobadas} cuotas de Bs {monto_cuota_bs:,.2f}",
@@ -155,6 +155,44 @@ def aprobar_financiamiento(id: int, aprobacion: AprobacionExtra, db: Session = D
         return {"success": True, "mensaje": f"Aprobado con {aprobacion.cuotas_aprobadas} cuotas", "aprobado_por": aprobacion.aprobado_por}
     except HTTPException: raise
     except Exception as e: db.rollback(); raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/cliente/{cliente_id}/activos")
+def get_financiamientos_activos_cliente(
+    cliente_id: int, 
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """Ver financiamientos activos de un cliente (sin filtro de tienda, para cajeros al buscar)."""
+    try:
+        activos = db.query(Financiamiento).filter(
+            Financiamiento.cliente_id == cliente_id,
+            Financiamiento.estado == "activo"
+        ).order_by(Financiamiento.id.desc()).all()
+        
+        resultado = []
+        for fin in activos:
+            cuotas_pagadas = db.query(Cuota).filter(
+                Cuota.financiamiento_id == fin.id, 
+                Cuota.estado == "pagada"
+            ).count()
+            
+            resultado.append({
+                "id": fin.id,
+                "codigo": fin.codigo,
+                "descripcion": fin.descripcion,
+                "numero_factura": fin.numero_factura,
+                "tienda_nombre": fin.tienda.nombre if fin.tienda else None,
+                "cuotas_aprobadas": fin.cuotas_aprobadas,
+                "cuotas_pagadas": cuotas_pagadas,
+                "estado": fin.estado,
+                "monto_total_bs": round(fin.monto_total_bs, 2),
+                "monto_total_usd": round(fin.monto_total_usd, 2)
+            })
+        
+        return {"total": len(resultado), "financiamientos": resultado}
+    except Exception as e:
+        logger.error(f"❌ Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("")
 def listar_financiamientos(
@@ -186,8 +224,8 @@ def listar_financiamientos(
                 "tienda_id": fin.tienda_id,
                 "tienda_nombre": fin.tienda.nombre if fin.tienda else None,
                 "creado_en": fin.creado_en.isoformat() if fin.creado_en else None,
-                "url_factura": fin.url_factura,           # ✅ NUEVO
-                "numero_factura": fin.numero_factura      # ✅ NUEVO
+                "url_factura": fin.url_factura,
+                "numero_factura": fin.numero_factura
             })
         return {"total": total, "skip": skip, "limit": limit, "tienda_filtro": tienda_id, "cliente_filtro": cliente_id, "financiamientos": resultado}
     except Exception as e: logger.error(f"❌ Error: {e}"); raise HTTPException(status_code=500, detail=str(e))
@@ -208,8 +246,8 @@ def obtener_financiamiento(id: int, db: Session = Depends(get_db), current_user 
             "cuotas_aprobadas": fin.cuotas_aprobadas,
             "estado": fin.estado,
             "tienda_nombre": fin.tienda.nombre if fin.tienda else None,
-            "url_factura": fin.url_factura,           # ✅ NUEVO
-            "numero_factura": fin.numero_factura,     # ✅ NUEVO
+            "url_factura": fin.url_factura,
+            "numero_factura": fin.numero_factura,
             "cuotas": [{"id": c.id, "numero": c.numero, "monto_total_bs": round(c.monto_total_bs, 2), "fecha_vencimiento": c.fecha_vencimiento.isoformat() if c.fecha_vencimiento else None, "estado": c.estado} for c in cuotas]
         }
     except HTTPException: raise
@@ -235,15 +273,12 @@ def eliminar_financiamiento(id: int, db: Session = Depends(get_db), current_admi
         if financiamiento.estado == "completado": 
             raise HTTPException(status_code=400, detail="No se puede eliminar un financiamiento completado")
         
-        # 1. Eliminar pagos
         db.query(Pago).filter(Pago.financiamiento_id == id).delete(synchronize_session='fetch')
         
-        # 2. Desasociar cuotas del financiamiento antes de eliminarlas
         cuotas = db.query(Cuota).filter(Cuota.financiamiento_id == id).all()
         for cuota in cuotas:
             db.delete(cuota)
         
-        # 3. Eliminar financiamiento
         db.delete(financiamiento)
         db.commit()
         
