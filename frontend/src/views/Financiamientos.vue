@@ -206,7 +206,6 @@
                         <v-btn v-if="item.estado === 'activo'" size="x-small" color="#4caf50" variant="tonal" @click="abrirPagoEfectivo(item)" rounded="pill">
                           <v-icon start size="16">mdi-cash</v-icon>Pagar
                         </v-btn>
-                        <!-- ✅ SOLO ADMIN CENTRAL PUEDE ELIMINAR -->
                         <v-btn v-if="esAdminCentral" size="x-small" color="error" variant="tonal" @click="confirmarEliminar(item)" rounded="pill">
                           <v-icon start size="16">mdi-delete</v-icon>
                         </v-btn>
@@ -264,7 +263,6 @@ let chartInstance = null
 const filtros = ref({ busqueda: '', estado: 'todos', nivel: 'todos', morosidad: 'todos' })
 const stats = ref({ total: 0, total_entrada: 0, total_financiado: 0, total_pendiente: 0 })
 
-// ✅ Solo admin central
 const esAdminCentral = computed(() => localStorage.getItem('admin_rol') === 'admin_central')
 
 const headers = [
@@ -299,11 +297,8 @@ const cargarDatos = async () => {
   try {
     const response = await api.get('/financiamientos')
     const financiamientosData = response.financiamientos || response.data || response || []
-    const clientesResponse = await api.get('/clientes')
-    const clientesData = Array.isArray(clientesResponse) ? clientesResponse : clientesResponse.data || []
 
     const datos = await Promise.all(financiamientosData.map(async (fin) => {
-      const cliente = clientesData.find(c => c.id === fin.cliente_id)
       const cuotasResponse = await api.get(`/financiamientos/${fin.id}/cuotas`)
       const cuotas = Array.isArray(cuotasResponse) ? cuotasResponse : cuotasResponse.data || []
       const pagadas = cuotas.filter(c => c.estado === 'pagada').length
@@ -312,7 +307,19 @@ const cargarDatos = async () => {
       const saldoPendienteBS = pendientes.reduce((s, c) => s + (c.monto_total_bs || 0), 0)
       const saldoPendienteUSD = pendientes.reduce((s, c) => s + (c.monto_total_usd || 0), 0)
       const porcentajePagado = fin.cuotas_solicitadas > 0 ? Math.round((pagadas / fin.cuotas_solicitadas) * 100) : 0
-      return { ...fin, cliente_nombre: cliente?.nombre || 'Desconocido', cliente_cedula: cliente?.cedula || '', cliente_nivel: cliente?.nivel || 'nuevo', cuotas, saldo_pendiente_bs: saldoPendienteBS, saldo_pendiente_usd: saldoPendienteUSD, porcentaje_pagado: porcentajePagado, morosidad: calcularMorosidad({ ...fin, cuotas }), cuotas_atrasadas: atrasadas.length, fecha_primera_cuota: fin.fecha_primera_cuota }
+      return { 
+        ...fin, 
+        cliente_nombre: fin.cliente_nombre || 'Desconocido',
+        cliente_cedula: fin.cliente_cedula || '', 
+        cliente_nivel: fin.cliente_nivel || 'nuevo', 
+        cuotas, 
+        saldo_pendiente_bs: saldoPendienteBS, 
+        saldo_pendiente_usd: saldoPendienteUSD, 
+        porcentaje_pagado: porcentajePagado, 
+        morosidad: calcularMorosidad({ ...fin, cuotas }), 
+        cuotas_atrasadas: atrasadas.length, 
+        fecha_primera_cuota: fin.fecha_primera_cuota 
+      }
     }))
     
     financiamientos.value = datos; aplicarFiltros(); calcularStats(); calcularNivelesMorosidad()
@@ -373,7 +380,6 @@ const confirmarPagoEfectivo = async () => {
   try { await api.post(`/cuotas/${cuotaSeleccionada.value}/pagar-efectivo`); alert('✅ Pago registrado'); dialogPago.value = false; await cargarDatos() } catch (e) { alert('Error registrando pago') }
 }
 
-// ✅ Eliminar financiamiento (solo admin central)
 const confirmarEliminar = (item) => {
   if (!confirm(`¿Eliminar el financiamiento ${item.codigo} de ${item.cliente_nombre}?`)) return
   eliminarFinanciamiento(item.id)
