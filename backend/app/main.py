@@ -68,6 +68,7 @@ async def cors_preflight_handler(request: Request, call_next):
 # 🌐 CORS: SIEMPRE PERMITIR ORÍGENES DE RENDER Y LOCAL
 # ─────────────────────────────────────────────────────────────
 ALLOWED_ORIGINS = [
+    # Desarrollo local
     "http://localhost:5173",
     "http://localhost:5174",
     "http://localhost:5175",
@@ -77,17 +78,22 @@ ALLOWED_ORIGINS = [
     "http://127.0.0.1:5175",
     "http://127.0.0.1:5176",
     "http://192.168.10.122:5175",
+    "http://192.168.100.26:5175",
+    
+    # Capacitor APK
     "capacitor://localhost",
     "ionic://localhost",
     "http://localhost",
     "https://localhost",
+    "https://financoop.app",       # ← Origen del APK
+    "capacitor://financoop.app",   # ← Por si acaso
+    
+    # Producción
     "https://financoop.onrender.com",
     "https://financoop-frontend.onrender.com",
     "https://financoop-backend.onrender.com",
     "https://financoop-agd5.onrender.com",
     "https://financoop-frontend-2hvc.onrender.com",
-    "http://192.168.100.26:5175",
-    
 ]
 
 app.add_middleware(
