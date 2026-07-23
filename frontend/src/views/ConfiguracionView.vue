@@ -64,10 +64,11 @@
                 <v-btn color="#4caf50" block rounded="pill" size="large" @click="actualizarTasaBCV" :loading="cargandoBCV" elevation="0" class="btn-premium">
                   <v-icon start>mdi-web</v-icon>Consultar BCV
                 </v-btn>
-                
+
+                <!-- ✅ AUTO-UPDATE STATUS -->
                 <v-alert type="info" variant="tonal" class="mt-3 rounded-xl" density="compact" border="start">
                   <v-icon start size="16">mdi-information</v-icon>
-                  <strong>Importante:</strong> Al cambiar la tasa se recalcularán TODAS las cuotas pendientes.
+                  <strong>Auto-actualización:</strong> La tasa se actualiza automáticamente cada 30 minutos desde el BCV.
                 </v-alert>
               </v-card-text>
             </v-card>
@@ -175,7 +176,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { api } from '@/config/api'
 
 const tasaActual = ref(40.0)
@@ -186,6 +187,8 @@ const cargando = ref(false)
 const cargandoBCV = ref(false)
 const stats = ref({ financiamientos_activos: 0, cuotas_pendientes: 0, total_cartera_usd: 0, total_cartera_bs: 0 })
 const historialTasas = ref([])
+
+let autoRefreshInterval = null
 
 const headersTasas = [
   { title: 'Tasa', key: 'tasa' },
@@ -243,9 +246,30 @@ const cargarStats = async () => {
   } catch (e) {}
 }
 
+const iniciarAutoRefresh = () => {
+  autoRefreshInterval = setInterval(async () => {
+    try {
+      await api.post('/config/tasa-dolar/bcv')
+      await cargarTasa()
+      await cargarStats()
+      console.log('🔄 Tasa actualizada automáticamente desde BCV')
+    } catch (e) {
+      console.log('⚠️ No se pudo actualizar tasa automáticamente')
+    }
+  }, 30 * 60 * 1000) // 30 minutos
+}
+
 const formatearFecha = (f) => f ? new Date(f).toLocaleString('es-VE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''
 
-onMounted(() => { cargarTasa(); cargarStats() })
+onMounted(() => { 
+  cargarTasa()
+  cargarStats()
+  iniciarAutoRefresh()
+})
+
+onUnmounted(() => {
+  if (autoRefreshInterval) clearInterval(autoRefreshInterval)
+})
 </script>
 
 <style scoped>

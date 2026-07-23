@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 import logging
+import httpx
 from app.database import get_db
 from app.models import TasaDolar, NivelConfig, Financiamiento, Cuota, ConfiguracionPago
 from app.config import NIVELES_CONFIG_DEFAULT
@@ -124,6 +125,60 @@ def actualizar_tasa(
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.post("/tasa-dolar/bcv")
+async def actualizar_tasa_bcv(db: Session = Depends(get_db)):
+    """Consultar tasa del BCV y actualizar automáticamente."""
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.get("https://bcv-api.deno.dev/v1/rates")
+            if response.status_code != 200:
+                raise HTTPException(status_code=500, detail="No se pudo consultar el BCV")
+            
+            data = response.json()
+            tasa_bcv = data.get("rates", {}).get("USD", 0)
+            
+            if not tasa_bcv or tasa_bcv <= 0:
+                raise HTTPException(status_code=500, detail="Tasa BCV no válida")
+        
+        nueva_tasa = TasaDolar(
+            tasa=float(tasa_bcv),
+            fuente="bcv",
+            actualizado_por="auto"
+        )
+        db.add(nueva_tasa)
+        
+        # Recalcular cuotas pendientes
+        financiamientos = db.query(Financiamiento).filter(
+            Financiamiento.estado == "activo"
+        ).all()
+        
+        for f in financiamientos:
+            cuotas_pendientes = db.query(Cuota).filter(
+                Cuota.financiamiento_id == f.id,
+                Cuota.estado.in_(["pendiente", "conciliando"])
+            ).all()
+            
+            for c in cuotas_pendientes:
+                if c.monto_base_usd:
+                    c.monto_total_bs = c.monto_base_usd * tasa_bcv
+                    if c.monto_interes_mora_usd:
+                        c.monto_interes_mora_bs = c.monto_interes_mora_usd * tasa_bcv
+        
+        db.commit()
+        
+        logger.info(f"✅ Tasa BCV actualizada automáticamente: {tasa_bcv} BS/$")
+        
+        return {
+            "success": True,
+            "tasa": tasa_bcv,
+            "mensaje": f"Tasa BCV actualizada: {tasa_bcv} BS/$"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error consultando BCV: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 # ============================================================
 # NIVELES DE FINANCIAMIENTO
 # ============================================================
@@ -189,7 +244,6 @@ def actualizar_nivel(
         if not config:
             raise HTTPException(status_code=404, detail=f"Nivel '{nivel}' no encontrado")
         
-        # ✅ CORREGIDO: validar suma = 100% (enteros, no decimales)
         if request.entrada_pct + request.financia_pct != 100:
             raise HTTPException(
                 status_code=400, 
