@@ -276,18 +276,18 @@ async def aprobar_cliente(
         )
         
         return {
-            "success": True,
-            "mensaje": f"Cliente {cliente.nombre} aprobado.",
-            "envio": resultado_envio,
-            "cliente": {
-                "id": cliente.id,
-                "nombre": cliente.nombre,
-                "cedula": cliente.cedula,
-                "telefono": cliente.telefono,
-                "estado": "aprobado",
-                "pin": pin_generado
-            }
-        }
+    "success": True,
+    "mensaje": f"Cliente {cliente.nombre} aprobado.",
+    "envio": resultado_envio,
+    "cliente": {
+        "id": cliente.id,
+        "nombre": cliente.nombre,
+        "cedula": cliente.cedula,
+        "telefono": cliente.telefono,
+        "estado": "aprobado",
+        "pin": pin_generado if current_user.rol == "admin_central" else "****"
+    }
+}
         
     except HTTPException:
         raise

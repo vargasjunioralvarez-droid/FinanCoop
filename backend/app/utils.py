@@ -2,6 +2,7 @@
 import os
 import random
 import uuid
+import string
 from datetime import datetime, timezone
 from twilio.rest import Client
 from twilio.base.exceptions import TwilioRestException
@@ -159,7 +160,7 @@ def enviar_pin_cliente(telefono: str, nombre: str, cedula: str, pin: str):
         resultado["mensaje"] = f"✅ WhatsApp enviado a {telefono}"
         print(f"✅ WhatsApp exitoso: {sid_wa}")
     else:
-        resultado["mensaje"] = f"⚠️ No se pudo enviar WhatsApp: {sid_wa}. PIN: {pin}"
+        resultado["mensaje"] = f"⚠️ No se pudo enviar WhatsApp: {sid_wa}"
         print(f"⚠️ WhatsApp falló: {sid_wa}")
     return resultado
 
@@ -169,15 +170,15 @@ def enviar_pin_cliente_completo(telefono: str, nombre: str, cedula: str, pin: st
     resultado_sms = enviar_pin_sms(telefono, nombre, cedula, pin)
     if resultado_sms["success"]:
         print(f"✅ PIN enviado por SMS a {telefono}")
-        return {"success": True, "mensaje": "PIN enviado por SMS", "canal": "sms", "sid": resultado_sms.get("sid"), "pin": pin}
+        return {"success": True, "mensaje": "PIN enviado por SMS", "canal": "sms", "sid": resultado_sms.get("sid"), "pin": "****"}
     print(f"⚠️ SMS falló: {resultado_sms.get('error')}")
     print("📤 Intentando WhatsApp como fallback...")
     resultado_whatsapp = enviar_pin_cliente(telefono, nombre, cedula, pin)
     if resultado_whatsapp["whatsapp_enviado"]:
         print(f"✅ PIN enviado por WhatsApp a {telefono}")
-        return {"success": True, "mensaje": "PIN enviado por WhatsApp (fallback)", "canal": "whatsapp", "sid": resultado_whatsapp.get("whatsapp_sid"), "pin": pin, "sms_error": resultado_sms.get("error")}
+        return {"success": True, "mensaje": "PIN enviado por WhatsApp (fallback)", "canal": "whatsapp", "sid": resultado_whatsapp.get("whatsapp_sid"), "pin": "****", "sms_error": resultado_sms.get("error")}
     print(f"❌ No se pudo enviar PIN por ningún canal")
-    return {"success": False, "mensaje": "No se pudo enviar el PIN por ningún canal", "error_sms": resultado_sms.get("error"), "error_whatsapp": resultado_whatsapp.get("mensaje"), "pin": pin, "sms_info": resultado_sms}
+    return {"success": False, "mensaje": "No se pudo enviar el PIN por ningún canal", "error_sms": resultado_sms.get("error"), "error_whatsapp": resultado_whatsapp.get("mensaje"), "pin": "****", "sms_info": resultado_sms}
 
 def enviar_notificacion_generica(telefono: str, mensaje: str):
     telefono = normalizar_telefono(telefono)
@@ -196,7 +197,6 @@ def enviar_notificacion_generica(telefono: str, mensaje: str):
 # ============ FUNCIONES DE NEGOCIO ============
 
 def calcular_nivel(score: int, db=None):
-    # ✅ Si hay db, leer de la BD directamente (valores actualizados por admin central)
     if db:
         from app.models import NivelConfig
         niveles_db = db.query(NivelConfig).order_by(NivelConfig.min_score).all()
@@ -215,7 +215,6 @@ def calcular_nivel(score: int, db=None):
                         "aprobacion_extra": n.aprobacion_extra
                     }
     
-    # Fallback a variable global
     niveles_ordenados = sorted(NIVELES_CONFIG.items(), key=lambda x: x[1]["min_score"])
     for nivel, config in niveles_ordenados:
         if config["min_score"] <= score <= config["max_score"]:
@@ -223,24 +222,8 @@ def calcular_nivel(score: int, db=None):
     return "nuevo", NIVELES_CONFIG.get("nuevo", NIVELES_CONFIG_DEFAULT["nuevo"])
 
 def actualizar_score_cliente(cliente: Cliente, db):
-    """
-    🎯 SISTEMA DE PUNTOS POR NIVELES (tipo Cashea):
-    
-    Cada nivel requiere 3 compras completadas = 100 pts base
-    + puntos extra por pagos puntuales/adelantados para subir más rápido
-    
-    Nuevo → Bronce:  100 pts (3 compras pagadas)
-    Bronce → Plata:  200 pts (6 compras pagadas)
-    Plata → Oro:     300 pts (9 compras pagadas)
-    Oro → Platino:   400 pts (12 compras pagadas)
-    
-    Pago puntual:     +10 pts
-    Pago adelantado:  +15 pts
-    Pago con atraso:  -5 pts
-    """
     puntos = 0
     
-    # === 1. PUNTOS BASE POR COMPRAS COMPLETADAS ===
     financiamientos_completados = db.query(Financiamiento).filter(
         Financiamiento.cliente_id == cliente.id,
         Financiamiento.estado == "completado"
@@ -248,7 +231,6 @@ def actualizar_score_cliente(cliente: Cliente, db):
     
     puntos += len(financiamientos_completados) * 33
     
-    # === 2. PUNTOS EXTRA POR PAGOS PUNTUALES/ADELANTADOS ===
     cuotas_pagadas = db.query(Cuota).join(Financiamiento).filter(
         Financiamiento.cliente_id == cliente.id,
         Cuota.estado == "pagada",
@@ -266,7 +248,6 @@ def actualizar_score_cliente(cliente: Cliente, db):
             else:
                 puntos -= 5
     
-    # === 3. BONUS POR NO TENER DEUDA VENCIDA ===
     hoy = datetime.now(timezone.utc)
     cuotas_vencidas = db.query(Cuota).join(Financiamiento).filter(
         Financiamiento.cliente_id == cliente.id,
@@ -290,8 +271,12 @@ def actualizar_score_cliente(cliente: Cliente, db):
     print(f"🎯 Score: {cliente.nombre} | {cliente.score} pts | Nivel: {cliente.nivel} | Compras: {cliente.total_compras}")
     return puntos
 
+# ✅ PIN ALFANUMÉRICO DE 6 CARACTERES (sin caracteres confusos)
 def generar_pin():
-    return str(random.randint(1000, 9999))
+    """Genera PIN de 6 caracteres (números + letras mayúsculas, sin 0/O/1/I/L)"""
+    caracteres = string.digits + string.ascii_uppercase
+    caracteres = caracteres.replace('0','').replace('O','').replace('1','').replace('I','').replace('L','')
+    return ''.join(random.choices(caracteres, k=6))
 
 def generar_token():
     return str(uuid.uuid4())
