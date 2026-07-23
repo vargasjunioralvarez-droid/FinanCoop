@@ -1,6 +1,6 @@
 """
 🔒 FinanCoop - Router de Autenticación Ultra-Seguro
-Login Admin (Frontend Vue) + Login Cliente (App Móvil)
+Login Admin (Frontend Vue) + Login Cliente (App Móvil) + Login Biométrico (Huella)
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request
@@ -8,6 +8,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, Field, validator
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone, timedelta
+from typing import Optional
 import logging
 import re
 import random
@@ -67,6 +68,19 @@ class LoginAdminRequest(BaseModel):
     """Login para panel admin - Username + Password (JSON)"""
     username: str = Field(..., min_length=3, max_length=50)
     password: str = Field(..., min_length=1, max_length=128)
+
+class LoginBiometricoRequest(BaseModel):
+    """Login con huella dactilar - Cédula + confirmación biométrica del dispositivo"""
+    cedula: str = Field(..., min_length=6, max_length=20, pattern=r"^[0-9Vv-]+$")
+    biometric_verified: bool = True
+    device_id: Optional[str] = None
+    
+    @validator('cedula')
+    def validate_cedula(cls, v):
+        v = v.strip().upper()
+        if not re.match(r"^[0-9Vv-]+$", v):
+            raise ValueError("Cédula contiene caracteres inválidos")
+        return v
 
 class RefreshTokenRequest(BaseModel):
     refresh_token: str = Field(..., min_length=20)
@@ -318,6 +332,58 @@ def login_cliente(
     
     access_token = create_access_token(data={"sub": str(cliente.id), "rol": "cliente"})
     refresh_token = create_refresh_token(str(cliente.id), "cliente")
+    
+    return {
+        "access_token": access_token, "token_type": "bearer",
+        "expires_in": ACCESS_TOKEN_EXPIRE_MINUTES * 60, "refresh_token": refresh_token,
+        "cliente": {
+            "id": cliente.id, "nombre": cliente.nombre,
+            "cedula": cliente.cedula[:4] + "****", "nivel": cliente.nivel,
+            "score": cliente.score, "telefono": cliente.telefono
+        }
+    }
+
+# ============================================================
+# 🔐 LOGIN BIOMÉTRICO (Huella Dactilar)
+# ============================================================
+
+@router.post("/login-biometrico")
+def login_biometrico(
+    request_data: LoginBiometricoRequest,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """
+    Login con autenticación biométrica verificada por el dispositivo.
+    La huella ya fue validada por el sistema operativo del teléfono.
+    Solo se requiere la cédula para identificar al usuario.
+    """
+    cedula = request_data.cedula
+    
+    client_ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "unknown")
+    rate_key = f"biometric:{cedula}:{client_ip}"
+    
+    if not _check_rate_limit(rate_key):
+        raise HTTPException(status_code=429, detail="Demasiados intentos fallidos")
+    
+    cliente = db.query(Cliente).filter(Cliente.cedula == cedula).first()
+    
+    if not cliente:
+        _record_failed_attempt(rate_key)
+        raise HTTPException(status_code=401, detail="Credenciales incorrectas")
+    
+    if cliente.estado != "aprobado":
+        _record_failed_attempt(rate_key)
+        raise HTTPException(status_code=403, detail="Cuenta pendiente de aprobación")
+    
+    _record_successful_attempt(rate_key)
+    cliente.ultimo_acceso = datetime.now(timezone.utc)
+    db.commit()
+    
+    access_token = create_access_token(data={"sub": str(cliente.id), "rol": "cliente"})
+    refresh_token = create_refresh_token(str(cliente.id), "cliente")
+    
+    logger.info(f"✅ Login biométrico exitoso: {cliente.nombre} (dispositivo: {request_data.device_id or 'desconocido'})")
     
     return {
         "access_token": access_token, "token_type": "bearer",
