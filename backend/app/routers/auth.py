@@ -31,7 +31,6 @@ from app.auth import (
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["Autenticación"])
 
-# ✅ Hash bcrypt VÁLIDO para timing-safe
 DUMMY_HASH = "$2b$12$LJ3m4ys3GZfnYMz8kVsKaOmLp1GpGmB0qJX3PzV3QXjKtHqKw8m5u"
 
 # ============================================================
@@ -47,9 +46,9 @@ SMTP_PASS = os.getenv("SMTP_PASS", "")
 # ============================================================
 
 class LoginClienteRequest(BaseModel):
-    """Login para app móvil - Cédula + PIN"""
+    """Login para app móvil - Cédula + PIN (6 caracteres alfanumérico)"""
     cedula: str = Field(..., min_length=6, max_length=20, pattern=r"^[0-9Vv-]+$")
-    pin: str = Field(..., min_length=4, max_length=6, pattern=r"^[0-9]+$")
+    pin: str = Field(..., min_length=4, max_length=6, pattern=r"^[A-Z0-9]+$")
     
     @validator('cedula')
     def validate_cedula(cls, v):
@@ -61,8 +60,8 @@ class LoginClienteRequest(BaseModel):
     @validator('pin')
     def validate_pin(cls, v):
         if len(v) < 4:
-            raise ValueError("PIN debe tener al menos 4 dígitos")
-        return v.strip()
+            raise ValueError("PIN debe tener al menos 4 caracteres")
+        return v.strip().upper()
 
 class LoginAdminRequest(BaseModel):
     """Login para panel admin - Username + Password (JSON)"""
@@ -96,7 +95,7 @@ class RegistroAdminRequest(BaseModel):
     email: str = Field(default="", max_length=200)
     tienda_id: int = None
 
-# ✅ MODELOS PARA RECUPERACIÓN DE PIN
+# ✅ MODELOS PARA RECUPERACIÓN DE PIN (6 caracteres)
 class SolicitarCodigoRequest(BaseModel):
     """Solicitar código de recuperación por correo"""
     cedula: str = Field(..., min_length=6, max_length=20, pattern=r"^[0-9Vv-]+$")
@@ -107,8 +106,8 @@ class VerificarCodigoRequest(BaseModel):
     codigo: str = Field(..., min_length=4, max_length=6)
 
 class CambiarPinRequest(BaseModel):
-    """Cambiar PIN después de verificar código"""
-    nuevo_pin: str = Field(..., min_length=4, max_length=6, pattern=r"^[0-9]+$")
+    """Cambiar PIN después de verificar código (6 caracteres alfanumérico)"""
+    nuevo_pin: str = Field(..., min_length=4, max_length=6, pattern=r"^[A-Z0-9]+$")
 
 # Almacenamiento temporal de códigos
 codigos_recuperacion = {}
@@ -485,7 +484,6 @@ def solicitar_codigo_recuperacion(
         "intentos": 0
     }
     
-    # Enviar por correo SMTP
     correo_enviado = enviar_correo_recuperacion(cliente.email, cliente.nombre, codigo)
     
     if not correo_enviado:
@@ -590,7 +588,7 @@ def cambiar_pin_recuperacion(
         if not cliente:
             raise HTTPException(status_code=404, detail="Cliente no encontrado")
         
-        nuevo_pin = request_data.nuevo_pin.strip()
+        nuevo_pin = request_data.nuevo_pin.strip().upper()
         cliente.pin_hash = hash_pin(nuevo_pin)
         db.commit()
         

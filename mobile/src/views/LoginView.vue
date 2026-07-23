@@ -72,11 +72,11 @@
               </label>
               <v-text-field
                 v-model="loginForm.pin"
-                placeholder="Ingresa tu PIN"
+                placeholder="Ingresa tu PIN (6 caracteres)"
                 type="password"
                 variant="solo-filled"
                 density="comfortable"
-                maxlength="4"
+                maxlength="6"
                 flat
                 rounded="lg"
                 bg-color="#f8f9fa"
@@ -244,7 +244,7 @@
               ✅ Código verificado correctamente
             </v-alert>
 
-            <p class="recuperar-text">Ingresa tu nuevo PIN de 4 dígitos</p>
+            <p class="recuperar-text">Ingresa tu nuevo PIN de 6 caracteres</p>
 
             <v-text-field
               v-model="recuperacion.nuevoPin"
@@ -254,8 +254,8 @@
               type="password"
               class="recuperar-input"
               hide-details
-              maxlength="4"
-              placeholder="••••"
+              maxlength="6"
+              placeholder="••••••"
             />
 
             <v-text-field
@@ -266,8 +266,8 @@
               type="password"
               class="recuperar-input mt-3"
               hide-details
-              maxlength="4"
-              placeholder="••••"
+              maxlength="6"
+              placeholder="••••••"
             />
 
             <v-alert v-if="errorRecuperacion" type="error" variant="tonal" density="compact" class="mt-3">
@@ -419,7 +419,7 @@ const verificarCodigo = async () => {
 
 const cambiarPin = async () => {
   if (recuperacion.nuevoPin.length < 4) {
-    errorRecuperacion.value = 'El PIN debe tener 4 dígitos'
+    errorRecuperacion.value = 'El PIN debe tener al menos 4 caracteres'
     return
   }
   if (recuperacion.nuevoPin !== recuperacion.confirmarPin) {
@@ -437,7 +437,7 @@ const cambiarPin = async () => {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${recuperacion.tokenTemp}`
       },
-      body: JSON.stringify({ nuevo_pin: recuperacion.nuevoPin })
+      body: JSON.stringify({ nuevo_pin: recuperacion.nuevoPin.toUpperCase() })
     })
 
     const data = await response.json()
