@@ -47,6 +47,7 @@
         <!-- Formulario -->
         <div class="login-body">
           <v-form @submit.prevent="handleLogin" class="login-form">
+            <!-- Campo de Cédula -->
             <div class="input-group">
               <label class="input-label">
                 <v-icon size="18" class="label-icon">mdi-card-account-details</v-icon>
@@ -65,27 +66,40 @@
               />
             </div>
 
+            <!-- Campo de PIN con botón de huella al lado -->
             <div class="input-group">
               <label class="input-label">
                 <v-icon size="18" class="label-icon">mdi-lock</v-icon>
                 PIN de Acceso
               </label>
-              <v-text-field
-                v-model="loginForm.pin"
-                placeholder="Ingresa tu PIN (6 caracteres)"
-                type="password"
-                variant="solo-filled"
-                density="comfortable"
-                maxlength="6"
-                flat
-                rounded="lg"
-                bg-color="#f8f9fa"
-                class="custom-input"
-                @keyup.enter="handleLogin"
-              />
+              <div class="pin-row">
+                <v-text-field
+                  v-model="loginForm.pin"
+                  placeholder="Ingresa tu PIN"
+                  type="password"
+                  variant="solo-filled"
+                  density="comfortable"
+                  maxlength="6"
+                  flat
+                  rounded="lg"
+                  bg-color="#f8f9fa"
+                  class="custom-input pin-input"
+                  @keyup.enter="handleLogin"
+                />
+                <v-btn
+                  v-if="huellaSoportada"
+                  icon="mdi-fingerprint"
+                  size="large"
+                  variant="tonal"
+                  class="biometric-icon-btn"
+                  @click="loginConHuella"
+                  :loading="cargandoHuella"
+                  :disabled="!loginForm.cedula || cargando"
+                />
+              </div>
             </div>
 
-            <!-- ✅ BOTÓN "OLVIDÉ MI PIN" -->
+            <!-- BOTÓN "OLVIDÉ MI PIN" -->
             <div class="forgot-pin-link">
               <span @click="mostrarRecuperarPin = true">¿Olvidaste tu PIN?</span>
             </div>
@@ -158,7 +172,7 @@
       </div>
     </div>
 
-    <!-- ✅ DIÁLOGO DE RECUPERACIÓN DE PIN -->
+    <!-- DIÁLOGO DE RECUPERACIÓN DE PIN -->
     <v-dialog v-model="mostrarRecuperarPin" max-width="400" persistent>
       <v-card class="recuperar-card">
         <v-card-title class="pa-4 pb-2">
@@ -288,15 +302,17 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useFinanCash } from '@/composables/useFinanCash'
+import { useBiometric } from '@/composables/useBiometric'
 import { buildApiUrl } from '@/config'
 
 const { loginForm, error, cargando, iniciarSesion } = useFinanCash()
+const { huellaSoportada, huellaActivada, cargandoHuella, verificarSoporte, autenticarConHuella } = useBiometric()
 const router = useRouter()
 
-// ✅ Estados de recuperación de PIN
+// Estados de recuperación de PIN
 const mostrarRecuperarPin = ref(false)
 const pasoRecuperacion = ref(1)
 const reintentos = ref(0)
@@ -314,6 +330,32 @@ const recuperacion = reactive({
   tokenTemp: ''
 })
 
+onMounted(async () => {
+  await verificarSoporte()
+})
+
+const loginConHuella = async () => {
+  const cedula = loginForm.value.cedula?.trim()
+  
+  if (!cedula || cedula.length < 6) {
+    error.value = 'Ingresa tu número de cédula primero'
+    return
+  }
+
+  const resultado = await autenticarConHuella(cedula)
+  
+  if (resultado.success) {
+    localStorage.setItem('financoop_token', resultado.data.access_token)
+    
+    // ✅ Pequeña pausa para que el token se propague
+    await new Promise(resolve => setTimeout(resolve, 300))
+    
+    await router.replace('/inicio')
+  } else {
+    error.value = resultado.error || 'Error en autenticación'
+  }
+}
+
 const handleLogin = async () => {
   console.log('🔑 Intentando login...')
   
@@ -323,6 +365,8 @@ const handleLogin = async () => {
     
     if (success) {
       console.log('✅ Login exitoso, navegando a /inicio...')
+      // ✅ Pequeña pausa para que el token se propague
+      await new Promise(resolve => setTimeout(resolve, 300))
       await router.replace('/inicio')
     } else {
       console.log('❌ Login falló')
@@ -336,7 +380,6 @@ const irARegistro = () => {
   router.push('/registro')
 }
 
-// ✅ Funciones de recuperación de PIN
 const cerrarRecuperacion = () => {
   mostrarRecuperarPin.value = false
   pasoRecuperacion.value = 1
@@ -702,6 +745,33 @@ const cambiarPin = async () => {
 
 .custom-input :deep(.v-icon) {
   color: rgba(255,255,255,0.3) !important;
+}
+
+/* ============ PIN + HUELLA EN FILA ============ */
+.pin-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.pin-input {
+  flex: 1;
+}
+
+.biometric-icon-btn {
+  background: rgba(79, 172, 254, 0.1) !important;
+  color: #4facfe !important;
+  border: 1px solid rgba(79, 172, 254, 0.25) !important;
+  border-radius: 12px !important;
+  height: 56px !important;
+  width: 56px !important;
+  min-width: 56px !important;
+  transition: all 0.3s ease;
+}
+
+.biometric-icon-btn:hover {
+  background: rgba(79, 172, 254, 0.2) !important;
+  border-color: rgba(79, 172, 254, 0.5) !important;
 }
 
 /* ============ OLVIDÉ MI PIN ============ */

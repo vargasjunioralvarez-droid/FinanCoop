@@ -102,6 +102,47 @@
         <div class="section-header"><div class="d-flex align-center"><v-icon color="#4facfe" size="20" class="mr-2">mdi-cog</v-icon><span>Configuración</span></div></div>
         <v-divider style="border-color: rgba(255,255,255,0.06);" />
         <div class="settings-list">
+          
+          <!-- 🆕 CONFIGURACIÓN DE HUELLA -->
+          <div v-if="plataformaNativa" class="setting-item">
+            <div class="d-flex align-center">
+              <v-icon color="#4facfe" size="20" class="mr-3">mdi-fingerprint</v-icon>
+              <div>
+                <span>Inicio de sesión con huella</span>
+                <div class="setting-description">Accede rápidamente sin PIN</div>
+              </div>
+            </div>
+            <v-switch
+              v-model="huellaActivada"
+              color="#4facfe"
+              hide-details
+              density="compact"
+              :loading="cargandoHuella"
+              :disabled="!huellaSoportada"
+              @update:model-value="onToggleHuella"
+              inset
+            />
+          </div>
+
+          <!-- Mensaje si no soporta huella -->
+          <div v-if="plataformaNativa && !huellaSoportada" class="pa-3">
+            <v-alert
+              type="info"
+              variant="tonal"
+              density="compact"
+              rounded="lg"
+              class="text-caption"
+            >
+              <div class="d-flex align-center">
+                <v-icon size="14" class="mr-2">mdi-information</v-icon>
+                Configura tu huella en Ajustes del dispositivo
+              </div>
+            </v-alert>
+          </div>
+
+          <v-divider v-if="plataformaNativa" style="border-color: rgba(255,255,255,0.06);" />
+
+          <!-- Cambiar PIN -->
           <div class="setting-item" @click="abrirCambiarPin">
             <div class="d-flex align-center"><v-icon color="#4facfe" size="20" class="mr-3">mdi-lock-reset</v-icon><span>Cambiar PIN</span></div>
             <v-icon size="20" color="rgba(255,255,255,0.2)">mdi-chevron-right</v-icon>
@@ -148,12 +189,22 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useFinanCash } from '@/composables/useFinanCash'
+import { useBiometric } from '@/composables/useBiometric'
 import { buildApiUrl } from '@/config'
 
 const { 
   token, usuario, financiamientos, nivelActual, lineaUsada,
   colorNivel, iconoNivel, cargarDatos, cerrarSesion
 } = useFinanCash()
+
+const { 
+  huellaSoportada, 
+  huellaActivada, 
+  plataformaNativa, 
+  cargandoHuella, 
+  verificarSoporte, 
+  toggleHuella 
+} = useBiometric()
 
 const verFotoAmpliada = ref(false)
 const dialogCambiarPin = ref(false)
@@ -162,6 +213,22 @@ const pinNuevo = ref('')
 const pinConfirmar = ref('')
 const errorPin = ref('')
 const cambiandoPin = ref(false)
+
+// 🆕 Toggle huella desde el switch
+const onToggleHuella = async (activar) => {
+  const resultado = await toggleHuella(activar)
+  
+  if (resultado.success) {
+    if (activar) {
+      alert('✅ Inicio de sesión con huella activado')
+    } else {
+      console.log('🔒 Huella desactivada')
+    }
+  } else {
+    huellaActivada.value = !activar
+    alert('❌ ' + (resultado.error || 'Error al configurar huella'))
+  }
+}
 
 const abrirCambiarPin = () => {
   pinActual.value = ''; pinNuevo.value = ''; pinConfirmar.value = ''; errorPin.value = ''
@@ -192,7 +259,8 @@ const guardarNuevoPin = async () => {
   finally { cambiandoPin.value = false }
 }
 
-onMounted(() => {
+onMounted(async () => {
+  await verificarSoporte()
   if (!usuario.value?.nombre && token.value) cargarDatos()
 })
 </script>
@@ -229,6 +297,7 @@ onMounted(() => {
 .setting-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; cursor: pointer; color: rgba(255,255,255,0.85); }
 .setting-item:hover { background: rgba(255,255,255,0.04); }
 .setting-item span { font-size: 14px; font-weight: 500; }
+.setting-description { font-size: 11px; color: rgba(255,255,255,0.4); margin-top: 2px; }
 .logout-btn { background: rgba(239,68,68,0.1) !important; color: #f87171 !important; border: 1px solid rgba(239,68,68,0.15); margin-top: 8px; }
 .cursor-pointer { cursor: pointer; }
 .custom-field :deep(.v-field) { border-radius: 12px !important; border: 1px solid rgba(255,255,255,0.2) !important; }
