@@ -1,15 +1,19 @@
-# backend/app/routers/config.py
+# backend/app/modules/config/router.py
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 import logging
 import httpx
-from app.database import get_db
-from app.models import TasaDolar, NivelConfig, Financiamiento, Cuota, ConfiguracionPago
-from app.config import NIVELES_CONFIG_DEFAULT
-from app.auth import get_current_admin
-from app.utils import obtener_tasa_actual, get_niveles_config
+
+from app.core.database import get_db
+from app.modules.config.models import TasaDolar, NivelConfig
+from app.modules.payments.models import ConfiguracionPago
+from app.modules.loans.models import Financiamiento, Cuota
+from app.modules.config.schemas import TasaUpdate, NivelConfigUpdate
+from app.core.security import get_current_admin
+from app.shared.utils import obtener_tasa_actual, get_niveles_config
+from app.core.config import NIVELES_CONFIG_DEFAULT
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/config", tags=["Configuración"])

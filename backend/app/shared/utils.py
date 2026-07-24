@@ -1,4 +1,4 @@
-# backend/app/utils.py
+# backend/app/shared/utils.py
 import os
 import random
 import uuid
@@ -6,8 +6,15 @@ import string
 from datetime import datetime, timezone
 from twilio.rest import Client
 from twilio.base.exceptions import TwilioRestException
-from app.config import NIVELES_CONFIG, NIVELES_CONFIG_DEFAULT
-from app.models import Cliente, Financiamiento, Cuota, NivelConfig, TasaDolar
+
+# ============================================================
+# 🔥 IMPORTS ACTUALIZADOS (NUEVA ESTRUCTURA)
+# ============================================================
+
+from app.core.config import NIVELES_CONFIG, NIVELES_CONFIG_DEFAULT
+from app.modules.users.models import Cliente
+from app.modules.loans.models import Financiamiento, Cuota
+from app.modules.config.models import NivelConfig, TasaDolar
 
 # ============ CONFIGURACIÓN TWILIO ============
 TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID')
@@ -198,7 +205,6 @@ def enviar_notificacion_generica(telefono: str, mensaje: str):
 
 def calcular_nivel(score: int, db=None):
     if db:
-        from app.models import NivelConfig
         niveles_db = db.query(NivelConfig).order_by(NivelConfig.min_score).all()
         if niveles_db:
             for n in niveles_db:
@@ -271,7 +277,6 @@ def actualizar_score_cliente(cliente: Cliente, db):
     print(f"🎯 Score: {cliente.nombre} | {cliente.score} pts | Nivel: {cliente.nivel} | Compras: {cliente.total_compras}")
     return puntos
 
-# ✅ PIN ALFANUMÉRICO DE 6 CARACTERES (sin caracteres confusos)
 def generar_pin():
     """Genera PIN de 6 caracteres (números + letras mayúsculas, sin 0/O/1/I/L)"""
     caracteres = string.digits + string.ascii_uppercase

@@ -3,13 +3,21 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 from typing import Optional
-from app.database import get_db
-from app.models import Cuota, Pago, Financiamiento, Cliente
-from app.schemas import PagoReporte, ConciliacionPago
-from app.utils import actualizar_score_cliente, calcular_nivel, obtener_tasa_actual, enviar_notificacion_generica
-from app.auth import get_current_admin, get_current_user, get_current_tienda
 import json
 import logging
+
+from app.core.database import get_db
+from app.modules.loans.models import Cuota, Financiamiento
+from app.modules.payments.models import Pago
+from app.modules.users.models import Cliente
+from app.modules.payments.schemas import PagoReporte, ConciliacionPago
+from app.shared.utils import (
+    actualizar_score_cliente,
+    calcular_nivel,
+    obtener_tasa_actual,
+    enviar_notificacion_generica
+)
+from app.core.security import get_current_admin, get_current_user, get_current_tienda
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/pagos", tags=["Pagos"])

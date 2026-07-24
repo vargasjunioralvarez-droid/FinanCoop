@@ -1,13 +1,16 @@
-# backend/app/routers/admin.py
+# backend/app/modules/admin/router.py
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
 import logging
+from datetime import datetime, timezone
 
-from app.database import get_db
-from app.models import Usuario, Cliente, Financiamiento, Pago, Cuota, Tienda
-from app.auth import get_current_admin, hash_password, verify_password
+from app.core.database import get_db
+from app.modules.users.models import Usuario, Tienda, Cliente
+from app.modules.loans.models import Financiamiento
+from app.modules.payments.models import Pago
+from app.core.security import get_current_admin, hash_password
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin", tags=["Administración"])
@@ -106,7 +109,6 @@ def actualizar_tienda(id: int, data: TiendaUpdate, db: Session = Depends(get_db)
 
 @router.delete("/tiendas/{id}")
 def eliminar_tienda(id: int, db: Session = Depends(get_db), current_user = Depends(get_current_admin)):
-    """Eliminar una tienda. Solo admin_central."""
     if current_user.rol != "admin_central":
         raise HTTPException(status_code=403, detail="Solo el administrador central puede eliminar tiendas")
     tienda = db.query(Tienda).filter(Tienda.id == id).first()
@@ -233,5 +235,3 @@ def reportes(db: Session = Depends(get_db), current_user = Depends(get_current_a
         if tienda_id: q_clientes = q_clientes.filter(Cliente.tienda_id == tienda_id); q_creditos = q_creditos.filter(Financiamiento.tienda_id == tienda_id); q_pagos = q_pagos.join(Financiamiento).filter(Financiamiento.tienda_id == tienda_id)
         return {"fecha_reporte": datetime.now(timezone.utc).isoformat(), "tienda": current_user.tienda.nombre if current_user.tienda else "Todas las tiendas", "clientes": {"total": q_clientes.count()}, "creditos": {"total": q_creditos.count(), "activos": q_creditos.filter(Financiamiento.estado == "activo").count(), "completados": q_creditos.filter(Financiamiento.estado == "completado").count()}, "pagos": {"pendientes": q_pagos.filter(Pago.estado == "pendiente").count(), "conciliados": q_pagos.filter(Pago.estado == "conciliado").count()}}
     except Exception as e: logger.error(f"❌ Error generando reportes: {e}"); raise HTTPException(status_code=500, detail=str(e))
-
-from datetime import datetime, timezone

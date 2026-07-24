@@ -11,9 +11,12 @@ from typing import Optional
 import logging
 import json
 
-from app.database import get_db
-from app.models import Pago, Cuota, Financiamiento, Cliente
-from app.utils import actualizar_score_cliente, obtener_tasa_actual
+from app.core.database import get_db
+from app.modules.payments.models import Pago
+from app.modules.loans.models import Cuota, Financiamiento
+from app.modules.users.models import Cliente
+from app.shared.utils import actualizar_score_cliente, obtener_tasa_actual
+from app.modules.config.models import LogsConciliacion
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/bancos", tags=["Conciliación Bancaria"])
@@ -24,9 +27,8 @@ router = APIRouter(prefix="/bancos", tags=["Conciliación Bancaria"])
 from pydantic import BaseModel
 
 class PagoBancoWebhook(BaseModel):
-    """Estructura que envía el banco cuando alguien paga"""
-    referencia: str           # Número de referencia del pago
-    monto: float              # Monto en Bs
+    referencia: str
+    monto: float
     banco_origen: Optional[str] = None
     telefono_origen: Optional[str] = None
     cedula_origen: Optional[str] = None

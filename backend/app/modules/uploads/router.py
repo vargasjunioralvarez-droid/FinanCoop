@@ -1,13 +1,14 @@
-# backend/app/routers/upload.py
+# backend/app/modules/uploads/router.py
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
-from app.auth import get_current_user
 from sqlalchemy.orm import Session
-from app.database import get_db
-from app.models import Financiamiento
 import httpx
 import os
 import uuid
 from datetime import datetime
+
+from app.core.database import get_db
+from app.modules.loans.models import Financiamiento
+from app.core.security import get_current_user
 
 router = APIRouter(prefix="/upload", tags=["Upload"])
 

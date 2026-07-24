@@ -8,22 +8,36 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse, HTMLResponse
-from app.database import engine, Base, get_db
-from app.models import NivelConfig, TasaDolar, ConfiguracionPago
-from app.config import NIVELES_CONFIG_DEFAULT
-from app.utils import get_niveles_config
-from app.routers import bancos_router
-from app.routers import (
-    clientes_router, 
-    financiamientos_router, 
-    pagos_router, 
-    config_router,
-    app_mobile_router, 
-    admin_router, 
-    auth_router,
-    upload_router
-)
 from datetime import datetime, timezone
+
+# ============================================================
+# 🔥 IMPORTS ACTUALIZADOS (NUEVA ESTRUCTURA)
+# ============================================================
+
+# Core
+from app.core.database import engine, Base, get_db
+
+# Models (desde módulos)
+from app.modules.config.models import NivelConfig, TasaDolar
+from app.modules.payments.models import ConfiguracionPago
+
+# Config
+from app.core.config import NIVELES_CONFIG_DEFAULT
+
+# Utils
+from app.shared.utils import get_niveles_config
+
+# Routers (desde módulos)
+from app.modules.auth.router import router as auth_router
+from app.modules.users.router import router as clientes_router
+from app.modules.loans.router import router as financiamientos_router
+from app.modules.payments.router import router as pagos_router
+from app.modules.config.router import router as config_router
+from app.modules.mobile.router import router as app_mobile_router
+from app.modules.admin.router import router as admin_router
+from app.modules.uploads.router import router as upload_router
+from app.modules.banks.router import router as bancos_router
+
 
 # ─────────────────────────────────────────────────────────────
 # 📝 LOGGING SEGURO
@@ -85,8 +99,8 @@ ALLOWED_ORIGINS = [
     "ionic://localhost",
     "http://localhost",
     "https://localhost",
-    "https://financoop.app",       # ← Origen del APK
-    "capacitor://financoop.app",   # ← Por si acaso
+    "https://financoop.app",
+    "capacitor://financoop.app",
     
     # Producción
     "https://financoop.onrender.com",
@@ -281,7 +295,7 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", 8000))
     uvicorn.run(
-        "main:app",
+        "app.main:app",
         host="0.0.0.0",
         port=port,
         reload=not IS_PROD,

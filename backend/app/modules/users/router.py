@@ -3,20 +3,44 @@ from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, 
 from pydantic import BaseModel
 from typing import Optional
 from sqlalchemy.orm import Session
-from app.database import get_db
-from app.models import Cliente, Financiamiento, Cuota, Pago
-from app.utils import (
-    calcular_nivel, actualizar_score_cliente, generar_pin, 
-    calcular_usado_disponible, obtener_tasa_actual, generar_token,
-    enviar_pin_cliente_completo
-)
-from app.auth import get_current_admin, get_current_user, get_current_user_optional, get_current_tienda, hash_pin
 from datetime import datetime, timezone
 import httpx
 import os
 import base64
 import uuid
 import logging
+
+# ============================================================
+# Imports del proyecto (actualizados a la nueva estructura)
+# ============================================================
+
+# Core
+from app.core.database import get_db
+
+# Models (desde módulos)
+from app.modules.users.models import Cliente
+from app.modules.loans.models import Financiamiento, Cuota
+from app.modules.payments.models import Pago
+
+# Security
+from app.core.security import (
+    get_current_admin,
+    get_current_user,
+    get_current_user_optional,
+    get_current_tienda,
+    hash_pin
+)
+
+# Utils (siguen igual, pero asegurarse que estén en app/shared/utils.py)
+from app.shared.utils import (
+    calcular_nivel,
+    actualizar_score_cliente,
+    generar_pin,
+    calcular_usado_disponible,
+    obtener_tasa_actual,
+    generar_token,
+    enviar_pin_cliente_completo
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/clientes", tags=["Clientes"])

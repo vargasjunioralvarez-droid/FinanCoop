@@ -1,12 +1,26 @@
-# backend/app/routers/app_mobile.py
+# backend/app/modules/mobile/router.py
 from fastapi import APIRouter, Depends, Response, Header, HTTPException, status
 from sqlalchemy.orm import Session
-from app.database import get_db
-from app.models import Cliente, Financiamiento, Cuota, ConfiguracionPago, NivelConfig
-from app.utils import generar_token, obtener_tasa_actual, calcular_usado_disponible, actualizar_score_cliente, calcular_nivel
-from app.auth import get_current_user, get_current_cliente
 from datetime import datetime, timezone
 import logging
+
+from app.core.database import get_db
+from app.modules.users.models import Cliente
+from app.modules.loans.models import Financiamiento, Cuota
+from app.modules.payments.models import ConfiguracionPago
+from app.shared.utils import (
+    generar_token,
+    obtener_tasa_actual,
+    calcular_usado_disponible,
+    actualizar_score_cliente,
+    calcular_nivel
+)
+from app.core.security import (
+    get_current_user,
+    get_current_cliente,
+    verify_pin,
+    hash_pin
+)
 
 logger = logging.getLogger(__name__)
 
@@ -128,8 +142,8 @@ def mis_datos(
                 "id": fin.id,
                 "codigo": fin.codigo,
                 "descripcion": fin.descripcion,
-                "url_factura": fin.url_factura,           # ✅ NUEVO
-                "numero_factura": fin.numero_factura,     # ✅ NUEVO
+                "url_factura": fin.url_factura,
+                "numero_factura": fin.numero_factura,
                 "monto_total_bs": round(fin.monto_total_bs, 2),
                 "monto_total_usd_ref": round(fin.monto_total_usd, 2),
                 "monto_entrada_bs": round(fin.monto_entrada_bs, 2),
@@ -293,8 +307,6 @@ def cambiar_pin(
     db: Session = Depends(get_db)
 ):
     """Permite al cliente cambiar su PIN de acceso."""
-    from app.auth import verify_pin, hash_pin
-    
     pin_actual = data.get("pin_actual")
     pin_nuevo = data.get("pin_nuevo")
     

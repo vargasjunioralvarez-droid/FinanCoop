@@ -2,14 +2,22 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import Optional
-from app.database import get_db
-from app.models import Cliente, Financiamiento, Cuota, Pago
-from app.schemas import FinanciamientoCreate, AprobacionExtra
-from app.utils import calcular_nivel, actualizar_score_cliente, calcular_usado_disponible, obtener_tasa_actual
-from app.auth import get_current_admin, get_current_user, get_current_tienda
 from datetime import datetime, timedelta, timezone
 import random
 import logging
+
+from app.core.database import get_db
+from app.modules.users.models import Cliente
+from app.modules.loans.models import Financiamiento, Cuota
+from app.modules.payments.models import Pago
+from app.modules.loans.schemas import FinanciamientoCreate, AprobacionExtra
+from app.shared.utils import (
+    calcular_nivel,
+    actualizar_score_cliente,
+    calcular_usado_disponible,
+    obtener_tasa_actual
+)
+from app.core.security import get_current_admin, get_current_user, get_current_tienda
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/financiamientos", tags=["Financiamientos"])

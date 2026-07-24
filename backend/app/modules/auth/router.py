@@ -2,14 +2,13 @@
 🔒 FinanCoop - Router de Autenticación Ultra-Seguro
 Login Admin (Frontend Vue) + Login Cliente (App Móvil) + Login Biométrico (Huella)
 """
-
+import logging  # <-- AGREGAR ESTA LÍNEA
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, Field, validator
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone, timedelta
 from typing import Optional
-import logging
 import re
 import random
 import os
@@ -18,15 +17,27 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from jose import jwt, JWTError, ExpiredSignatureError
 
-from app.database import get_db
-from app.models import Usuario, Cliente
-from app.auth import (
-    create_access_token, create_refresh_token,
-    get_current_cliente, get_current_admin, get_current_user,
-    hash_password, hash_pin, verify_password, verify_pin,
-    _check_rate_limit, _record_failed_attempt, _record_successful_attempt,
-    _hash_token, blacklist_token, ACCESS_TOKEN_EXPIRE_MINUTES,
-    SECRET_KEY, ALGORITHM
+from app.core.database import get_db
+from app.modules.users.models import Cliente, Usuario
+from app.modules.auth.models import TokenBlacklist
+from app.core.security import (
+    get_current_user,
+    get_current_admin,
+    create_access_token,
+    create_refresh_token,
+    get_current_cliente,
+    hash_password,
+    hash_pin,
+    verify_password,
+    verify_pin,
+    _check_rate_limit,
+    _record_failed_attempt,
+    _record_successful_attempt,
+    _hash_token,
+    blacklist_token,
+    ACCESS_TOKEN_EXPIRE_MINUTES,
+    SECRET_KEY,
+    ALGORITHM
 )
 
 logger = logging.getLogger(__name__)
