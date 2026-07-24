@@ -1,5 +1,19 @@
 <template>
   <v-app :theme="tema" class="mobile-app">
+    <!-- Pantalla de carga inicial -->
+    <div v-if="cargandoInicial" class="loading-screen">
+      <div class="loading-content">
+        <v-progress-circular
+          indeterminate
+          color="primary"
+          size="64"
+          width="4"
+        />
+        <h2 class="loading-title">FinanCoop</h2>
+        <p class="loading-text">{{ mensajeCarga }}</p>
+      </div>
+    </div>
+
     <!-- Toast de inactividad -->
     <v-snackbar
       v-model="mostrarMensajeInactividad"
@@ -216,9 +230,9 @@ const router = useRouter()
 const mostrarAyuda = ref(false)
 const tema = ref(localStorage.getItem('financoop_theme') || 'light')
 const scrolled = ref(false)
-
-// ✅ FIX: Flag para evitar redirección múltiple
 const redirigiendo = ref(false)
+const cargandoInicial = ref(true)
+const mensajeCarga = ref('Iniciando...')
 
 // ============ MENSAJE DE INACTIVIDAD ============
 const mostrarMensajeInactividad = ref(false)
@@ -260,6 +274,7 @@ const onScroll = () => {
 // ============ INICIALIZAR APP ============
 const iniciarApp = async () => {
   console.log('📱 Iniciando app...')
+  mensajeCarga.value = 'Verificando sesión...'
 
   const tokenGuardado = localStorage.getItem('financoop_token')
 
@@ -269,17 +284,26 @@ const iniciarApp = async () => {
 
   if (token.value) {
     console.log('🔄 Token presente, cargando datos...')
+    mensajeCarga.value = 'Cargando tus datos...'
+    
     try {
       await cargarDatos()
       console.log('✅ Datos cargados correctamente')
+      mensajeCarga.value = '¡Listo!'
+      
       if (resetInactivityTimer) {
         resetInactivityTimer()
       }
+      
+      await new Promise(resolve => setTimeout(resolve, 500))
+      
     } catch (error) {
       console.error('❌ Error cargando datos:', error)
+      mensajeCarga.value = 'Error al cargar datos'
+      
       localStorage.removeItem('financoop_token')
       token.value = null
-      // ✅ FIX: Solo redirigir si no estamos ya en una ruta pública
+      
       if (!['/login', '/registro', '/registro-exitoso'].includes(route.path) && !redirigiendo.value) {
         redirigiendo.value = true
         await router.push('/login')
@@ -288,21 +312,34 @@ const iniciarApp = async () => {
     }
   } else {
     console.log('❌ No hay token')
+    mensajeCarga.value = 'Sin sesión activa'
+    
     if (!['/login', '/registro', '/registro-exitoso'].includes(route.path) && !redirigiendo.value) {
       redirigiendo.value = true
       await router.push('/login')
       redirigiendo.value = false
     }
   }
+  
+  cargandoInicial.value = false
 }
 
 // ============ WATCHERS ============
-// ✅ FIX: watch con flag de protección contra bucles
-watch(token, (newToken, oldToken) => {
+// ✅ WATCHER MEJORADO PARA DETECTAR CAMBIOS DE TOKEN
+watch(token, async (newToken, oldToken) => {
   console.log('🔄 Token cambiado:', newToken ? 'Token presente' : 'Sin token')
 
-  // Solo redirigir si el token pasó de tener valor a null (logout)
-  // NO redirigir en el inicial (oldToken es undefined al inicio)
+  if (newToken && !oldToken) {
+    // ✅ TOKEN NUEVO - FORZAR CARGA DE DATOS
+    console.log('✅ Nuevo token detectado, cargando datos...')
+    try {
+      await cargarDatos()
+      console.log('✅ Datos cargados después de login')
+    } catch (error) {
+      console.error('❌ Error cargando datos:', error)
+    }
+  }
+
   if (!newToken && oldToken !== undefined && !redirigiendo.value) {
     if (!['/login', '/registro', '/registro-exitoso'].includes(route.path)) {
       redirigiendo.value = true
@@ -311,7 +348,7 @@ watch(token, (newToken, oldToken) => {
       })
     }
   }
-})
+}, { immediate: true })
 
 // ============ CICLO DE VIDA ============
 onMounted(async () => {
@@ -430,5 +467,41 @@ onBeforeUnmount(() => {
 
 .gap-2 {
   gap: 8px;
+}
+
+/* ============ PANTALLA DE CARGA ============ */
+.loading-screen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #0a0e1a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  flex-direction: column;
+}
+
+.loading-content {
+  text-align: center;
+  padding: 20px;
+}
+
+.loading-title {
+  color: #ffffff;
+  font-size: 28px;
+  font-weight: 700;
+  margin-top: 20px;
+  background: linear-gradient(135deg, #4facfe, #6366f1);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.loading-text {
+  color: rgba(255,255,255,0.5);
+  font-size: 14px;
+  margin-top: 10px;
 }
 </style>

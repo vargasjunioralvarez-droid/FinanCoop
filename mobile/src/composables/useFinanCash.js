@@ -1,7 +1,7 @@
 // mobile/src/composables/useFinanCash.js
 import { ref, computed } from 'vue'
-import { CapacitorHttp } from '@capacitor/core'
-import { buildApiUrl } from '@/config'
+
+const API_URL = 'https://financoop-agd5.onrender.com/api/v1'
 
 // ============ TIMEOUT DE INACTIVIDAD ============
 const INACTIVITY_TIMEOUT = 15 * 60 * 1000
@@ -71,13 +71,16 @@ function resetInactivityTimer() {
   }
 
   if (token.value) {
+    console.log('⏰ Iniciando timer de inactividad (15 minutos)')
     inactivityTimer = setTimeout(() => {
+      console.log('⏰ Tiempo de inactividad agotado, cerrando sesión...')
       cerrarSesionPorInactividad()
     }, INACTIVITY_TIMEOUT)
   }
 }
 
 function cerrarSesionPorInactividad() {
+  console.log('🔒 Cerrando sesión por inactividad')
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('inactividad', { 
       detail: { mensaje: 'Sesión cerrada por inactividad' }
@@ -89,6 +92,8 @@ function cerrarSesionPorInactividad() {
 function iniciarListenersInactividad() {
   if (listenersAdded) return
   listenersAdded = true
+
+  console.log('📡 Activando listeners de inactividad')
 
   const eventos = ['click', 'touchstart', 'mousemove', 'scroll', 'keydown', 'focus', 'input', 'change']
   let throttleTimer = null
@@ -121,16 +126,22 @@ function limpiarListenersInactividad() {
 // ============ CARGAR NIVELES ============
 async function cargarNiveles() {
   try {
+    console.log('🔄 Cargando niveles desde backend...')
     const data = await apiCall('/config/niveles')
+    
     const niveles = data.niveles || data
     
     if (niveles && typeof niveles === 'object' && !niveles.error) {
       nivelesConfig.value = niveles
       nivelesCargados.value = true
+      console.log('✅ Niveles cargados desde backend:', Object.keys(niveles))
       return true
+    } else {
+      console.error('❌ Respuesta de niveles inválida:', data)
+      return false
     }
-    return false
   } catch (err) {
+    console.error('❌ Error cargando niveles:', err)
     nivelesConfig.value = {}
     nivelesCargados.value = false
     return false
@@ -140,7 +151,9 @@ async function cargarNiveles() {
 // ============ COMPUTED ============
 const nivelActual = computed(() => {
   const nivel = usuario.value.nivel
-  if (!nivel || !nivelesConfig.value[nivel]) return {}
+  if (!nivel || !nivelesConfig.value[nivel]) {
+    return {}
+  }
   return nivelesConfig.value[nivel]
 })
 
@@ -232,13 +245,16 @@ function iconoNivel(nivel) {
 
 function copiarAlPortapapeles(texto) {
   if (navigator.clipboard) {
-    navigator.clipboard.writeText(texto)
+    navigator.clipboard.writeText(texto).then(() => console.log('✅ Copiado:', texto))
+  } else {
+    console.log('📋 Copiado:', texto)
   }
 }
 
-// ============ API CALLS CON CapacitorHttp ============
+// ============ API CALLS ============
 async function apiCall(endpoint, options = {}) {
-  const url = buildApiUrl(endpoint)
+  const url = `${API_URL}${endpoint}`
+
   const currentToken = localStorage.getItem('financoop_token') || token.value
 
   const headers = {
@@ -246,52 +262,61 @@ async function apiCall(endpoint, options = {}) {
     ...options.headers
   }
 
-  // ❌ NO agregar Content-Type si es FormData
   if (!(options.body instanceof FormData)) {
     headers['Content-Type'] = 'application/json'
   }
 
-  if (currentToken) {
+  const endpointsQueNecesitanToken = [
+    '/app/', '/config/', '/upload/', '/clientes/', 
+    '/financiamientos/', '/pagos/', '/admin/'
+  ]
+  
+  const necesitaToken = endpointsQueNecesitanToken.some(path => endpoint.includes(path))
+  
+  if (currentToken && necesitaToken) {
     headers['Authorization'] = `Bearer ${currentToken}`
+    console.log(`🔑 Token enviado a: ${endpoint}`)
   }
 
   try {
-    const httpOptions = {
+    console.log(`🌐 API Call: ${options.method || 'GET'} ${url}`)
+
+    const fetchOptions = {
       method: options.method || 'GET',
-      url: url,
       headers: headers,
     }
 
-    if (options.body) {
-      if (options.body instanceof FormData) {
-        // ✅ Para FormData, usar fetch nativo en lugar de CapacitorHttp
-        const response = await fetch(url, {
-          method: options.method || 'POST',
-          headers: headers,
-          body: options.body
-        })
-        const data = await response.json()
-        if (response.status < 200 || response.status >= 300) {
-          throw new Error(data?.detail || data?.error || `Error ${response.status}`)
-        }
-        return data
-      } else {
-        httpOptions.data = options.body
-      }
+    if (options.body && (options.method === 'POST' || options.method === 'PUT' || options.method === 'PATCH')) {
+      fetchOptions.body = options.body instanceof FormData 
+        ? options.body 
+        : JSON.stringify(options.body)
     }
 
-    const response = await CapacitorHttp.request(httpOptions)
-    const data = response.data || {}
+    const response = await fetch(url, fetchOptions)
 
-    if (response.status < 200 || response.status >= 300) {
-      const errorMsg = data?.detail || data?.error || `Error ${response.status}`
+    let data = {}
+    const contentType = response.headers.get('content-type')
+    if (contentType && contentType.includes('application/json')) {
+      data = await response.json()
+    } else {
+      const text = await response.text()
+      console.log('📥 Respuesta no-JSON:', text.substring(0, 200))
+      data = { error: text || `HTTP ${response.status}` }
+    }
+
+    console.log(`✅ Response status: ${response.status}`)
+
+    if (!response.ok) {
+      const errorMsg = data?.detail || data?.error || `HTTP ${response.status}`
       throw new Error(errorMsg)
     }
 
     return data
 
   } catch (err) {
-    if (err.message?.includes('401') || err.message?.includes('Token')) {
+    console.error('❌ API Error:', err)
+    if (err.message?.includes('401') || err.message?.includes('Sesión no válida') || err.message?.includes('Token')) {
+      console.log('🔒 Token inválido, cerrando sesión...')
       cerrarSesion()
     }
     throw err
@@ -302,22 +327,33 @@ async function apiCall(endpoint, options = {}) {
 async function subirComprobante(file) {
   if (!file) return null
   
+  console.log('📸 Subiendo comprobante a Cloudflare...')
+  console.log('📸 Archivo:', file.name, file.type, file.size)
+  
   cargandoUpload.value = true
   
   try {
     const formData = new FormData()
     formData.append('file', file)
     
+    console.log('📤 Enviando a /upload/comprobante')
+    
     const data = await apiCall('/upload/comprobante', {
       method: 'POST',
       body: formData,
     })
     
+    console.log('📥 Respuesta upload:', data)
+    
     if (data.success && data.url) {
+      console.log('✅ Comprobante subido a Cloudflare:', data.url)
       return data.url
+    } else {
+      console.error('❌ Error en respuesta de Cloudflare:', data)
+      return null
     }
-    return null
   } catch (e) {
+    console.error('❌ Error subiendo comprobante:', e)
     return null
   } finally {
     cargandoUpload.value = false
@@ -339,11 +375,14 @@ async function iniciarSesion() {
   }
 
   try {
-    // ✅ NUEVO ENDPOINT UNIFICADO
+    console.log('🔑 Intentando login con:', { cedula, pin: '***' })
+
     const data = await apiCall('/auth/login-cliente', {
       method: 'POST',
       body: { cedula, pin }
     })
+
+    console.log('📥 Respuesta login:', JSON.stringify(data).substring(0, 300))
 
     if (data.error) {
       error.value = data.error
@@ -351,10 +390,22 @@ async function iniciarSesion() {
       return false
     }
 
-    if (data.access_token) {
-      token.value = data.access_token
-      localStorage.setItem('financoop_token', data.access_token)
-
+    const tokenRecibido = data.access_token || data.token
+    
+    if (tokenRecibido) {
+      token.value = tokenRecibido
+      localStorage.setItem('financoop_token', tokenRecibido)
+      
+      // ✅ GUARDAR USUARIO EN LOCALSTORAGE
+      const usuario = {
+        cedula: cedula,
+        pin: pin,
+        nombre: data.cliente?.nombre || '',
+        id: data.cliente?.id || ''
+      }
+      localStorage.setItem('financoop_usuario', JSON.stringify(usuario))
+      
+      console.log('✅ Login exitoso, token guardado')
       iniciarListenersInactividad()
       resetInactivityTimer()
     } else {
@@ -370,6 +421,7 @@ async function iniciarSesion() {
     return true
 
   } catch (err) {
+    console.error('❌ Error en login:', err)
     error.value = err.message || 'Error de conexión. Verifica tu internet.'
     cargando.value = false
     return false
@@ -377,6 +429,12 @@ async function iniciarSesion() {
 }
 
 function cerrarSesion() {
+  console.log('🔒 Cerrando sesión manualmente')
+  
+  // ✅ LIMPIAR CREDENCIALES DE HUELLA
+  localStorage.removeItem('financoop_usuario')
+  localStorage.removeItem('financoop_huella_credenciales')
+  
   if (inactivityTimer) {
     clearTimeout(inactivityTimer)
     inactivityTimer = null
@@ -400,31 +458,36 @@ async function registrarCliente(formData) {
 
   try {
     if (!(formData instanceof FormData)) {
+      console.error('❌ registrarCliente: formData no es FormData')
       error.value = 'Error interno: formato de datos incorrecto'
       cargando.value = false
       return { success: false, error: error.value }
     }
 
-    const response = await fetch(buildApiUrl('/clientes'), {
+    console.log('📤 Enviando registro...')
+
+    const response = await fetch(`${API_URL}/clientes`, {
       method: 'POST',
       body: formData
     })
 
     const resData = await response.json()
+    console.log('📥 Respuesta registro:', JSON.stringify(resData).substring(0, 300))
 
-    if (!response.ok) {
-      error.value = resData.detail || 'Error al registrar'
+    if (resData.error || resData.success === false) {
+      error.value = resData.error || 'Error al registrar'
       cargando.value = false
       return { success: false, error: error.value }
     }
 
-    if (resData.pin) {
-      localStorage.setItem('financoop_pin_temp', resData.pin)
+    if (resData.pin_generado) {
+      localStorage.setItem('financoop_pin_temp', resData.pin_generado)
     }
 
     cargando.value = false
-    return { success: true, pin: resData.pin, mensaje: resData.mensaje }
+    return { success: true, pin: resData.pin_generado, mensaje: resData.mensaje }
   } catch (err) {
+    console.error('❌ Error registrando:', err)
     error.value = 'Error de conexión: ' + (err.message || 'desconocido')
     cargando.value = false
     return { success: false, error: error.value }
@@ -435,9 +498,13 @@ async function registrarCliente(formData) {
 async function miPerfil() {
   try {
     const data = await apiCall('/app/mi-perfil')
-    if (data.error) return null
+    if (data.error) {
+      console.error('❌ Error obteniendo perfil:', data.error)
+      return null
+    }
     return data
   } catch (err) {
+    console.error('❌ Error en miPerfil:', err)
     return null
   }
 }
@@ -446,11 +513,16 @@ async function miPerfil() {
 async function cargarDatos() {
   const currentToken = localStorage.getItem('financoop_token')
 
-  if (!currentToken) return
+  if (!currentToken) {
+    console.log('⚠️ No hay token en localStorage')
+    return
+  }
 
   if (!token.value) {
     token.value = currentToken
   }
+
+  console.log('🔄 Cargando datos...')
 
   try {
     if (!nivelesCargados.value) {
@@ -459,7 +531,10 @@ async function cargarDatos() {
 
     const data = await apiCall('/app/mis-datos')
 
+    console.log('📥 Datos del cliente recibidos:', JSON.stringify(data).substring(0, 300))
+
     if (data.error) {
+      console.error('❌ Error en mis-datos:', data.error)
       if (data.error.includes('Sesión') || data.error.includes('Token')) {
         cerrarSesion()
       }
@@ -468,28 +543,38 @@ async function cargarDatos() {
 
     datosCliente.value = data
     if (data.cliente) {
-  usuario.value = {
-    ...data.cliente,
-    url_cedula: data.cliente.url_cedula || null  // Asegurar que url_cedula se copie
-  }
-}
+      usuario.value = data.cliente
+      console.log('✅ Usuario actualizado:', data.cliente.nombre, '| Nivel:', data.cliente.nivel)
+    }
 
     tasaActual.value = data.tasa_actual || 0
     financiamientos.value = data.financiamientos_activos || []
     datosPago.value = data.datos_pago || {}
 
+    console.log('✅ Datos principales cargados. Financiamientos:', financiamientos.value.length)
+
     try {
+      console.log('🔄 Cargando cuotas...')
       const cuotasData = await apiCall('/app/mis-cuotas')
+      console.log('📥 Respuesta de cuotas:', JSON.stringify(cuotasData).substring(0, 200))
+
       if (cuotasData && !cuotasData.error) {
         todasCuotas.value = cuotasData.cuotas || []
+        console.log('✅ Cuotas cargadas:', todasCuotas.value.length)
+      } else if (cuotasData?.error) {
+        console.error('❌ Error en cuotas:', cuotasData.error)
+        todasCuotas.value = []
       }
     } catch (err) {
+      console.error('❌ Error cargando cuotas:', err)
       todasCuotas.value = []
     }
 
+    console.log('✅ Todos los datos cargados exitosamente')
     resetInactivityTimer()
 
   } catch (err) {
+    console.error('❌ Error cargando datos:', err)
     error.value = 'Error cargando datos: ' + (err.message || 'desconocido')
   }
 }
@@ -517,6 +602,7 @@ function recalcularMontosConNuevaTasa(nuevaTasa) {
 // ============ PAGOS ============
 async function reportarPago(payload = null) {
   if (payload) {
+    console.log('📤 Reportando pago con payload:', payload)
     cargandoPago.value = true
     error.value = null
     
@@ -525,6 +611,8 @@ async function reportarPago(payload = null) {
         method: 'POST',
         body: payload
       })
+      
+      console.log('📥 Respuesta reportar pago:', data)
       
       if (data.error) {
         error.value = data.error
@@ -548,7 +636,9 @@ async function reportarPago(payload = null) {
       return true
       
     } catch (err) {
-      error.value = err.message || 'Error desconocido'
+      console.error('❌ Error reportando pago:', err)
+      const errorDetail = err.message || 'Error desconocido'
+      error.value = errorDetail
       cargandoPago.value = false
       return false
     }
@@ -582,12 +672,14 @@ async function reportarPago(payload = null) {
   try {
     let comprobanteUrl = null
     if (pagoForm.value.comprobante && pagoForm.value.comprobante instanceof File) {
+      console.log('📸 Subiendo comprobante a Cloudflare...')
       comprobanteUrl = await subirComprobante(pagoForm.value.comprobante)
       if (!comprobanteUrl) {
         error.value = 'No se pudo subir el comprobante'
         cargandoPago.value = false
         return false
       }
+      console.log('✅ Comprobante subido URL:', comprobanteUrl)
     }
 
     const pagoData = {
@@ -600,6 +692,8 @@ async function reportarPago(payload = null) {
       cedula_pago: pagoForm.value.cedula_pago || '',
       comprobante: comprobanteUrl || ''
     }
+
+    console.log('📤 Enviando pago al backend:', pagoData)
 
     const data = await apiCall('/pagos/reportar', {
       method: 'POST',
@@ -628,6 +722,7 @@ async function reportarPago(payload = null) {
     return true
 
   } catch (err) {
+    console.error('❌ Error reportando pago:', err)
     error.value = 'Error al reportar el pago: ' + (err.message || 'desconocido')
     cargandoPago.value = false
     return false
@@ -636,6 +731,7 @@ async function reportarPago(payload = null) {
 
 // ============ SELECCIONAR CUOTA ============
 function setCuotaSeleccionada(cuota) {
+  console.log('📌 Cuota seleccionada:', cuota)
   cuotaSeleccionada.value = cuota
 }
 

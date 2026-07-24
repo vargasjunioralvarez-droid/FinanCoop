@@ -219,7 +219,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { useFinanCash } from '@/composables/useFinanCash'
 import { buildApiUrl } from '@/config'
@@ -240,6 +240,7 @@ const {
   totalDeudaBs,
   totalDeudaUsd,
   historialDolar,
+  cargarDatos,
   formatearBS,
   formatearUSD,
   formatearNumero,
@@ -330,6 +331,20 @@ function verFactura(fin) {
     dialogoFactura.value = true
   }
 }
+
+// ✅ FORZAR RECARGA CUANDO LA VISTA SE MONTA
+onMounted(async () => {
+  console.log('📱 InicioView montada, forzando carga de datos...')
+  await cargarDatos()
+  console.log('✅ Datos recargados en InicioView')
+})
+
+// ✅ RECARGAR CUANDO EL USUARIO VUELVE A LA VISTA
+onActivated(async () => {
+  console.log('🔄 InicioView activada, recargando datos...')
+  await cargarDatos()
+  console.log('✅ Datos recargados en InicioView (activada)')
+})
 </script>
 
 <style scoped>

@@ -1,13 +1,13 @@
 <template>
   <div class="login-wrapper">
-    <!-- Fondo animado con gradiente y partículas -->
+    <!-- Fondo animado -->
     <div class="login-bg">
       <div class="gradient-sphere sphere-1"></div>
       <div class="gradient-sphere sphere-2"></div>
       <div class="gradient-sphere sphere-3"></div>
     </div>
 
-    <!-- Animación de partículas -->
+    <!-- Partículas -->
     <div class="particles">
       <div v-for="i in 15" :key="i" class="particle" :style="{
         left: Math.random() * 100 + '%',
@@ -21,7 +21,7 @@
 
     <div class="login-container">
       <v-card class="login-card" elevation="20" rounded="xl">
-        <!-- Logo y título -->
+        <!-- Logo -->
         <div class="login-header">
           <div class="logo-wrapper">
             <div class="logo-icon">
@@ -36,18 +36,14 @@
           </div>
           <h1 class="app-title">FinanCoop</h1>
           <p class="app-subtitle">Cecosesola</p>
-          
-          <div class="divider-line">
-            <span></span>
-          </div>
-          
+          <div class="divider-line"><span></span></div>
           <p class="welcome-text">Bienvenido de vuelta</p>
         </div>
 
         <!-- Formulario -->
         <div class="login-body">
           <v-form @submit.prevent="handleLogin" class="login-form">
-            <!-- Campo de Cédula -->
+            <!-- Cédula -->
             <div class="input-group">
               <label class="input-label">
                 <v-icon size="18" class="label-icon">mdi-card-account-details</v-icon>
@@ -66,7 +62,7 @@
               />
             </div>
 
-            <!-- Campo de PIN con botón de huella al lado -->
+            <!-- PIN + Huella -->
             <div class="input-group">
               <label class="input-label">
                 <v-icon size="18" class="label-icon">mdi-lock</v-icon>
@@ -99,11 +95,12 @@
               </div>
             </div>
 
-            <!-- BOTÓN "OLVIDÉ MI PIN" -->
+            <!-- Olvidé mi PIN -->
             <div class="forgot-pin-link">
               <span @click="mostrarRecuperarPin = true">¿Olvidaste tu PIN?</span>
             </div>
 
+            <!-- Error -->
             <v-alert
               v-if="error"
               type="error"
@@ -118,6 +115,7 @@
               </div>
             </v-alert>
 
+            <!-- Botones -->
             <v-btn
               type="submit"
               color="primary"
@@ -133,9 +131,7 @@
               <span v-else>Verificando...</span>
             </v-btn>
 
-            <div class="divider-text">
-              <span>o</span>
-            </div>
+            <div class="divider-text"><span>o</span></div>
 
             <v-btn
               color="success"
@@ -154,7 +150,7 @@
             <div class="footer-text">
               <p>
                 <v-icon size="16" class="text-grey">mdi-help-circle</v-icon>
-                ¿No tienes PIN? Solicítalo en la Coop. mas Cercana
+                ¿No tienes PIN? Solicítalo en la Coop. más Cercana
               </p>
             </div>
 
@@ -166,13 +162,12 @@
         </div>
       </v-card>
 
-      <!-- Versión -->
       <div class="version-text">
         <span>v2.0 • FinanCoop</span>
       </div>
     </div>
 
-    <!-- DIÁLOGO DE RECUPERACIÓN DE PIN -->
+    <!-- DIÁLOGO RECUPERACIÓN DE PIN -->
     <v-dialog v-model="mostrarRecuperarPin" max-width="400" persistent>
       <v-card class="recuperar-card">
         <v-card-title class="pa-4 pb-2">
@@ -183,7 +178,7 @@
         </v-card-title>
 
         <v-card-text class="pa-4 pt-2">
-          <!-- Paso 1: Ingresar cédula -->
+          <!-- Paso 1 -->
           <div v-if="pasoRecuperacion === 1">
             <p class="recuperar-text">
               Ingresa tu número de cédula y te enviaremos un código de verificación
@@ -216,10 +211,10 @@
             </div>
           </div>
 
-          <!-- Paso 2: Verificar código -->
+          <!-- Paso 2 -->
           <div v-if="pasoRecuperacion === 2">
             <v-alert type="info" variant="tonal" density="compact" class="mb-3">
-               📧 Código enviado al <strong>correo electrónico</strong> asociado a la cédula {{ recuperacion.cedula }}
+              📧 Código enviado al <strong>correo electrónico</strong> asociado a la cédula {{ recuperacion.cedula }}
             </v-alert>
 
             <v-text-field
@@ -252,7 +247,7 @@
             </div>
           </div>
 
-          <!-- Paso 3: Nuevo PIN -->
+          <!-- Paso 3 -->
           <div v-if="pasoRecuperacion === 3">
             <v-alert type="success" variant="tonal" density="compact" class="mb-3">
               ✅ Código verificado correctamente
@@ -308,11 +303,18 @@ import { useFinanCash } from '@/composables/useFinanCash'
 import { useBiometric } from '@/composables/useBiometric'
 import { buildApiUrl } from '@/config'
 
-const { loginForm, error, cargando, iniciarSesion } = useFinanCash()
-const { huellaSoportada, huellaActivada, cargandoHuella, verificarSoporte, autenticarConHuella } = useBiometric()
+const { loginForm, error, cargando, iniciarSesion, cargarDatos } = useFinanCash()
+const { 
+  huellaSoportada, 
+  cargandoHuella, 
+  verificarSoporte, 
+  autenticarConHuella,
+  guardarCredencialesHuella,
+  limpiarCredencialesHuella
+} = useBiometric()
 const router = useRouter()
 
-// Estados de recuperación de PIN
+// Recuperación de PIN
 const mostrarRecuperarPin = ref(false)
 const pasoRecuperacion = ref(1)
 const reintentos = ref(0)
@@ -334,28 +336,9 @@ onMounted(async () => {
   await verificarSoporte()
 })
 
-const loginConHuella = async () => {
-  const cedula = loginForm.value.cedula?.trim()
-  
-  if (!cedula || cedula.length < 6) {
-    error.value = 'Ingresa tu número de cédula primero'
-    return
-  }
-
-  const resultado = await autenticarConHuella(cedula)
-  
-  if (resultado.success) {
-    localStorage.setItem('financoop_token', resultado.data.access_token)
-    
-    // ✅ Pequeña pausa para que el token se propague
-    await new Promise(resolve => setTimeout(resolve, 300))
-    
-    await router.replace('/inicio')
-  } else {
-    error.value = resultado.error || 'Error en autenticación'
-  }
-}
-
+// ============================================================
+// ✅ LOGIN CON PIN - GUARDA CREDENCIALES
+// ============================================================
 const handleLogin = async () => {
   console.log('🔑 Intentando login...')
   
@@ -364,15 +347,63 @@ const handleLogin = async () => {
     console.log('✅ Resultado login:', success)
     
     if (success) {
-      console.log('✅ Login exitoso, navegando a /inicio...')
-      // ✅ Pequeña pausa para que el token se propague
+      console.log('✅ Login exitoso')
+      
+      // ✅ GUARDAR CREDENCIALES PARA HUELLA
+      const cedula = loginForm.value.cedula?.trim()
+      const pin = loginForm.value.pin?.trim()
+      if (cedula && pin) {
+        guardarCredencialesHuella(cedula, pin)
+        console.log('✅ Credenciales guardadas para huella')
+      }
+      
       await new Promise(resolve => setTimeout(resolve, 300))
+      await cargarDatos()
       await router.replace('/inicio')
     } else {
       console.log('❌ Login falló')
     }
   } catch (err) {
     console.error('❌ Error en login:', err)
+  }
+}
+
+// ============================================================
+// ✅ LOGIN CON HUELLA - VERIFICA QUE COINCIDA
+// ============================================================
+const loginConHuella = async () => {
+  const cedula = loginForm.value.cedula?.trim()
+  
+  if (!cedula || cedula.length < 6) {
+    error.value = 'Ingresa tu número de cédula primero'
+    return
+  }
+
+  // ✅ LA HUELLA VERIFICA QUE LA CÉDULA COINCIDA CON LA GUARDADA
+  const resultado = await autenticarConHuella(cedula)
+  
+  if (resultado.success) {
+    const token = resultado.data?.access_token || resultado.token
+    if (token) {
+      console.log('✅ Token recibido, guardando...')
+      localStorage.setItem('financoop_token', token)
+      
+      // ✅ GUARDAR USUARIO EN LOCALSTORAGE
+      const usuario = {
+        cedula: cedula,
+        nombre: resultado.data?.cliente?.nombre || '',
+        id: resultado.data?.cliente?.id || ''
+      }
+      localStorage.setItem('financoop_usuario', JSON.stringify(usuario))
+      
+      await new Promise(resolve => setTimeout(resolve, 300))
+      await cargarDatos()
+      await router.replace('/inicio')
+    } else {
+      error.value = 'Error: No se recibió token'
+    }
+  } else {
+    error.value = resultado.error || 'Error en autenticación'
   }
 }
 
@@ -536,7 +567,6 @@ const cambiarPin = async () => {
   background: radial-gradient(circle, #4facfe, #00f2fe);
   animation-delay: 0s;
 }
-
 .sphere-2 {
   width: 350px;
   height: 350px;
@@ -545,7 +575,6 @@ const cambiarPin = async () => {
   background: radial-gradient(circle, #a855f7, #6366f1);
   animation-delay: -5s;
 }
-
 .sphere-3 {
   width: 200px;
   height: 200px;
@@ -584,16 +613,10 @@ const cambiarPin = async () => {
 }
 
 @keyframes floatParticle {
-  0% {
-    transform: translateY(0) rotate(0deg);
-    opacity: 0;
-  }
+  0% { transform: translateY(0) rotate(0deg); opacity: 0; }
   10% { opacity: 1; }
   90% { opacity: 1; }
-  100% {
-    transform: translateY(-100vh) rotate(720deg);
-    opacity: 0;
-  }
+  100% { transform: translateY(-100vh) rotate(720deg); opacity: 0; }
 }
 
 /* ============ CARD DE LOGIN ============ */
@@ -644,9 +667,7 @@ const cambiarPin = async () => {
   50% { box-shadow: 0 0 40px rgba(79, 172, 254, 0.2); }
 }
 
-.logo-img {
-  border-radius: 12px;
-}
+.logo-img { border-radius: 12px; }
 
 .app-title {
   font-size: 28px;
@@ -747,7 +768,6 @@ const cambiarPin = async () => {
   color: rgba(255,255,255,0.3) !important;
 }
 
-/* ============ PIN + HUELLA EN FILA ============ */
 .pin-row {
   display: flex;
   gap: 8px;
@@ -774,7 +794,6 @@ const cambiarPin = async () => {
   border-color: rgba(79, 172, 254, 0.5) !important;
 }
 
-/* ============ OLVIDÉ MI PIN ============ */
 .forgot-pin-link {
   text-align: right;
   margin-top: -10px;
@@ -792,7 +811,6 @@ const cambiarPin = async () => {
   color: #4facfe;
 }
 
-/* ============ BOTONES ============ */
 .login-btn {
   background: linear-gradient(135deg, #4facfe, #6366f1) !important;
   border: none !important;
@@ -828,7 +846,6 @@ const cambiarPin = async () => {
   border-color: rgba(255,255,255,0.15);
 }
 
-/* ============ DIVISOR ============ */
 .divider-text {
   display: flex;
   align-items: center;
@@ -851,7 +868,6 @@ const cambiarPin = async () => {
   letter-spacing: 1px;
 }
 
-/* ============ ERROR ============ */
 .error-alert {
   background: rgba(239, 68, 68, 0.1) !important;
   border: 1px solid rgba(239, 68, 68, 0.15);
@@ -860,7 +876,6 @@ const cambiarPin = async () => {
   padding: 8px 12px !important;
 }
 
-/* ============ FOOTER ============ */
 .footer-text {
   text-align: center;
   margin-top: 4px;
@@ -901,7 +916,6 @@ const cambiarPin = async () => {
   letter-spacing: 1px;
 }
 
-/* ============ DIÁLOGO RECUPERACIÓN ============ */
 .recuperar-card {
   background: #1a1f3a !important;
   border: 1px solid rgba(255,255,255,0.08) !important;
@@ -933,92 +947,31 @@ const cambiarPin = async () => {
   color: rgba(255,255,255,0.6) !important;
 }
 
-.gap-2 {
-  gap: 8px;
-}
+.gap-2 { gap: 8px; }
 
-/* ============ RESPONSIVE ============ */
 @media (max-width: 480px) {
-  .login-wrapper {
-    padding: 12px;
-  }
-  
-  .login-header {
-    padding: 24px 16px 16px;
-  }
-  
-  .login-body {
-    padding: 0 16px 20px;
-  }
-  
-  .logo-icon {
-    width: 64px;
-    height: 64px;
-    padding: 10px;
-  }
-  
-  .app-title {
-    font-size: 24px;
-  }
-  
-  .login-btn {
-    height: 50px;
-    font-size: 15px;
-  }
-  
-  .register-btn {
-    height: 44px;
-    font-size: 13px;
-  }
+  .login-wrapper { padding: 12px; }
+  .login-header { padding: 24px 16px 16px; }
+  .login-body { padding: 0 16px 20px; }
+  .logo-icon { width: 64px; height: 64px; padding: 10px; }
+  .app-title { font-size: 24px; }
+  .login-btn { height: 50px; font-size: 15px; }
+  .register-btn { height: 44px; font-size: 13px; }
 }
 
 @media (max-height: 700px) {
-  .login-header {
-    padding: 16px 16px 12px;
-  }
-  
-  .logo-icon {
-    width: 56px;
-    height: 56px;
-    padding: 8px;
-    margin-bottom: 8px;
-  }
-  
-  .app-title {
-    font-size: 20px;
-  }
-  
-  .divider-line {
-    margin: 8px auto;
-  }
-  
-  .welcome-text {
-    font-size: 12px;
-  }
-  
-  .login-body {
-    padding: 0 16px 16px;
-    gap: 12px;
-  }
-  
-  .login-form {
-    gap: 12px;
-  }
-  
-  .login-btn {
-    height: 44px;
-  }
-  
-  .register-btn {
-    height: 40px;
-    font-size: 12px;
-  }
+  .login-header { padding: 16px 16px 12px; }
+  .logo-icon { width: 56px; height: 56px; padding: 8px; margin-bottom: 8px; }
+  .app-title { font-size: 20px; }
+  .divider-line { margin: 8px auto; }
+  .welcome-text { font-size: 12px; }
+  .login-body { padding: 0 16px 16px; gap: 12px; }
+  .login-form { gap: 12px; }
+  .login-btn { height: 44px; }
+  .register-btn { height: 40px; font-size: 12px; }
 }
 
-/* ============ TEMA OSCURO ============ */
 @media (prefers-color-scheme: dark) {
-  .login-card {
-    background: rgba(10, 14, 26, 0.8) !important;
-  }
+  .login-card { background: rgba(10, 14, 26, 0.8) !important; }
 }
 </style>
