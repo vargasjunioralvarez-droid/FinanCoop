@@ -14,6 +14,7 @@ from app.modules.config.schemas import TasaUpdate, NivelConfigUpdate
 from app.core.security import get_current_admin
 from app.shared.utils import obtener_tasa_actual, get_niveles_config
 from app.core.config import NIVELES_CONFIG_DEFAULT
+from app.core.audit import audit, registrar_auditoria  # ✅ NUEVO
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/config", tags=["Configuración"])
@@ -72,6 +73,7 @@ def obtener_tasa(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/tasa-dolar")
+@audit(accion="ACTUALIZAR_TASA", tabla="tasa_dolar")  # ✅ NUEVO
 def actualizar_tasa(
     request: TasaUpdate,
     db: Session = Depends(get_db),
@@ -115,6 +117,18 @@ def actualizar_tasa(
         
         logger.info(f"✅ Tasa actualizada a {request.tasa} por {request.actualizado_por}")
         
+        # ✅ NUEVO: Registrar auditoría manual
+        registrar_auditoria(
+            db=db,
+            usuario_id=current_user.id,
+            usuario_nombre=current_user.nombre,
+            usuario_rol=current_user.rol,
+            accion="ACTUALIZAR_TASA",
+            tabla="tasa_dolar",
+            registro_id=nueva_tasa.id,
+            detalles=f"Tasa actualizada a {request.tasa} BS/USD, {financiamientos_afectados} financiamientos afectados"
+        )
+        
         return {
             "success": True,
             "mensaje": "Tasa actualizada correctamente",
@@ -130,7 +144,8 @@ def actualizar_tasa(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/tasa-dolar/bcv")
-async def actualizar_tasa_bcv(db: Session = Depends(get_db)):
+@audit(accion="ACTUALIZAR_TASA_BCV", tabla="tasa_dolar")  # ✅ NUEVO
+async def actualizar_tasa_bcv(db: Session = Depends(get_db), current_user = Depends(get_current_admin)):
     """Consultar tasa del BCV y actualizar automáticamente."""
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
@@ -171,6 +186,18 @@ async def actualizar_tasa_bcv(db: Session = Depends(get_db)):
         db.commit()
         
         logger.info(f"✅ Tasa BCV actualizada automáticamente: {tasa_bcv} BS/$")
+        
+        # ✅ NUEVO: Registrar auditoría manual
+        registrar_auditoria(
+            db=db,
+            usuario_id=current_user.id,
+            usuario_nombre=current_user.nombre,
+            usuario_rol=current_user.rol,
+            accion="ACTUALIZAR_TASA_BCV",
+            tabla="tasa_dolar",
+            registro_id=nueva_tasa.id,
+            detalles=f"Tasa BCV actualizada a {tasa_bcv} BS/USD"
+        )
         
         return {
             "success": True,
@@ -236,6 +263,7 @@ def obtener_niveles(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.put("/niveles/{nivel}")
+@audit(accion="ACTUALIZAR_NIVEL", tabla="niveles_config")  # ✅ NUEVO
 def actualizar_nivel(
     nivel: str,
     request: NivelConfigUpdate,
@@ -254,6 +282,17 @@ def actualizar_nivel(
                 detail=f"La suma de entrada ({request.entrada_pct}%) + financiamiento ({request.financia_pct}%) debe ser 100%"
             )
         
+        # Guardar datos antes
+        datos_antes = {
+            "monto_max_usd": config.monto_max_usd,
+            "entrada_pct": config.entrada_pct,
+            "financia_pct": config.financia_pct,
+            "cuotas_base": config.cuotas_base,
+            "cuotas_max": config.cuotas_max,
+            "mora_diaria": config.mora_diaria,
+            "aprobacion_extra": config.aprobacion_extra
+        }
+        
         config.monto_max_usd = request.monto_max_usd
         config.entrada_pct = request.entrada_pct
         config.financia_pct = request.financia_pct
@@ -266,6 +305,20 @@ def actualizar_nivel(
         get_niveles_config(db)
         
         logger.info(f"✅ Nivel '{nivel}' actualizado")
+        
+        # ✅ NUEVO: Registrar auditoría manual
+        registrar_auditoria(
+            db=db,
+            usuario_id=current_user.id,
+            usuario_nombre=current_user.nombre,
+            usuario_rol=current_user.rol,
+            accion="ACTUALIZAR_NIVEL",
+            tabla="niveles_config",
+            registro_id=config.id,
+            datos_antes=datos_antes,
+            detalles=f"Nivel '{nivel}' actualizado por {current_user.nombre}"
+        )
+        
         return {"success": True, "mensaje": f"Nivel '{nivel}' actualizado correctamente"}
     except HTTPException:
         raise
@@ -275,6 +328,7 @@ def actualizar_nivel(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/niveles/reset")
+@audit(accion="RESET_NIVELES", tabla="niveles_config")  # ✅ NUEVO
 def reset_niveles(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin)
@@ -302,6 +356,18 @@ def reset_niveles(
         get_niveles_config(db)
         
         logger.info("✅ Niveles restaurados a valores por defecto")
+        
+        # ✅ NUEVO: Registrar auditoría manual
+        registrar_auditoria(
+            db=db,
+            usuario_id=current_user.id,
+            usuario_nombre=current_user.nombre,
+            usuario_rol=current_user.rol,
+            accion="RESET_NIVELES",
+            tabla="niveles_config",
+            detalles=f"Niveles restaurados a valores por defecto por {current_user.nombre}"
+        )
+        
         return {"success": True, "mensaje": "Niveles restaurados a valores por defecto"}
     except Exception as e:
         logger.error(f"❌ Error reseteando niveles: {e}")
@@ -339,6 +405,7 @@ def obtener_config_pago(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.put("/pago")
+@audit(accion="ACTUALIZAR_CONFIG_PAGO", tabla="configuracion_pago")  # ✅ NUEVO
 def actualizar_config_pago(
     request: ConfigPagoUpdate,
     db: Session = Depends(get_db),
@@ -350,6 +417,17 @@ def actualizar_config_pago(
         if not config:
             config = ConfiguracionPago()
             db.add(config)
+        
+        # Guardar datos antes
+        datos_antes = {
+            "banco_pago_movil": config.banco_pago_movil,
+            "telefono_pago_movil": config.telefono_pago_movil,
+            "cedula_pago_movil": config.cedula_pago_movil,
+            "banco_transferencia": config.banco_transferencia,
+            "cuenta_transferencia": config.cuenta_transferencia,
+            "correo_zelle": config.correo_zelle,
+            "correo_binance": config.correo_binance
+        }
         
         if request.banco_pago_movil is not None:
             config.banco_pago_movil = request.banco_pago_movil
@@ -369,6 +447,20 @@ def actualizar_config_pago(
         db.commit()
         
         logger.info(f"✅ Configuración de pagos actualizada por {current_user.username}")
+        
+        # ✅ NUEVO: Registrar auditoría manual
+        registrar_auditoria(
+            db=db,
+            usuario_id=current_user.id,
+            usuario_nombre=current_user.nombre,
+            usuario_rol=current_user.rol,
+            accion="ACTUALIZAR_CONFIG_PAGO",
+            tabla="configuracion_pago",
+            registro_id=config.id,
+            datos_antes=datos_antes,
+            detalles=f"Configuración de pagos actualizada por {current_user.nombre}"
+        )
+        
         return {"success": True, "mensaje": "Configuración de pagos actualizada"}
     except Exception as e:
         logger.error(f"❌ Error actualizando config pago: {e}")

@@ -13,6 +13,9 @@ import AdminLoginView from '@/views/AdminLogin.vue'
 import UsuariosView from '@/views/UsuariosView.vue'
 import AdminTiendas from '@/views/AdminTiendas.vue'
 import MisVentas from '@/views/MisVentas.vue'
+import AuditoriaView from '@/views/AuditoriaView.vue'
+import BackupView from '@/views/BackupView.vue'
+
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -37,6 +40,9 @@ const router = createRouter({
     { path: '/tiendas', component: AdminTiendas, meta: { requiresAuth: true, requiresAdmin: true } },
     { path: '/configuracion', component: ConfiguracionView, meta: { requiresAuth: true, requiresAdmin: true } },
     { path: '/niveles', component: NivelesView, meta: { requiresAuth: true, requiresAdmin: true } },
+    { path: '/auditoria', component: AuditoriaView, meta: { requiresAuth: true, requiresAdmin: true } },
+    { path: '/backup', component: BackupView, meta: { requiresAuth: true, requiresAdmin: true } },
+
   ]
 })
 

@@ -1,4 +1,4 @@
-# backend/app/routers/clientes.py
+# backend/app/modules/users/router.py
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form, status
 from pydantic import BaseModel
 from typing import Optional
@@ -11,18 +11,13 @@ import uuid
 import logging
 
 # ============================================================
-# Imports del proyecto (actualizados a la nueva estructura)
+# Imports del proyecto
 # ============================================================
 
-# Core
 from app.core.database import get_db
-
-# Models (desde módulos)
 from app.modules.users.models import Cliente
 from app.modules.loans.models import Financiamiento, Cuota
 from app.modules.payments.models import Pago
-
-# Security
 from app.core.security import (
     get_current_admin,
     get_current_user,
@@ -30,8 +25,6 @@ from app.core.security import (
     get_current_tienda,
     hash_pin
 )
-
-# Utils (siguen igual, pero asegurarse que estén en app/shared/utils.py)
 from app.shared.utils import (
     calcular_nivel,
     actualizar_score_cliente,
@@ -41,6 +34,7 @@ from app.shared.utils import (
     generar_token,
     enviar_pin_cliente_completo
 )
+from app.core.audit import audit, registrar_auditoria  # ✅ NUEVO
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/clientes", tags=["Clientes"])
@@ -109,6 +103,7 @@ async def subir_imagen_cloudflare_base64(base64_string: str, nombre_archivo: str
 # ✅ CREAR CLIENTE (CON TIENDA AUTOMÁTICA)
 # ============================================================
 @router.post("")
+@audit(accion="CREAR_CLIENTE", tabla="clientes")  # ✅ NUEVO
 async def crear_cliente(
     nombre: str = Form(...),
     cedula: str = Form(...),
@@ -204,6 +199,7 @@ async def crear_cliente(
 # CREAR CLIENTE VIA JSON
 # ============================================================
 @router.post("/json")
+@audit(accion="CREAR_CLIENTE_JSON", tabla="clientes")  # ✅ NUEVO
 async def crear_cliente_json(
     cliente_data: ClienteCreate,
     db: Session = Depends(get_db),
@@ -269,6 +265,7 @@ async def crear_cliente_json(
 # APROBAR CLIENTE (SOLO admin_central)
 # ============================================================
 @router.post("/aprobar")
+@audit(accion="APROBAR_CLIENTE", tabla="clientes")  # ✅ NUEVO
 async def aprobar_cliente(
     data: ClienteAprobar,
     db: Session = Depends(get_db),
@@ -299,19 +296,31 @@ async def aprobar_cliente(
             pin=pin_generado
         )
         
+        # ✅ NUEVO: Registrar auditoría manual
+        registrar_auditoria(
+            db=db,
+            usuario_id=current_user.id,
+            usuario_nombre=current_user.nombre,
+            usuario_rol=current_user.rol,
+            accion="APROBAR_CLIENTE",
+            tabla="clientes",
+            registro_id=cliente.id,
+            detalles=f"Cliente {cliente.nombre} (cédula: {cliente.cedula}) aprobado por {current_user.nombre}"
+        )
+        
         return {
-    "success": True,
-    "mensaje": f"Cliente {cliente.nombre} aprobado.",
-    "envio": resultado_envio,
-    "cliente": {
-        "id": cliente.id,
-        "nombre": cliente.nombre,
-        "cedula": cliente.cedula,
-        "telefono": cliente.telefono,
-        "estado": "aprobado",
-        "pin": pin_generado if current_user.rol == "admin_central" else "****"
-    }
-}
+            "success": True,
+            "mensaje": f"Cliente {cliente.nombre} aprobado.",
+            "envio": resultado_envio,
+            "cliente": {
+                "id": cliente.id,
+                "nombre": cliente.nombre,
+                "cedula": cliente.cedula,
+                "telefono": cliente.telefono,
+                "estado": "aprobado",
+                "pin": pin_generado if current_user.rol == "admin_central" else "****"
+            }
+        }
         
     except HTTPException:
         raise
@@ -405,6 +414,7 @@ def obtener_cliente(
 # ACTUALIZAR CLIENTE (SOLO admin_central)
 # ============================================================
 @router.put("/{id}")
+@audit(accion="ACTUALIZAR_CLIENTE", tabla="clientes")  # ✅ NUEVO
 def actualizar_cliente(
     id: int,
     cliente_data: ClienteUpdate,
@@ -419,6 +429,14 @@ def actualizar_cliente(
     if not cliente:
         raise HTTPException(status_code=404, detail="Cliente no encontrado")
     
+    # Guardar datos antes de actualizar
+    datos_antes = {
+        "nombre": cliente.nombre,
+        "telefono": cliente.telefono,
+        "email": cliente.email,
+        "direccion": cliente.direccion
+    }
+    
     if cliente_data.nombre is not None:
         cliente.nombre = cliente_data.nombre
     if cliente_data.telefono is not None:
@@ -430,6 +448,19 @@ def actualizar_cliente(
     
     db.commit()
     db.refresh(cliente)
+    
+    # ✅ NUEVO: Registrar auditoría manual
+    registrar_auditoria(
+        db=db,
+        usuario_id=current_admin.id,
+        usuario_nombre=current_admin.nombre,
+        usuario_rol=current_admin.rol,
+        accion="ACTUALIZAR_CLIENTE",
+        tabla="clientes",
+        registro_id=cliente.id,
+        datos_antes=datos_antes,
+        detalles=f"Cliente {cliente.nombre} (cédula: {cliente.cedula}) actualizado por {current_admin.nombre}"
+    )
     
     return {
         "success": True,
@@ -448,6 +479,7 @@ def actualizar_cliente(
 # ELIMINAR CLIENTE (SOLO admin_central)
 # ============================================================
 @router.delete("/{id}")
+@audit(accion="ELIMINAR_CLIENTE", tabla="clientes")  # ✅ NUEVO
 def eliminar_cliente(
     id: int,
     db: Session = Depends(get_db),
@@ -462,6 +494,16 @@ def eliminar_cliente(
         raise HTTPException(status_code=404, detail="Cliente no encontrado")
     
     nombre = cliente.nombre
+    cedula = cliente.cedula
+    
+    # Guardar datos antes de eliminar
+    datos_antes = {
+        "nombre": nombre,
+        "cedula": cedula,
+        "telefono": cliente.telefono,
+        "email": cliente.email,
+        "estado": cliente.estado
+    }
     
     financiamientos = db.query(Financiamiento).filter(Financiamiento.cliente_id == id).all()
     for fin in financiamientos:
@@ -471,6 +513,19 @@ def eliminar_cliente(
     
     db.delete(cliente)
     db.commit()
+    
+    # ✅ NUEVO: Registrar auditoría manual
+    registrar_auditoria(
+        db=db,
+        usuario_id=current_admin.id,
+        usuario_nombre=current_admin.nombre,
+        usuario_rol=current_admin.rol,
+        accion="ELIMINAR_CLIENTE",
+        tabla="clientes",
+        registro_id=id,
+        datos_antes=datos_antes,
+        detalles=f"Cliente {nombre} (cédula: {cedula}) eliminado por {current_admin.nombre}"
+    )
     
     return {"success": True, "mensaje": f"Cliente {nombre} eliminado"}
 

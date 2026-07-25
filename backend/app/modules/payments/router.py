@@ -1,4 +1,3 @@
-# backend/app/routers/pagos.py
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
@@ -18,11 +17,14 @@ from app.shared.utils import (
     enviar_notificacion_generica
 )
 from app.core.security import get_current_admin, get_current_user, get_current_tienda
+from app.core.audit import audit, registrar_auditoria  # ✅ NUEVO
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/pagos", tags=["Pagos"])
 
+
 @router.post("/reportar")
+@audit(accion="REPORTAR_PAGO", tabla="pagos")  # ✅ NUEVO
 async def reportar_pago(request: Request, db: Session = Depends(get_db)):
     """Reporta un pago realizado por el cliente. Puede ser cuota única, abono, adelantar o liquidar."""
     try:
@@ -199,6 +201,7 @@ async def reportar_pago(request: Request, db: Session = Depends(get_db)):
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @router.get("/pendientes")
 def pagos_pendientes_conciliacion(
     db: Session = Depends(get_db), 
@@ -263,7 +266,9 @@ def pagos_pendientes_conciliacion(
         logger.error(f"❌ Error listando pagos pendientes: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @router.post("/conciliar")
+@audit(accion="CONCILIAR", tabla="pagos")  # ✅ NUEVO
 def conciliar_pago(
     conciliacion: ConciliacionPago, 
     db: Session = Depends(get_db), 
@@ -341,6 +346,18 @@ def conciliar_pago(
                 fin.estado = "completado"
                 fin.fecha_completado = datetime.now(timezone.utc)
                 logger.info(f"✅ Financiamiento {fin.codigo} completado")
+                
+                # ✅ NUEVO: Registrar auditoría manual
+                registrar_auditoria(
+                    db=db,
+                    usuario_id=current_admin.id,
+                    usuario_nombre=current_admin.nombre,
+                    usuario_rol=current_admin.rol,
+                    accion="COMPLETAR_FINANCIAMIENTO",
+                    tabla="financiamientos",
+                    registro_id=fin.id,
+                    detalles=f"Financiamiento #{fin.codigo} completado al conciliar última cuota"
+                )
 
             db.commit()
 
@@ -387,7 +404,9 @@ def conciliar_pago(
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @router.post("/cuotas/{id}/pagar-efectivo")
+@audit(accion="PAGAR_EFECTIVO", tabla="cuotas")  # ✅ NUEVO
 def pagar_cuota_efectivo(
     id: int, 
     db: Session = Depends(get_db), 
@@ -456,6 +475,18 @@ def pagar_cuota_efectivo(
             fin.estado = "completado"
             fin.fecha_completado = hoy
             db.commit()
+            
+            # ✅ NUEVO: Registrar auditoría manual
+            registrar_auditoria(
+                db=db,
+                usuario_id=current_admin.id,
+                usuario_nombre=current_admin.nombre,
+                usuario_rol=current_admin.rol,
+                accion="COMPLETAR_FINANCIAMIENTO",
+                tabla="financiamientos",
+                registro_id=fin.id,
+                detalles=f"Financiamiento #{fin.codigo} completado al pagar última cuota en efectivo"
+            )
 
         if cliente:
             actualizar_score_cliente(cliente, db)

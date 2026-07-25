@@ -37,6 +37,10 @@ from app.modules.mobile.router import router as app_mobile_router
 from app.modules.admin.router import router as admin_router
 from app.modules.uploads.router import router as upload_router
 from app.modules.banks.router import router as bancos_router
+from app.modules.audit.router import router as audit_router
+
+# ⏰ Scheduler para backups automáticos
+from app.core.scheduler import iniciar_scheduler
 
 
 # ─────────────────────────────────────────────────────────────
@@ -273,6 +277,8 @@ app.include_router(app_mobile_router, prefix=API_PREFIX)
 app.include_router(admin_router, prefix=API_PREFIX)
 app.include_router(upload_router, prefix=API_PREFIX)
 app.include_router(bancos_router, prefix=API_PREFIX)
+app.include_router(audit_router, prefix=API_PREFIX)
+
 
 # ─────────────────────────────────────────────────────────────
 # 🚀 STARTUP
@@ -287,6 +293,11 @@ def startup():
         logger.info("✅ Niveles cargados desde BD")
     except Exception as e:
         logger.warning(f"⚠️ No se pudieron cargar niveles: {e}")
+    
+    # ✅ INICIAR SCHEDULER (solo en producción)
+    if IS_PROD:
+        iniciar_scheduler()
+        logger.info("⏰ Scheduler de backups iniciado")
 
 # ─────────────────────────────────────────────────────────────
 # ▶️ EJECUCIÓN

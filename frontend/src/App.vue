@@ -56,24 +56,33 @@
           </v-btn>
         </template>
         <v-list class="glass-card-menu" elevation="0" rounded="lg">
-          <v-list-item to="/tiendas" class="menu-item">
-            <template v-slot:prepend><v-icon color="#4caf50" size="20">mdi-store</v-icon></template>
-            <v-list-item-title class="text-white">Tiendas</v-list-item-title>
-          </v-list-item>
-          <v-list-item to="/usuarios" class="menu-item">
-            <template v-slot:prepend><v-icon color="#f44336" size="20">mdi-shield-account</v-icon></template>
-            <v-list-item-title class="text-white">Usuarios</v-list-item-title>
-          </v-list-item>
-          <v-divider style="border-color: rgba(255,255,255,0.06);" />
-          <v-list-item to="/configuracion" class="menu-item">
-            <template v-slot:prepend><v-icon color="#4facfe" size="20">mdi-currency-usd</v-icon></template>
-            <v-list-item-title class="text-white">Tasa del Dólar</v-list-item-title>
-          </v-list-item>
-          <v-list-item to="/niveles" class="menu-item">
-            <template v-slot:prepend><v-icon color="#ffd54f" size="20">mdi-trophy</v-icon></template>
-            <v-list-item-title class="text-white">Niveles</v-list-item-title>
-          </v-list-item>
-        </v-list>
+  <v-list-item to="/tiendas" class="menu-item">
+    <template v-slot:prepend><v-icon color="#4caf50" size="20">mdi-store</v-icon></template>
+    <v-list-item-title class="text-white">Tiendas</v-list-item-title>
+  </v-list-item>
+  <v-list-item to="/usuarios" class="menu-item">
+    <template v-slot:prepend><v-icon color="#f44336" size="20">mdi-shield-account</v-icon></template>
+    <v-list-item-title class="text-white">Usuarios</v-list-item-title>
+  </v-list-item>
+  <v-divider style="border-color: rgba(255,255,255,0.06);" />
+  <v-list-item to="/configuracion" class="menu-item">
+    <template v-slot:prepend><v-icon color="#4facfe" size="20">mdi-currency-usd</v-icon></template>
+    <v-list-item-title class="text-white">Tasa del Dólar</v-list-item-title>
+  </v-list-item>
+  <v-list-item to="/niveles" class="menu-item">
+    <template v-slot:prepend><v-icon color="#ffd54f" size="20">mdi-trophy</v-icon></template>
+    <v-list-item-title class="text-white">Niveles</v-list-item-title>
+  </v-list-item>
+  <v-divider style="border-color: rgba(255,255,255,0.06);" />
+  <v-list-item to="/auditoria" class="menu-item">
+    <template v-slot:prepend><v-icon color="#7E57C2" size="20">mdi-shield-check</v-icon></template>
+    <v-list-item-title class="text-white">Auditoría</v-list-item-title>
+  </v-list-item>
+  <v-list-item to="/backup" class="menu-item">
+    <template v-slot:prepend><v-icon color="#FFD700" size="20">mdi-backup-restore</v-icon></template>
+    <v-list-item-title class="text-white">Backups</v-list-item-title>
+  </v-list-item>
+</v-list>
       </v-menu>
       
       <v-chip v-if="auth.tiendaNombre" class="ml-2 chip-tienda" size="small">

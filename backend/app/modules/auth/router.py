@@ -39,6 +39,7 @@ from app.core.security import (
     SECRET_KEY,
     ALGORITHM
 )
+from app.core.audit import audit_login, registrar_auditoria  # ✅ NUEVO
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["Autenticación"])
@@ -198,6 +199,7 @@ def enviar_correo_recuperacion(destinatario: str, nombre: str, codigo: str) -> b
 # ============================================================
 
 @router.post("/login-json")
+@audit_login()  # ✅ NUEVO
 def login_admin_json(
     request_data: LoginAdminRequest,
     request: Request,
@@ -248,6 +250,7 @@ def login_admin_json(
 # ============================================================
 
 @router.post("/login")
+@audit_login()  # ✅ NUEVO
 def login_admin_form(
     request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
@@ -298,6 +301,7 @@ def login_admin_form(
 # ============================================================
 
 @router.post("/login-cliente")
+@audit_login()  # ✅ NUEVO
 def login_cliente(
     request_data: LoginClienteRequest,
     request: Request,
@@ -359,6 +363,7 @@ def login_cliente(
 # ============================================================
 
 @router.post("/login-biometrico")
+@audit_login()  # ✅ NUEVO
 def login_biometrico(
     request_data: LoginBiometricoRequest,
     request: Request,
@@ -504,6 +509,7 @@ def cambiar_password(
 # ============================================================
 
 @router.post("/logout")
+@audit_login(logout=True)  # ✅ NUEVO
 def logout(
     request: Request,
     current_user: Usuario = Depends(get_current_user),

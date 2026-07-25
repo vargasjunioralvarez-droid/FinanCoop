@@ -11,6 +11,10 @@ from app.modules.users.models import Usuario, Tienda, Cliente
 from app.modules.loans.models import Financiamiento
 from app.modules.payments.models import Pago
 from app.core.security import get_current_admin, hash_password
+from app.core.audit import audit, registrar_auditoria  # ✅ NUEVO
+import os
+from app.core.backup import crear_backup, listar_backups, restaurar_backup
+
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin", tags=["Administración"])
@@ -82,6 +86,7 @@ def listar_tiendas(db: Session = Depends(get_db), current_user = Depends(get_cur
     return [{"id": t.id, "nombre": t.nombre, "codigo": t.codigo, "direccion": t.direccion, "telefono": t.telefono, "activo": t.activo, "total_clientes": db.query(Cliente).filter(Cliente.tienda_id == t.id).count(), "total_creditos": db.query(Financiamiento).filter(Financiamiento.tienda_id == t.id).count(), "creado_en": t.creado_en.isoformat() if t.creado_en else None} for t in tiendas]
 
 @router.post("/tiendas")
+@audit(accion="CREAR_TIENDA", tabla="tiendas")  # ✅ NUEVO
 def crear_tienda(data: TiendaCreate, db: Session = Depends(get_db), current_user = Depends(get_current_admin)):
     if current_user.rol != "admin_central":
         raise HTTPException(status_code=403, detail="Solo el administrador central puede crear tiendas")
@@ -91,23 +96,59 @@ def crear_tienda(data: TiendaCreate, db: Session = Depends(get_db), current_user
     tienda = Tienda(nombre=data.nombre, codigo=data.codigo.upper(), direccion=data.direccion, telefono=data.telefono)
     db.add(tienda); db.commit(); db.refresh(tienda)
     logger.info(f"✅ Tienda creada: {tienda.nombre} ({tienda.codigo})")
+    
+    # ✅ NUEVO: Registrar auditoría manual
+    registrar_auditoria(
+        db=db,
+        usuario_id=current_user.id,
+        usuario_nombre=current_user.nombre,
+        usuario_rol=current_user.rol,
+        accion="CREAR_TIENDA",
+        tabla="tiendas",
+        registro_id=tienda.id,
+        detalles=f"Tienda '{tienda.nombre}' ({tienda.codigo}) creada por {current_user.nombre}"
+    )
+    
     return {"success": True, "id": tienda.id, "nombre": tienda.nombre}
 
 @router.put("/tiendas/{id}")
+@audit(accion="ACTUALIZAR_TIENDA", tabla="tiendas")  # ✅ NUEVO
 def actualizar_tienda(id: int, data: TiendaUpdate, db: Session = Depends(get_db), current_user = Depends(get_current_admin)):
     if current_user.rol != "admin_central":
         raise HTTPException(status_code=403, detail="Solo el administrador central")
     tienda = db.query(Tienda).filter(Tienda.id == id).first()
     if not tienda:
         raise HTTPException(status_code=404, detail="Tienda no encontrada")
+    
+    datos_antes = {
+        "nombre": tienda.nombre,
+        "direccion": tienda.direccion,
+        "telefono": tienda.telefono,
+        "activo": tienda.activo
+    }
+    
     if data.nombre is not None: tienda.nombre = data.nombre
     if data.direccion is not None: tienda.direccion = data.direccion
     if data.telefono is not None: tienda.telefono = data.telefono
     if data.activo is not None: tienda.activo = data.activo
     db.commit()
+    
+    registrar_auditoria(
+        db=db,
+        usuario_id=current_user.id,
+        usuario_nombre=current_user.nombre,
+        usuario_rol=current_user.rol,
+        accion="ACTUALIZAR_TIENDA",
+        tabla="tiendas",
+        registro_id=id,
+        datos_antes=datos_antes,
+        detalles=f"Tienda {tienda.nombre} actualizada por {current_user.nombre}"
+    )
+    
     return {"success": True, "mensaje": "Tienda actualizada"}
 
 @router.delete("/tiendas/{id}")
+@audit(accion="ELIMINAR_TIENDA", tabla="tiendas")  # ✅ NUEVO
 def eliminar_tienda(id: int, db: Session = Depends(get_db), current_user = Depends(get_current_admin)):
     if current_user.rol != "admin_central":
         raise HTTPException(status_code=403, detail="Solo el administrador central puede eliminar tiendas")
@@ -117,8 +158,23 @@ def eliminar_tienda(id: int, db: Session = Depends(get_db), current_user = Depen
     clientes = db.query(Cliente).filter(Cliente.tienda_id == id).count()
     if clientes > 0:
         raise HTTPException(status_code=400, detail=f"No se puede eliminar: tiene {clientes} cliente(s) asignados")
+    
+    datos_antes = {"nombre": tienda.nombre, "codigo": tienda.codigo}
     db.delete(tienda); db.commit()
     logger.info(f"🗑️ Tienda eliminada: {tienda.nombre}")
+    
+    registrar_auditoria(
+        db=db,
+        usuario_id=current_user.id,
+        usuario_nombre=current_user.nombre,
+        usuario_rol=current_user.rol,
+        accion="ELIMINAR_TIENDA",
+        tabla="tiendas",
+        registro_id=id,
+        datos_antes=datos_antes,
+        detalles=f"Tienda {tienda.nombre} eliminada por {current_user.nombre}"
+    )
+    
     return {"success": True, "mensaje": f"Tienda {tienda.nombre} eliminada"}
 
 # ============================================================
@@ -141,6 +197,7 @@ def listar_usuarios(skip: int = Query(0, ge=0), limit: int = Query(50, ge=1, le=
 # CREAR USUARIO (SOLO admin_central)
 # ============================================================
 @router.post("/usuarios")
+@audit(accion="CREAR_USUARIO", tabla="usuarios")  # ✅ NUEVO
 def crear_usuario(usuario_data: UsuarioCreate, db: Session = Depends(get_db), current_user = Depends(get_current_admin)):
     if current_user.rol != "admin_central":
         raise HTTPException(status_code=403, detail="Solo el administrador central puede crear usuarios")
@@ -155,6 +212,18 @@ def crear_usuario(usuario_data: UsuarioCreate, db: Session = Depends(get_db), cu
         nuevo = Usuario(username=usuario_data.username, password=hash_password(usuario_data.password), nombre=usuario_data.nombre, email=usuario_data.email, rol=usuario_data.rol, activo=usuario_data.activo, tienda_id=tienda_id, creado_por=current_user.username)
         db.add(nuevo); db.commit(); db.refresh(nuevo)
         logger.info(f"✅ Usuario creado: {nuevo.username} (rol: {nuevo.rol}, tienda: {tienda_id})")
+        
+        registrar_auditoria(
+            db=db,
+            usuario_id=current_user.id,
+            usuario_nombre=current_user.nombre,
+            usuario_rol=current_user.rol,
+            accion="CREAR_USUARIO",
+            tabla="usuarios",
+            registro_id=nuevo.id,
+            detalles=f"Usuario {nuevo.username} ({nuevo.rol}) creado por {current_user.nombre}"
+        )
+        
         return {"id": nuevo.id, "username": nuevo.username, "nombre": nuevo.nombre, "email": nuevo.email, "rol": nuevo.rol, "activo": nuevo.activo, "tienda_id": nuevo.tienda_id}
     except HTTPException: raise
     except Exception as e: logger.error(f"❌ Error creando usuario: {e}"); db.rollback(); raise HTTPException(status_code=500, detail=str(e))
@@ -163,11 +232,15 @@ def crear_usuario(usuario_data: UsuarioCreate, db: Session = Depends(get_db), cu
 # ACTUALIZAR USUARIO (SOLO admin_central)
 # ============================================================
 @router.put("/usuarios/{id}")
+@audit(accion="ACTUALIZAR_USUARIO", tabla="usuarios")  # ✅ NUEVO
 def actualizar_usuario(id: int, usuario_data: UsuarioUpdate, db: Session = Depends(get_db), current_user = Depends(get_current_admin)):
     if current_user.rol != "admin_central": raise HTTPException(status_code=403, detail="Solo el administrador central puede modificar usuarios")
     try:
         usuario = db.query(Usuario).filter(Usuario.id == id).first()
         if not usuario: raise HTTPException(status_code=404, detail="Usuario no encontrado")
+        
+        datos_antes = {"username": usuario.username, "rol": usuario.rol, "activo": usuario.activo, "tienda_id": usuario.tienda_id}
+        
         if usuario_data.password:
             if len(usuario_data.password) < 8: raise HTTPException(status_code=400, detail="La contraseña debe tener al menos 8 caracteres")
             usuario.password = hash_password(usuario_data.password)
@@ -177,6 +250,19 @@ def actualizar_usuario(id: int, usuario_data: UsuarioUpdate, db: Session = Depen
         if usuario_data.activo is not None: usuario.activo = usuario_data.activo
         if usuario_data.tienda_id is not None: usuario.tienda_id = usuario_data.tienda_id if usuario_data.rol != "admin_central" else None
         db.commit(); db.refresh(usuario)
+        
+        registrar_auditoria(
+            db=db,
+            usuario_id=current_user.id,
+            usuario_nombre=current_user.nombre,
+            usuario_rol=current_user.rol,
+            accion="ACTUALIZAR_USUARIO",
+            tabla="usuarios",
+            registro_id=id,
+            datos_antes=datos_antes,
+            detalles=f"Usuario {usuario.username} actualizado por {current_user.nombre}"
+        )
+        
         return {"success": True, "mensaje": "Usuario actualizado"}
     except HTTPException: raise
     except Exception as e: logger.error(f"❌ Error actualizando usuario: {e}"); db.rollback(); raise HTTPException(status_code=500, detail=str(e))
@@ -185,13 +271,29 @@ def actualizar_usuario(id: int, usuario_data: UsuarioUpdate, db: Session = Depen
 # ELIMINAR USUARIO (SOLO admin_central)
 # ============================================================
 @router.delete("/usuarios/{id}")
+@audit(accion="ELIMINAR_USUARIO", tabla="usuarios")  # ✅ NUEVO
 def eliminar_usuario(id: int, db: Session = Depends(get_db), current_user = Depends(get_current_admin)):
     if current_user.rol != "admin_central": raise HTTPException(status_code=403, detail="Solo el administrador central puede eliminar usuarios")
     try:
         usuario = db.query(Usuario).filter(Usuario.id == id).first()
         if not usuario: raise HTTPException(status_code=404, detail="Usuario no encontrado")
         if usuario.id == current_user.id: raise HTTPException(status_code=403, detail="No puedes eliminar tu propio usuario")
+        
+        datos_antes = {"username": usuario.username, "rol": usuario.rol}
         db.delete(usuario); db.commit()
+        
+        registrar_auditoria(
+            db=db,
+            usuario_id=current_user.id,
+            usuario_nombre=current_user.nombre,
+            usuario_rol=current_user.rol,
+            accion="ELIMINAR_USUARIO",
+            tabla="usuarios",
+            registro_id=id,
+            datos_antes=datos_antes,
+            detalles=f"Usuario {usuario.username} eliminado por {current_user.nombre}"
+        )
+        
         return {"mensaje": f"Usuario {usuario.username} eliminado"}
     except HTTPException: raise
     except Exception as e: logger.error(f"❌ Error eliminando usuario: {e}"); db.rollback(); raise HTTPException(status_code=500, detail=str(e))
@@ -224,6 +326,54 @@ def financiamientos_pendientes(db: Session = Depends(get_db), current_user = Dep
         return {"total": len(resultado), "financiamientos": resultado}
     except Exception as e: logger.error(f"❌ Error: {e}"); raise HTTPException(status_code=500, detail=str(e))
 
+    # ============================================================
+# BACKUPS
+# ============================================================
+
+@router.post("/backup/crear")
+def crear_backup_manual(
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_admin)
+):
+    """Crear backup manual (solo admin_central)"""
+    if current_user.rol != "admin_central":
+        raise HTTPException(status_code=403, detail="Solo admin_central")
+    
+    resultado = crear_backup()
+    if resultado:
+        return {"success": True, "mensaje": "Backup creado correctamente"}
+    else:
+        raise HTTPException(status_code=500, detail="Error creando backup")
+
+@router.get("/backup/listar")
+def listar_backups_disponibles(
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_admin)
+):
+    """Listar backups disponibles (solo admin_central)"""
+    if current_user.rol != "admin_central":
+        raise HTTPException(status_code=403, detail="Solo admin_central")
+    
+    return {"backups": listar_backups()}
+
+@router.post("/backup/restaurar")
+def restaurar_backup_manual(
+    archivo: str,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_admin)
+):
+    """Restaurar backup (solo admin_central)"""
+    if current_user.rol != "admin_central":
+        raise HTTPException(status_code=403, detail="Solo admin_central")
+    
+    backup_path = os.path.join(os.getenv("BACKUP_DIR", "./backups"), archivo)
+    resultado = restaurar_backup(backup_path)
+    
+    if resultado:
+        return {"success": True, "mensaje": f"Backup {archivo} restaurado"}
+    else:
+        raise HTTPException(status_code=500, detail="Error restaurando backup")
+
 # ============================================================
 # REPORTES
 # ============================================================
@@ -235,3 +385,25 @@ def reportes(db: Session = Depends(get_db), current_user = Depends(get_current_a
         if tienda_id: q_clientes = q_clientes.filter(Cliente.tienda_id == tienda_id); q_creditos = q_creditos.filter(Financiamiento.tienda_id == tienda_id); q_pagos = q_pagos.join(Financiamiento).filter(Financiamiento.tienda_id == tienda_id)
         return {"fecha_reporte": datetime.now(timezone.utc).isoformat(), "tienda": current_user.tienda.nombre if current_user.tienda else "Todas las tiendas", "clientes": {"total": q_clientes.count()}, "creditos": {"total": q_creditos.count(), "activos": q_creditos.filter(Financiamiento.estado == "activo").count(), "completados": q_creditos.filter(Financiamiento.estado == "completado").count()}, "pagos": {"pendientes": q_pagos.filter(Pago.estado == "pendiente").count(), "conciliados": q_pagos.filter(Pago.estado == "conciliado").count()}}
     except Exception as e: logger.error(f"❌ Error generando reportes: {e}"); raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/backup/descargar")
+def descargar_backup(
+    archivo: str,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_admin)
+):
+    """Descargar backup (solo admin_central)"""
+    if current_user.rol != "admin_central":
+        raise HTTPException(status_code=403, detail="Solo admin_central")
+    
+    backup_path = os.path.join(os.getenv("BACKUP_DIR", "./backups"), archivo)
+    
+    if not os.path.exists(backup_path):
+        raise HTTPException(status_code=404, detail="Archivo no encontrado")
+    
+    from fastapi.responses import FileResponse
+    return FileResponse(
+        backup_path,
+        media_type="application/zip",
+        filename=archivo
+    )

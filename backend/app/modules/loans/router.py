@@ -1,4 +1,4 @@
-# backend/app/routers/financiamientos.py
+# backend/app/modules/loans/router.py
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import Optional
@@ -18,13 +18,16 @@ from app.shared.utils import (
     obtener_tasa_actual
 )
 from app.core.security import get_current_admin, get_current_user, get_current_tienda
+from app.core.audit import audit, registrar_auditoria  # ✅ NUEVO
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/financiamientos", tags=["Financiamientos"])
 
 MAX_CREDITOS_ACTIVOS = 3
 
+
 @router.post("")
+@audit(accion="CREAR_FINANCIAMIENTO", tabla="financiamientos")  # ✅ NUEVO
 def crear_financiamiento(
     f: FinanciamientoCreate, 
     db: Session = Depends(get_db),
@@ -146,23 +149,69 @@ def crear_financiamiento(
     except HTTPException: raise
     except Exception as e: logger.error(f"❌ Error: {e}"); db.rollback(); raise HTTPException(status_code=500, detail=str(e))
 
+
 @router.post("/{id}/aprobar")
-def aprobar_financiamiento(id: int, aprobacion: AprobacionExtra, db: Session = Depends(get_db), current_admin = Depends(get_current_admin)):
+@audit(accion="APROBAR_FINANCIAMIENTO", tabla="financiamientos")  # ✅ NUEVO
+def aprobar_financiamiento(
+    id: int, 
+    aprobacion: AprobacionExtra, 
+    db: Session = Depends(get_db), 
+    current_admin = Depends(get_current_admin)
+):
     try:
         fin = db.query(Financiamiento).filter(Financiamiento.id == id).first()
-        if not fin: raise HTTPException(status_code=404, detail="Financiamiento no encontrado")
-        if not fin.requiere_aprobacion: raise HTTPException(status_code=400, detail="No requiere aprobación")
-        fin.cuotas_aprobadas = aprobacion.cuotas_aprobadas; fin.aprobado_por = aprobacion.aprobado_por; fin.requiere_aprobacion = False
+        if not fin: 
+            raise HTTPException(status_code=404, detail="Financiamiento no encontrado")
+        if not fin.requiere_aprobacion: 
+            raise HTTPException(status_code=400, detail="No requiere aprobación")
+        
+        fin.cuotas_aprobadas = aprobacion.cuotas_aprobadas
+        fin.aprobado_por = aprobacion.aprobado_por
+        fin.requiere_aprobacion = False
+        
         db.query(Cuota).filter(Cuota.financiamiento_id == fin.id).delete()
         monto_cuota_bs = fin.monto_financia_bs / aprobacion.cuotas_aprobadas if aprobacion.cuotas_aprobadas > 0 else 0
         monto_cuota_usd = fin.monto_financia_usd / aprobacion.cuotas_aprobadas if aprobacion.cuotas_aprobadas > 0 else 0
+        
         for i in range(1, aprobacion.cuotas_aprobadas + 1):
-            cuota = Cuota(financiamiento_id=fin.id, numero=i, monto_base_bs=monto_cuota_bs, monto_total_bs=monto_cuota_bs, monto_base_usd=monto_cuota_usd, monto_total_usd=monto_cuota_usd, fecha_vencimiento=fin.fecha_primera_cuota + timedelta(days=15 * (i - 1)), estado="pendiente")
+            cuota = Cuota(
+                financiamiento_id=fin.id, 
+                numero=i, 
+                monto_base_bs=monto_cuota_bs, 
+                monto_total_bs=monto_cuota_bs, 
+                monto_base_usd=monto_cuota_usd, 
+                monto_total_usd=monto_cuota_usd, 
+                fecha_vencimiento=fin.fecha_primera_cuota + timedelta(days=15 * (i - 1)), 
+                estado="pendiente"
+            )
             db.add(cuota)
-        fin.monto_cuota_bs = monto_cuota_bs; fin.monto_cuota_usd = monto_cuota_usd; db.commit()
-        return {"success": True, "mensaje": f"Aprobado con {aprobacion.cuotas_aprobadas} cuotas", "aprobado_por": aprobacion.aprobado_por}
+        
+        fin.monto_cuota_bs = monto_cuota_bs
+        fin.monto_cuota_usd = monto_cuota_usd
+        db.commit()
+        
+        # ✅ NUEVO: Registrar auditoría manual con detalles
+        registrar_auditoria(
+            db=db,
+            usuario_id=current_admin.id,
+            usuario_nombre=current_admin.nombre,
+            usuario_rol=current_admin.rol,
+            accion="APROBAR_FINANCIAMIENTO",
+            tabla="financiamientos",
+            registro_id=fin.id,
+            detalles=f"Financiamiento #{fin.codigo} aprobado con {aprobacion.cuotas_aprobadas} cuotas por {current_admin.nombre}"
+        )
+        
+        return {
+            "success": True, 
+            "mensaje": f"Aprobado con {aprobacion.cuotas_aprobadas} cuotas", 
+            "aprobado_por": aprobacion.aprobado_por
+        }
     except HTTPException: raise
-    except Exception as e: db.rollback(); raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e: 
+        db.rollback() 
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/cliente/{cliente_id}/activos")
 def get_financiamientos_activos_cliente(
@@ -202,18 +251,29 @@ def get_financiamientos_activos_cliente(
         logger.error(f"❌ Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @router.get("")
 def listar_financiamientos(
-    skip: int = 0, limit: int = 50, estado: str = None, cliente_id: Optional[int] = None,
-    db: Session = Depends(get_db), current_user = Depends(get_current_user), tienda_id: Optional[int] = Depends(get_current_tienda)
+    skip: int = 0, 
+    limit: int = 50, 
+    estado: str = None, 
+    cliente_id: Optional[int] = None,
+    db: Session = Depends(get_db), 
+    current_user = Depends(get_current_user), 
+    tienda_id: Optional[int] = Depends(get_current_tienda)
 ):
     try:
         query = db.query(Financiamiento)
-        if tienda_id: query = query.filter(Financiamiento.tienda_id == tienda_id)
-        if cliente_id: query = query.filter(Financiamiento.cliente_id == cliente_id)
-        if estado: query = query.filter(Financiamiento.estado == estado)
+        if tienda_id: 
+            query = query.filter(Financiamiento.tienda_id == tienda_id)
+        if cliente_id: 
+            query = query.filter(Financiamiento.cliente_id == cliente_id)
+        if estado: 
+            query = query.filter(Financiamiento.estado == estado)
+        
         total = query.count()
         financiamientos = query.order_by(Financiamiento.id.desc()).offset(skip).limit(limit).all()
+        
         resultado = []
         for fin in financiamientos:
             cliente = db.query(Cliente).filter(Cliente.id == fin.cliente_id).first()
@@ -235,16 +295,34 @@ def listar_financiamientos(
                 "url_factura": fin.url_factura,
                 "numero_factura": fin.numero_factura
             })
-        return {"total": total, "skip": skip, "limit": limit, "tienda_filtro": tienda_id, "cliente_filtro": cliente_id, "financiamientos": resultado}
-    except Exception as e: logger.error(f"❌ Error: {e}"); raise HTTPException(status_code=500, detail=str(e))
+        
+        return {
+            "total": total, 
+            "skip": skip, 
+            "limit": limit, 
+            "tienda_filtro": tienda_id, 
+            "cliente_filtro": cliente_id, 
+            "financiamientos": resultado
+        }
+    except Exception as e: 
+        logger.error(f"❌ Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/{id}")
-def obtener_financiamiento(id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+def obtener_financiamiento(
+    id: int, 
+    db: Session = Depends(get_db), 
+    current_user = Depends(get_current_user)
+):
     try:
         fin = db.query(Financiamiento).filter(Financiamiento.id == id).first()
-        if not fin: raise HTTPException(status_code=404, detail="Financiamiento no encontrado")
+        if not fin: 
+            raise HTTPException(status_code=404, detail="Financiamiento no encontrado")
+        
         cliente = db.query(Cliente).filter(Cliente.id == fin.cliente_id).first()
         cuotas = db.query(Cuota).filter(Cuota.financiamiento_id == fin.id).order_by(Cuota.numero).all()
+        
         return {
             "id": fin.id, "codigo": fin.codigo,
             "cliente": {"id": cliente.id if cliente else None, "nombre": cliente.nombre if cliente else "Desconocido"},
@@ -259,27 +337,64 @@ def obtener_financiamiento(id: int, db: Session = Depends(get_db), current_user 
             "cuotas": [{"id": c.id, "numero": c.numero, "monto_total_bs": round(c.monto_total_bs, 2), "fecha_vencimiento": c.fecha_vencimiento.isoformat() if c.fecha_vencimiento else None, "estado": c.estado} for c in cuotas]
         }
     except HTTPException: raise
-    except Exception as e: raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e: 
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/{id}/cuotas")
-def ver_cuotas(id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+def ver_cuotas(
+    id: int, 
+    db: Session = Depends(get_db), 
+    current_user = Depends(get_current_user)
+):
     try:
         fin = db.query(Financiamiento).filter(Financiamiento.id == id).first()
-        if not fin: raise HTTPException(status_code=404, detail="Financiamiento no encontrado")
+        if not fin: 
+            raise HTTPException(status_code=404, detail="Financiamiento no encontrado")
+        
         cuotas = db.query(Cuota).filter(Cuota.financiamiento_id == id).order_by(Cuota.numero).all()
         hoy = datetime.now(timezone.utc)
-        return {"financiamiento_id": id, "codigo": fin.codigo, "cuotas": [{"id": c.id, "numero": c.numero, "monto_base_bs": round(c.monto_base_bs, 2), "monto_total_bs": round(c.monto_total_bs, 2), "fecha_vencimiento": c.fecha_vencimiento.isoformat() if c.fecha_vencimiento else None, "estado": c.estado, "dias_atraso": (hoy - c.fecha_vencimiento).days if c.estado == "pendiente" and hoy > c.fecha_vencimiento else 0} for c in cuotas]}
+        
+        return {
+            "financiamiento_id": id, 
+            "codigo": fin.codigo, 
+            "cuotas": [{
+                "id": c.id, 
+                "numero": c.numero, 
+                "monto_base_bs": round(c.monto_base_bs, 2), 
+                "monto_total_bs": round(c.monto_total_bs, 2), 
+                "fecha_vencimiento": c.fecha_vencimiento.isoformat() if c.fecha_vencimiento else None, 
+                "estado": c.estado, 
+                "dias_atraso": (hoy - c.fecha_vencimiento).days if c.estado == "pendiente" and hoy > c.fecha_vencimiento else 0
+            } for c in cuotas]
+        }
     except HTTPException: raise
-    except Exception as e: raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e: 
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.delete("/{id}")
-def eliminar_financiamiento(id: int, db: Session = Depends(get_db), current_admin = Depends(get_current_admin)):
+@audit(accion="ELIMINAR_FINANCIAMIENTO", tabla="financiamientos")  # ✅ NUEVO
+def eliminar_financiamiento(
+    id: int, 
+    db: Session = Depends(get_db), 
+    current_admin = Depends(get_current_admin)
+):
     try:
         financiamiento = db.query(Financiamiento).filter(Financiamiento.id == id).first()
         if not financiamiento: 
             raise HTTPException(status_code=404, detail="Financiamiento no encontrado")
         if financiamiento.estado == "completado": 
             raise HTTPException(status_code=400, detail="No se puede eliminar un financiamiento completado")
+        
+        # ✅ NUEVO: Guardar datos ANTES de eliminar
+        datos_antes = {
+            "codigo": financiamiento.codigo,
+            "cliente_id": financiamiento.cliente_id,
+            "monto_total_bs": financiamiento.monto_total_bs,
+            "estado": financiamiento.estado,
+            "cuotas_aprobadas": financiamiento.cuotas_aprobadas
+        }
         
         db.query(Pago).filter(Pago.financiamiento_id == id).delete(synchronize_session='fetch')
         
@@ -289,6 +404,19 @@ def eliminar_financiamiento(id: int, db: Session = Depends(get_db), current_admi
         
         db.delete(financiamiento)
         db.commit()
+        
+        # ✅ NUEVO: Registrar auditoría manual con detalles
+        registrar_auditoria(
+            db=db,
+            usuario_id=current_admin.id,
+            usuario_nombre=current_admin.nombre,
+            usuario_rol=current_admin.rol,
+            accion="ELIMINAR_FINANCIAMIENTO",
+            tabla="financiamientos",
+            registro_id=id,
+            datos_antes=datos_antes,
+            detalles=f"Financiamiento #{id} ({datos_antes['codigo']}) eliminado por {current_admin.nombre}"
+        )
         
         return {"success": True, "mensaje": f"Financiamiento #{id} eliminado"}
     except HTTPException: 
