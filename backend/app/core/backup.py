@@ -15,8 +15,8 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
-# Importar init_db desde main
-from app.main import init_db
+
+from app.core.init_db import init_db
 
 logger = logging.getLogger(__name__)
 

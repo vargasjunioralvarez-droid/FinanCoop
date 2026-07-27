@@ -42,6 +42,11 @@ from app.modules.audit.router import router as audit_router
 # ⏰ Scheduler para backups automáticos
 from app.core.scheduler import iniciar_scheduler
 
+# ============================================================
+# 📊 INICIALIZACIÓN DE DATOS (NUEVO ARCHIVO)
+# ============================================================
+from app.core.init_db import init_db
+
 
 # ─────────────────────────────────────────────────────────────
 # 📝 LOGGING SEGURO
@@ -212,58 +217,6 @@ async def global_exception_handler(request: Request, exc: Exception):
 Base.metadata.create_all(bind=engine, checkfirst=True)
 
 # ─────────────────────────────────────────────────────────────
-# 📊 INICIALIZAR DATOS
-# ─────────────────────────────────────────────────────────────
-def init_db():
-    db = next(get_db())
-    try:
-        for nivel_key, config in NIVELES_CONFIG_DEFAULT.items():
-            existe = db.query(NivelConfig).filter(NivelConfig.nivel == nivel_key).first()
-            if not existe:
-                nc = NivelConfig(
-                    nivel=nivel_key,
-                    min_score=config["min_score"],
-                    max_score=config["max_score"],
-                    monto_max_usd=config["monto_max_usd"],
-                    entrada_pct=config["entrada_pct"],
-                    financia_pct=config["financia_pct"],
-                    cuotas_base=config["cuotas_base"],
-                    cuotas_max=config["cuotas_max"],
-                    mora_diaria=config["mora_diaria"],
-                    aprobacion_extra=config["aprobacion_extra"]
-                )
-                db.add(nc)
-                logger.info(f"✅ Nivel creado: {nivel_key}")
-
-        tasa = db.query(TasaDolar).order_by(TasaDolar.id.desc()).first()
-        if not tasa:
-            tasa = TasaDolar(tasa=40.0, fuente="manual")
-            db.add(tasa)
-            logger.info("✅ Tasa dólar inicial creada: 40.0")
-
-        config_pago = db.query(ConfiguracionPago).first()
-        if not config_pago:
-            config_pago = ConfiguracionPago(
-                banco_pago_movil="Banco de Venezuela",
-                telefono_pago_movil="04121234567",
-                cedula_pago_movil="V12345678",
-                banco_transferencia="Banco Mercantil",
-                cuenta_transferencia="01051234567890123456"
-            )
-            db.add(config_pago)
-            logger.info("✅ Configuración de pagos inicial creada")
-
-        db.commit()
-        logger.info("🚀 Base de datos inicializada correctamente")
-        
-    except Exception as e:
-        db.rollback()
-        logger.error(f"❌ Error inicializando BD: {e}")
-        raise
-    finally:
-        db.close()
-
-# ─────────────────────────────────────────────────────────────
 # 🔌 ROUTERS CON PREFIJO /api/v1
 # ─────────────────────────────────────────────────────────────
 API_PREFIX = "/api/v1"
@@ -279,14 +232,19 @@ app.include_router(upload_router, prefix=API_PREFIX)
 app.include_router(bancos_router, prefix=API_PREFIX)
 app.include_router(audit_router, prefix=API_PREFIX)
 
-
 # ─────────────────────────────────────────────────────────────
 # 🚀 STARTUP
 # ─────────────────────────────────────────────────────────────
 @app.on_event("startup")
 def startup():
     logger.info(f"🚀 FinanCoop API iniciando | Entorno: {ENV}")
-    init_db()
+    
+    # ✅ Inicializar datos mínimos (niveles, tasa, configuraciones)
+    try:
+        init_db()
+    except Exception as e:
+        logger.error(f"❌ Error inicializando datos: {e}")
+    
     # ✅ Cargar niveles desde BD al iniciar
     try:
         get_niveles_config(next(get_db()))
