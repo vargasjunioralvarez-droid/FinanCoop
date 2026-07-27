@@ -3,7 +3,7 @@ import axios from 'axios'
 const isDevelopment = import.meta.env.MODE === 'development'
 const API_URL = isDevelopment 
   ? '/api/v1' 
-  : 'https://financoop-agd5.onrender.com/api/v1'
+  : 'https://financoop.onrender.com/api/v1'
 
 console.log('🌐 Modo:', import.meta.env.MODE)
 console.log('🔗 API_URL:', API_URL)
