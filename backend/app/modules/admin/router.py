@@ -329,6 +329,10 @@ def financiamientos_pendientes(db: Session = Depends(get_db), current_user = Dep
 # BACKUPS
 # ============================================================
 
+# ============================================================
+# BACKUPS
+# ============================================================
+
 @router.post("/backup/crear")
 def crear_backup_manual(
     db: Session = Depends(get_db),
@@ -463,31 +467,6 @@ def limpiar_conexiones(
         
     except Exception as e:
         logger.error(f"❌ Error limpiando conexiones: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-# ============================================================
-# REPORTES
-# ============================================================
-@router.get("/reportes")
-def reportes(db: Session = Depends(get_db), current_user = Depends(get_current_admin)):
-    try:
-        tienda_id = None if current_user.rol == "admin_central" else current_user.tienda_id
-        q_clientes = db.query(Cliente)
-        q_creditos = db.query(Financiamiento)
-        q_pagos = db.query(Pago)
-        if tienda_id:
-            q_clientes = q_clientes.filter(Cliente.tienda_id == tienda_id)
-            q_creditos = q_creditos.filter(Financiamiento.tienda_id == tienda_id)
-            q_pagos = q_pagos.join(Financiamiento).filter(Financiamiento.tienda_id == tienda_id)
-        return {
-            "fecha_reporte": datetime.now(timezone.utc).isoformat(),
-            "tienda": current_user.tienda.nombre if current_user.tienda else "Todas las tiendas",
-            "clientes": {"total": q_clientes.count()},
-            "creditos": {"total": q_creditos.count(), "activos": q_creditos.filter(Financiamiento.estado == "activo").count(), "completados": q_creditos.filter(Financiamiento.estado == "completado").count()},
-            "pagos": {"pendientes": q_pagos.filter(Pago.estado == "pendiente").count(), "conciliados": q_pagos.filter(Pago.estado == "conciliado").count()}
-        }
-    except Exception as e:
-        logger.error(f"❌ Error generando reportes: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # ============================================================

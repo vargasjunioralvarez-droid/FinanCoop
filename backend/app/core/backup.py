@@ -407,13 +407,13 @@ def listar_backups():
         return []
 
 # ============================================================
-# RESTAURAR BACKUP (VERSIÓN MEJORADA)
+# RESTAURAR BACKUP (VERSIÓN MEJORADA CON LIMPIEZA PREVIA)
 # ============================================================
 
 def restaurar_backup(backup_file: str):
     """
     Restaura un backup desde un archivo local
-    Versión mejorada con timeout y uso de URL completa
+    Versión mejorada con limpieza previa de la base de datos
     """
     try:
         if not DATABASE_URL:
@@ -440,6 +440,53 @@ def restaurar_backup(backup_file: str):
         # Verificar que el SQL existe
         if not os.path.exists(sql_file):
             logger.error(f"❌ Archivo SQL no encontrado: {sql_file}")
+            return False
+        
+        # ============================================================
+        # LIMPIAR BASE DE DATOS ANTES DE RESTAURAR
+        # ============================================================
+        logger.info("🧹 Limpiando base de datos antes de restaurar...")
+        try:
+            import psycopg2
+            conn = psycopg2.connect(DATABASE_URL)
+            conn.autocommit = True
+            cur = conn.cursor()
+            
+            # Obtener todas las tablas
+            cur.execute("""
+                SELECT tablename FROM pg_tables 
+                WHERE schemaname = 'public'
+            """)
+            tables = cur.fetchall()
+            
+            logger.info(f"📊 Tablas encontradas: {len(tables)}")
+            
+            # Eliminar todas las tablas en orden inverso (para respetar FK)
+            for table in tables:
+                try:
+                    cur.execute(f"DROP TABLE IF EXISTS {table[0]} CASCADE")
+                    logger.info(f"🗑️ Tabla eliminada: {table[0]}")
+                except Exception as e:
+                    logger.warning(f"⚠️ No se pudo eliminar {table[0]}: {e}")
+            
+            # Eliminar secuencias
+            cur.execute("""
+                SELECT sequence_name FROM information_schema.sequences 
+                WHERE sequence_schema = 'public'
+            """)
+            sequences = cur.fetchall()
+            for seq in sequences:
+                try:
+                    cur.execute(f"DROP SEQUENCE IF EXISTS {seq[0]} CASCADE")
+                    logger.info(f"🗑️ Secuencia eliminada: {seq[0]}")
+                except Exception as e:
+                    logger.warning(f"⚠️ No se pudo eliminar secuencia {seq[0]}: {e}")
+            
+            conn.close()
+            logger.info("✅ Base de datos limpiada correctamente")
+            
+        except Exception as e:
+            logger.error(f"❌ Error limpiando base de datos: {e}")
             return False
         
         # ============================================================
