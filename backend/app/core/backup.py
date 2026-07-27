@@ -10,6 +10,7 @@ from datetime import datetime
 from pathlib import Path
 import zipfile
 import re
+import shutil
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
@@ -184,6 +185,17 @@ def crear_backup():
         
         logger.info(f"📦 Iniciando backup: {backup_sql}")
         
+        # ============================================================
+        # VERIFICAR QUE pg_dump EXISTE
+        # ============================================================
+        if not shutil.which('pg_dump'):
+            logger.error("❌ pg_dump NO está instalado en el sistema")
+            logger.error("💡 Solución: Agregar 'postgresql-client' al Dockerfile o variable BUILD_PACKAGES")
+            return False
+        
+        # ============================================================
+        # OPCIÓN 1: USAR pg_dump (recomendado)
+        # ============================================================
         parsed = parsear_db_url(DATABASE_URL)
         if not parsed:
             logger.error(f"❌ URL de base de datos no válida: {DATABASE_URL}")
@@ -195,25 +207,128 @@ def crear_backup():
         env = os.environ.copy()
         env["PGPASSWORD"] = password
         
-        cmd = ["pg_dump", "-h", host, "-p", port, "-U", user, "-d", dbname, "-F", "p", "-f", backup_sql]
+        # Usar la URL completa para pg_dump
+        cmd = ["pg_dump", DATABASE_URL, "-F", "p", "-f", backup_sql]
         logger.info(f"🔄 Ejecutando: {' '.join(cmd)}")
         
         result = subprocess.run(cmd, env=env, capture_output=True, text=True)
-        if result.returncode != 0:
-            logger.error(f"❌ Error en pg_dump: {result.stderr}")
+        
+        # Logs de depuración
+        logger.info(f"🔍 Código de retorno: {result.returncode}")
+        if result.stderr:
+            logger.warning(f"⚠️ stderr: {result.stderr[:500]}")
+        if result.stdout:
+            logger.info(f"✅ stdout: {result.stdout[:500]}")
+        
+        # ============================================================
+        # VERIFICAR TAMAÑO DEL BACKUP
+        # ============================================================
+        if not os.path.exists(backup_sql):
+            logger.error("❌ El archivo SQL no se creó")
             return False
         
-        if not os.path.exists(backup_sql) or os.path.getsize(backup_sql) == 0:
-            logger.error("❌ El archivo de backup no se creó correctamente")
-            return False
+        sql_size = os.path.getsize(backup_sql)
+        logger.info(f"📄 Tamaño del archivo SQL: {sql_size} bytes ({sql_size/1024:.2f} KB)")
+        
+        if sql_size < 100:
+            logger.error("❌ El archivo SQL está vacío o es demasiado pequeño")
+            
+            # ============================================================
+            # OPCIÓN 2: FALLBACK - USAR psycopg2
+            # ============================================================
+            logger.info("🔄 Intentando método alternativo con psycopg2...")
+            try:
+                import psycopg2
+                conn = psycopg2.connect(DATABASE_URL)
+                cur = conn.cursor()
+                
+                with open(backup_sql, 'w') as f:
+                    # Obtener todas las tablas
+                    cur.execute("""
+                        SELECT tablename FROM pg_tables 
+                        WHERE schemaname = 'public'
+                    """)
+                    tables = cur.fetchall()
+                    
+                    logger.info(f"📊 Tablas encontradas: {len(tables)}")
+                    
+                    for table in tables:
+                        table_name = table[0]
+                        f.write(f"\n-- Datos de la tabla: {table_name}\n")
+                        
+                        # Obtener datos de la tabla
+                        cur.execute(f"SELECT * FROM {table_name}")
+                        rows = cur.fetchall()
+                        
+                        if rows:
+                            # Obtener nombres de columnas
+                            col_names = [desc[0] for desc in cur.description]
+                            f.write(f"INSERT INTO {table_name} ({', '.join(col_names)}) VALUES\n")
+                            
+                            for i, row in enumerate(rows):
+                                f.write("(")
+                                for j, val in enumerate(row):
+                                    if val is None:
+                                        f.write("NULL")
+                                    elif isinstance(val, str):
+                                        # Escapar comillas simples
+                                        val_escaped = val.replace("'", "''")
+                                        f.write(f"'{val_escaped}'")
+                                    elif isinstance(val, bool):
+                                        f.write("true" if val else "false")
+                                    elif isinstance(val, datetime):
+                                        f.write(f"'{val.isoformat()}'")
+                                    else:
+                                        f.write(str(val))
+                                    if j < len(row) - 1:
+                                        f.write(", ")
+                                f.write(")")
+                                if i < len(rows) - 1:
+                                    f.write(",\n")
+                                else:
+                                    f.write(";\n")
+                            logger.info(f"✅ Tabla {table_name}: {len(rows)} registros")
+                
+                conn.close()
+                
+                # Verificar tamaño del backup generado con psycopg2
+                sql_size = os.path.getsize(backup_sql)
+                logger.info(f"📄 Tamaño del SQL (psycopg2): {sql_size} bytes ({sql_size/1024:.2f} KB)")
+                
+                if sql_size < 100:
+                    logger.error("❌ El backup con psycopg2 también está vacío")
+                    return False
+                    
+            except ImportError:
+                logger.error("❌ psycopg2 no está instalado. Instalar con: pip install psycopg2-binary")
+                return False
+            except Exception as e:
+                logger.error(f"❌ Error en método alternativo: {e}")
+                return False
+        
+        # ============================================================
+        # COMPRIMIR EL ARCHIVO SQL
+        # ============================================================
+        logger.info(f"📦 Comprimiendo: {backup_sql} -> {backup_zip}")
         
         with zipfile.ZipFile(backup_zip, 'w', zipfile.ZIP_DEFLATED) as zipf:
             zipf.write(backup_sql, os.path.basename(backup_sql))
         
-        os.remove(backup_sql)
-        logger.info(f"✅ Backup SQL generado: {os.path.basename(backup_sql)}")
+        # Verificar que el ZIP se creó correctamente
+        if not os.path.exists(backup_zip) or os.path.getsize(backup_zip) == 0:
+            logger.error("❌ El archivo ZIP no se creó correctamente")
+            return False
         
-        # Intentar subir a Google Drive (opcional)
+        zip_size = os.path.getsize(backup_zip)
+        logger.info(f"📦 Tamaño del ZIP: {zip_size} bytes ({zip_size/1024:.2f} KB)")
+        
+        # Eliminar el SQL temporal
+        os.remove(backup_sql)
+        logger.info("🗑️ Archivo SQL temporal eliminado")
+        
+        # ============================================================
+        # INTENTAR SUBIR A GOOGLE DRIVE (OPCIONAL)
+        # ============================================================
         drive_service = autenticar_google_drive()
         if drive_service:
             if subir_a_google_drive(drive_service, backup_zip):
@@ -225,7 +340,7 @@ def crear_backup():
                 logger.warning("⚠️ Backup guardado localmente (falló subida a Google Drive)")
                 return True
         else:
-            logger.info("ℹ️ Backup guardado localmente (Google Drive no configurado)")
+            logger.info(f"ℹ️ Backup guardado localmente: {backup_zip}")
             return True
             
     except Exception as e:
@@ -243,12 +358,14 @@ def listar_backups():
     try:
         backups = []
         for file in Path(BACKUP_DIR).glob("*.zip"):
+            size_bytes = file.stat().st_size
             backups.append({
                 "nombre": file.name,
-                "tamaño_bytes": file.stat().st_size,
-                "tamaño_mb": round(file.stat().st_size / (1024 * 1024), 2),
+                "tamaño_bytes": size_bytes,
+                "tamaño_mb": round(size_bytes / (1024 * 1024), 2),
                 "fecha": datetime.fromtimestamp(file.stat().st_mtime).isoformat()
             })
+        logger.info(f"📋 {len(backups)} backups encontrados")
         return sorted(backups, key=lambda x: x["fecha"], reverse=True)
         
     except Exception as e:
@@ -288,6 +405,11 @@ def restaurar_backup(backup_file: str):
                 zipf.extractall(BACKUP_DIR)
                 sql_file = os.path.join(BACKUP_DIR, sql_name)
                 logger.info(f"📦 Archivo descomprimido: {sql_file}")
+        
+        # Verificar que el SQL existe
+        if not os.path.exists(sql_file):
+            logger.error(f"❌ Archivo SQL no encontrado: {sql_file}")
+            return False
         
         env = os.environ.copy()
         env["PGPASSWORD"] = password
