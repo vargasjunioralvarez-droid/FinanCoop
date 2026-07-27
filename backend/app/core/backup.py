@@ -214,3 +214,71 @@ def listar_backups():
     except Exception as e:
         logger.error(f"❌ Error listando backups: {e}")
         return []
+
+# ============================================================
+# RESTAURAR BACKUP
+# ============================================================
+
+def restaurar_backup(backup_file: str):
+    """
+    Restaura un backup desde un archivo en Google Drive
+    """
+    try:
+        logger.info(f"🔄 Iniciando restauración: {backup_file}")
+        
+        # 1. Verificar que el archivo existe
+        if not os.path.exists(backup_file):
+            logger.error(f"❌ Archivo no encontrado: {backup_file}")
+            return False
+        
+        # 2. Parsear URL de la base de datos
+        match = re.match(r"postgresql://([^:]+):([^@]+)@([^:]+):(\d+)/(.+)", DATABASE_URL)
+        if not match:
+            logger.error("❌ URL de base de datos no válida")
+            return False
+        
+        user, password, host, port, dbname = match.groups()
+        
+        # 3. Descomprimir si es .zip
+        sql_file = backup_file
+        if backup_file.endswith('.zip'):
+            with zipfile.ZipFile(backup_file, 'r') as zipf:
+                sql_name = zipf.namelist()[0]
+                zipf.extractall(BACKUP_DIR)
+                sql_file = os.path.join(BACKUP_DIR, sql_name)
+                logger.info(f"📦 Archivo descomprimido: {sql_file}")
+        
+        # 4. Configurar variable de entorno para la contraseña
+        env = os.environ.copy()
+        env["PGPASSWORD"] = password
+        
+        # 5. Ejecutar psql para restaurar
+        cmd = [
+            "psql",
+            "-h", host,
+            "-p", port,
+            "-U", user,
+            "-d", dbname,
+            "-f", sql_file
+        ]
+        
+        logger.info(f"🔄 Ejecutando: {' '.join(cmd)}")
+        
+        result = subprocess.run(cmd, env=env, capture_output=True, text=True)
+        
+        if result.returncode != 0:
+            logger.error(f"❌ Error restaurando: {result.stderr}")
+            return False
+        
+        logger.info(f"✅ Backup restaurado exitosamente: {backup_file}")
+        
+        # 6. Limpiar archivo SQL extraído (si era zip)
+        if backup_file.endswith('.zip') and os.path.exists(sql_file):
+            os.remove(sql_file)
+            logger.info(f"🗑️ Archivo SQL temporal eliminado: {sql_file}")
+        
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ Error restaurando backup: {e}")
+        return False
