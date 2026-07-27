@@ -1,5 +1,5 @@
 """
-Sistema de Backups Automáticos
+Sistema de Backups Automáticos con Google Drive
 """
 
 import os
@@ -9,6 +9,9 @@ from datetime import datetime, timedelta
 from pathlib import Path
 import zipfile
 import re
+import json
+from pydrive2.auth import GoogleAuth
+from pydrive2.drive import GoogleDrive
 
 logger = logging.getLogger(__name__)
 
@@ -16,17 +19,107 @@ logger = logging.getLogger(__name__)
 # CONFIGURACIÓN
 # ============================================================
 
-# Carpeta donde se guardan los backups
 BACKUP_DIR = os.getenv("BACKUP_DIR", "./backups")
-
-# URL de la base de datos
 DATABASE_URL = os.getenv("DATABASE_URL", "")
-
-# Número máximo de backups a mantener
 MAX_BACKUPS = int(os.getenv("MAX_BACKUPS", "30"))
+GOOGLE_DRIVE_FOLDER = os.getenv("GOOGLE_DRIVE_FOLDER", "financoop_backups")
 
 # Crear carpeta de backups si no existe
 Path(BACKUP_DIR).mkdir(parents=True, exist_ok=True)
+
+# ============================================================
+# AUTENTICACIÓN CON GOOGLE DRIVE
+# ============================================================
+
+def autenticar_google_drive():
+    """
+    Autentica con Google Drive usando credenciales de cuenta de servicio
+    """
+    try:
+        # Obtener credenciales desde variable de entorno
+        creds_json = os.getenv("GOOGLE_CREDENTIALS")
+        if not creds_json:
+            logger.error("❌ GOOGLE_CREDENTIALS no está configurada")
+            return None
+        
+        # Guardar credenciales temporalmente
+        creds_file = "temp_credentials.json"
+        with open(creds_file, "w") as f:
+            f.write(creds_json)
+        
+        gauth = GoogleAuth()
+        gauth.LoadCredentialsFile(creds_file)
+        
+        if gauth.credentials is None:
+            gauth.ServiceAuth()
+            gauth.SaveCredentialsFile(creds_file)
+        elif gauth.access_token_expired:
+            gauth.Refresh()
+        else:
+            gauth.Authorize()
+        
+        drive = GoogleDrive(gauth)
+        logger.info("✅ Autenticación con Google Drive exitosa")
+        
+        # Limpiar archivo temporal
+        os.remove(creds_file)
+        
+        return drive
+    except Exception as e:
+        logger.error(f"❌ Error autenticando con Google Drive: {e}")
+        return None
+
+# ============================================================
+# SUBIR A GOOGLE DRIVE
+# ============================================================
+
+def subir_a_google_drive(drive, archivo_zip):
+    """
+    Sube un archivo a Google Drive
+    """
+    try:
+        folder_id = buscar_o_crear_carpeta(drive)
+        if not folder_id:
+            return False
+        
+        file_drive = drive.CreateFile({
+            'title': os.path.basename(archivo_zip),
+            'parents': [{'id': folder_id}],
+            'mimeType': 'application/zip'
+        })
+        file_drive.SetContentFile(archivo_zip)
+        file_drive.Upload()
+        
+        logger.info(f"📤 Backup subido a Google Drive: {os.path.basename(archivo_zip)}")
+        return True
+    except Exception as e:
+        logger.error(f"❌ Error subiendo a Google Drive: {e}")
+        return False
+
+def buscar_o_crear_carpeta(drive):
+    """
+    Busca o crea la carpeta de backups en Google Drive
+    """
+    try:
+        file_list = drive.ListFile({
+            'q': f"title='{GOOGLE_DRIVE_FOLDER}' and mimeType='application/vnd.google-apps.folder' and trashed=false"
+        }).GetList()
+        
+        if file_list:
+            folder_id = file_list[0]['id']
+            logger.info(f"📁 Carpeta encontrada: {GOOGLE_DRIVE_FOLDER}")
+            return folder_id
+        
+        folder = drive.CreateFile({
+            'title': GOOGLE_DRIVE_FOLDER,
+            'mimeType': 'application/vnd.google-apps.folder'
+        })
+        folder.Upload()
+        logger.info(f"📁 Carpeta creada: {GOOGLE_DRIVE_FOLDER}")
+        return folder['id']
+    except Exception as e:
+        logger.error(f"❌ Error buscando/creando carpeta: {e}")
+        return None
 
 # ============================================================
 # FUNCIÓN PRINCIPAL: CREAR BACKUP
@@ -34,178 +127,90 @@ Path(BACKUP_DIR).mkdir(parents=True, exist_ok=True)
 
 def crear_backup():
     """
-    Crea un backup completo de la base de datos.
-    Usa pg_dump de PostgreSQL para exportar la BD.
+    Crea un backup completo de la base de datos y lo sube a Google Drive
     """
     try:
-        # 1. Generar nombre de archivo con fecha/hora
+        drive = autenticar_google_drive()
+        if not drive:
+            logger.error("❌ No se pudo autenticar con Google Drive")
+            return False
+        
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         backup_sql = f"{BACKUP_DIR}/financoop_backup_{timestamp}.sql"
         backup_zip = f"{BACKUP_DIR}/financoop_backup_{timestamp}.zip"
         
         logger.info(f"📦 Iniciando backup: {backup_sql}")
         
-        # 2. Parsear la URL de la base de datos
-        # Ejemplo: postgresql://usuario:password@host:5432/database
         match = re.match(r"postgresql://([^:]+):([^@]+)@([^:]+):(\d+)/(.+)", DATABASE_URL)
-        
         if not match:
             logger.error("❌ URL de base de datos no válida")
             return False
         
         user, password, host, port, dbname = match.groups()
-        logger.info(f"📊 Conectando a: {host}:{port}/{dbname} como {user}")
-        
-        # 3. Configurar variable de entorno para la contraseña
         env = os.environ.copy()
         env["PGPASSWORD"] = password
         
-        # 4. Ejecutar pg_dump
-        cmd = [
-            "pg_dump",
-            "-h", host,
-            "-p", port,
-            "-U", user,
-            "-d", dbname,
-            "-F", "p",      # Formato: plain text (SQL)
-            "-f", backup_sql
-        ]
-        
+        cmd = ["pg_dump", "-h", host, "-p", port, "-U", user, "-d", dbname, "-F", "p", "-f", backup_sql]
         logger.info(f"🔄 Ejecutando: {' '.join(cmd)}")
         
         result = subprocess.run(cmd, env=env, capture_output=True, text=True)
-        
-        # 5. Verificar que el backup fue exitoso
         if result.returncode != 0:
             logger.error(f"❌ Error en pg_dump: {result.stderr}")
             return False
         
-        # 6. Verificar que el archivo se creó correctamente
         if not os.path.exists(backup_sql) or os.path.getsize(backup_sql) == 0:
             logger.error("❌ El archivo de backup no se creó correctamente")
             return False
         
-        # 7. Comprimir el archivo SQL
         with zipfile.ZipFile(backup_zip, 'w', zipfile.ZIP_DEFLATED) as zipf:
             zipf.write(backup_sql, os.path.basename(backup_sql))
         
-        # 8. Eliminar el archivo SQL (solo guardamos el .zip)
         os.remove(backup_sql)
         
-        # 9. Limpiar backups antiguos
-        limpiar_backups_antiguos()
-        
-        # 10. Calcular tamaño del backup
-        size_mb = os.path.getsize(backup_zip) / (1024 * 1024)
-        
-        logger.info(f"✅ Backup completado: {os.path.basename(backup_zip)} ({size_mb:.2f} MB)")
-        return True
-        
+        if subir_a_google_drive(drive, backup_zip):
+            os.remove(backup_zip)
+            logger.info("🗑️ Archivo local eliminado después de subir a Google Drive")
+            logger.info("✅ Backup completado y guardado en Google Drive")
+            return True
+        else:
+            logger.warning("⚠️ Backup guardado localmente (falló subida a Google Drive)")
+            return True
+            
     except Exception as e:
         logger.error(f"❌ Error creando backup: {e}")
         return False
 
 # ============================================================
-# LIMPIAR BACKUPS ANTIGUOS
-# ============================================================
-
-def limpiar_backups_antiguos():
-    """
-    Elimina los backups que tengan más de MAX_BACKUPS días
-    """
-    try:
-        now = datetime.now()
-        cutoff = now - timedelta(days=MAX_BACKUPS)
-        
-        for file in Path(BACKUP_DIR).glob("*.zip"):
-            # Obtener la fecha de modificación del archivo
-            file_time = datetime.fromtimestamp(file.stat().st_mtime)
-            
-            if file_time < cutoff:
-                file.unlink()
-                logger.info(f"🗑️ Backup antiguo eliminado: {file.name}")
-                
-    except Exception as e:
-        logger.error(f"❌ Error limpiando backups antiguos: {e}")
-
-# ============================================================
-# LISTAR BACKUPS DISPONIBLES
+# LISTAR BACKUPS DESDE GOOGLE DRIVE
 # ============================================================
 
 def listar_backups():
     """
-    Lista todos los backups disponibles
-    """
-    backups = []
-    for file in Path(BACKUP_DIR).glob("*.zip"):
-        backups.append({
-            "nombre": file.name,
-            "tamaño_bytes": file.stat().st_size,
-            "tamaño_mb": round(file.stat().st_size / (1024 * 1024), 2),
-            "fecha": datetime.fromtimestamp(file.stat().st_mtime).isoformat()
-        })
-    return sorted(backups, key=lambda x: x["fecha"], reverse=True)
-
-# ============================================================
-# RESTAURAR BACKUP
-# ============================================================
-
-def restaurar_backup(backup_file: str):
-    """
-    Restaura un backup usando psql
+    Lista los backups disponibles en Google Drive
     """
     try:
-        if not os.path.exists(backup_file):
-            logger.error(f"❌ Archivo no encontrado: {backup_file}")
-            return False
+        drive = autenticar_google_drive()
+        if not drive:
+            return []
         
-        logger.info(f"🔄 Restaurando backup: {backup_file}")
+        folder_id = buscar_o_crear_carpeta(drive)
+        if not folder_id:
+            return []
         
-        # Parsear URL de la BD
-        match = re.match(r"postgresql://([^:]+):([^@]+)@([^:]+):(\d+)/(.+)", DATABASE_URL)
+        file_list = drive.ListFile({
+            'q': f"'{folder_id}' in parents and trashed=false"
+        }).GetList()
         
-        if not match:
-            logger.error("❌ URL de base de datos no válida")
-            return False
-        
-        user, password, host, port, dbname = match.groups()
-        
-        # Descomprimir si es .zip
-        sql_file = backup_file
-        if backup_file.endswith('.zip'):
-            with zipfile.ZipFile(backup_file, 'r') as zipf:
-                sql_name = zipf.namelist()[0]
-                zipf.extractall(BACKUP_DIR)
-                sql_file = os.path.join(BACKUP_DIR, sql_name)
-        
-        # Configurar variable de entorno
-        env = os.environ.copy()
-        env["PGPASSWORD"] = password
-        
-        # Ejecutar psql para restaurar
-        cmd = [
-            "psql",
-            "-h", host,
-            "-p", port,
-            "-U", user,
-            "-d", dbname,
-            "-f", sql_file
-        ]
-        
-        result = subprocess.run(cmd, env=env, capture_output=True, text=True)
-        
-        if result.returncode != 0:
-            logger.error(f"❌ Error restaurando: {result.stderr}")
-            return False
-        
-        logger.info(f"✅ Backup restaurado: {backup_file}")
-        
-        # Limpiar archivo SQL extraído (si era zip)
-        if backup_file.endswith('.zip') and os.path.exists(sql_file):
-            os.remove(sql_file)
-        
-        return True
+        backups = []
+        for file in file_list:
+            backups.append({
+                "nombre": file['title'],
+                "tamaño_bytes": int(file['fileSize']),
+                "tamaño_mb": round(int(file['fileSize']) / (1024 * 1024), 2),
+                "fecha": file['createdDate']
+            })
+        return sorted(backups, key=lambda x: x["fecha"], reverse=True)
         
     except Exception as e:
-        logger.error(f"❌ Error restaurando backup: {e}")
-        return False
+        logger.error(f"❌ Error listando backups: {e}")
+        return []
