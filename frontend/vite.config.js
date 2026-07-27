@@ -1,4 +1,3 @@
-// frontend/vite.config.js
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import vuetify from 'vite-plugin-vuetify'
@@ -24,13 +23,12 @@ export default defineConfig({
     },
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:8000',
+        target: 'https://financoop.onrender.com', // ← CAMBIADO
         changeOrigin: true
-        // ❌ ELIMINA LA LÍNEA "rewrite"
       }
     }
   },
-  base: './',
+  base: '/', // ← CAMBIADO (era './')
   build: {
     outDir: 'dist',
     assetsDir: 'assets',
@@ -40,7 +38,10 @@ export default defineConfig({
         manualChunks: {
           vendor: ['vue', 'vue-router', 'pinia'],
           vuetify: ['vuetify']
-        }
+        },
+        assetFileNames: 'assets/[name]-[hash].[ext]',
+        chunkFileNames: 'assets/[name]-[hash].js',
+        entryFileNames: 'assets/[name]-[hash].js'
       }
     }
   }

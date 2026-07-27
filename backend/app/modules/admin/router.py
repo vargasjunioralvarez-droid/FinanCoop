@@ -396,12 +396,26 @@ def descargar_backup(
     if current_user.rol != "admin_central":
         raise HTTPException(status_code=403, detail="Solo admin_central")
     
-    backup_path = os.path.join(os.getenv("BACKUP_DIR", "./backups"), archivo)
+    import os
+    from fastapi.responses import FileResponse
     
+    # Ruta segura al directorio de backups
+    backup_dir = os.getenv("BACKUP_DIR", "./backups")
+    
+    # Validar que el archivo no tenga path traversal (../)
+    if ".." in archivo or "/" in archivo or "\\" in archivo:
+        raise HTTPException(status_code=400, detail="Nombre de archivo inválido")
+    
+    backup_path = os.path.join(backup_dir, archivo)
+    
+    # Verificar que el archivo existe
     if not os.path.exists(backup_path):
         raise HTTPException(status_code=404, detail="Archivo no encontrado")
     
-    from fastapi.responses import FileResponse
+    # Verificar que el archivo es un ZIP
+    if not archivo.endswith('.zip'):
+        raise HTTPException(status_code=400, detail="Solo se permiten archivos ZIP")
+    
     return FileResponse(
         backup_path,
         media_type="application/zip",

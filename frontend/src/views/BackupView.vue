@@ -201,11 +201,41 @@ const confirmarRestauracion = async () => {
   }
 }
 
-const descargarBackup = (nombre) => {
-  // Por ahora, solo descarga desde la URL directa
-  // En producción, necesitarías un endpoint para servir archivos
-  const url = `/api/v1/admin/backup/descargar?archivo=${nombre}`
-  window.open(url, '_blank')
+const descargarBackup = async (nombre) => {
+  try {
+    const token = localStorage.getItem('access_token')
+    
+    // Usar fetch directamente para manejar el blob
+    const response = await fetch(`/api/v1/admin/backup/descargar?archivo=${nombre}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    })
+    
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || 'Error al descargar')
+    }
+    
+    // Obtener el blob y crear la descarga
+    const blob = await response.blob()
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.download = nombre
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(link.href)
+    
+    mensaje.value = `✅ Backup ${nombre} descargado`
+    tipoMensaje.value = 'success'
+    
+  } catch (error) {
+    console.error('Error descargando backup:', error)
+    mensaje.value = `❌ Error descargando: ${error.message}`
+    tipoMensaje.value = 'error'
+  }
 }
 
 onMounted(cargarBackups)
