@@ -18,6 +18,35 @@ from googleapiclient.http import MediaFileUpload
 logger = logging.getLogger(__name__)
 
 # ============================================================
+# UTILIDADES DE SEGURIDAD
+# ============================================================
+
+def sanitize_url(url: str) -> str:
+    """
+    Oculta las credenciales en una URL de base de datos para logs
+    """
+    if not url:
+        return "URL no configurada"
+    
+    try:
+        # Ocultar contraseña y usuario
+        match = re.match(r"postgresql://([^:]+):([^@]+)@([^:]+):(\d+)/(.+)", url)
+        if match:
+            user, password, host, port, dbname = match.groups()
+            user_short = user[:3] + "..." if len(user) > 3 else user
+            return f"postgresql://{user_short}:****@...:{port}/{dbname}"
+        
+        match = re.match(r"postgresql://([^:]+):([^@]+)@([^/]+)/(.+)", url)
+        if match:
+            user, password, host, dbname = match.groups()
+            user_short = user[:3] + "..." if len(user) > 3 else user
+            return f"postgresql://{user_short}:****@.../{dbname}"
+        
+        return "URL con formato no reconocido"
+    except Exception:
+        return "Error al sanitizar URL"
+
+# ============================================================
 # CONFIGURACIÓN
 # ============================================================
 
@@ -29,9 +58,12 @@ GOOGLE_DRIVE_FOLDER = os.getenv("GOOGLE_DRIVE_FOLDER", "financoop_backups")
 # Crear carpeta de backups si no existe
 Path(BACKUP_DIR).mkdir(parents=True, exist_ok=True)
 
-# Log de configuración
+# Log de configuración (seguro)
 logger.info(f"📁 BACKUP_DIR: {BACKUP_DIR}")
-logger.info(f"🔍 DATABASE_URL: {'✅ Configurada' if DATABASE_URL else '❌ NO CONFIGURADA'}")
+if DATABASE_URL:
+    logger.info(f"🔍 DATABASE_URL: Configurada (host: {sanitize_url(DATABASE_URL)})")
+else:
+    logger.info("🔍 DATABASE_URL: ❌ NO CONFIGURADA")
 logger.info(f"📁 GOOGLE_DRIVE_FOLDER: {GOOGLE_DRIVE_FOLDER}")
 
 # ============================================================
@@ -198,25 +230,27 @@ def crear_backup():
         # ============================================================
         parsed = parsear_db_url(DATABASE_URL)
         if not parsed:
-            logger.error(f"❌ URL de base de datos no válida: {DATABASE_URL}")
+            logger.error(f"❌ URL de base de datos no válida: {sanitize_url(DATABASE_URL)}")
             return False
         
         user, password, host, port, dbname = parsed
-        logger.info(f"📊 Conectando a: {host}:{port}/{dbname} como {user}")
+        logger.info(f"📊 Conectando a: {host}:{port}/{dbname}")
         
         env = os.environ.copy()
         env["PGPASSWORD"] = password
         
         # Usar la URL completa para pg_dump
         cmd = ["pg_dump", DATABASE_URL, "-F", "p", "-f", backup_sql]
-        logger.info(f"🔄 Ejecutando: {' '.join(cmd)}")
+        logger.info(f"🔄 Ejecutando: pg_dump {sanitize_url(DATABASE_URL)} -F p -f {backup_sql}")
         
         result = subprocess.run(cmd, env=env, capture_output=True, text=True)
         
-        # Logs de depuración
+        # Logs de depuración (sin credenciales)
         logger.info(f"🔍 Código de retorno: {result.returncode}")
         if result.stderr:
-            logger.warning(f"⚠️ stderr: {result.stderr[:500]}")
+            # Sanitizar posibles credenciales en stderr
+            stderr_safe = result.stderr.replace(DATABASE_URL, sanitize_url(DATABASE_URL))
+            logger.warning(f"⚠️ stderr: {stderr_safe[:500]}")
         if result.stdout:
             logger.info(f"✅ stdout: {result.stdout[:500]}")
         
@@ -422,7 +456,7 @@ def restaurar_backup(backup_file: str):
             "--set", "ON_ERROR_STOP=on"
         ]
         
-        logger.info(f"🔄 Ejecutando: {' '.join(cmd)}")
+        logger.info(f"🔄 Ejecutando: psql {sanitize_url(DATABASE_URL)} -f {sql_file}")
         
         # Ejecutar con timeout de 5 minutos para evitar que se cuelgue
         result = subprocess.run(
