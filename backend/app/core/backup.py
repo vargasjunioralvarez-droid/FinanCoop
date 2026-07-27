@@ -20,12 +20,17 @@ logger = logging.getLogger(__name__)
 # ============================================================
 
 BACKUP_DIR = os.getenv("BACKUP_DIR", "./backups")
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://financash_user:nd4tC0TcZk1hytHbwhwT9VGGmbJce4it@dpg-d9d59jurnols73ct1qvg-a.oregon-postgres.render.com/financash_db_6ge7")
+DATABASE_URL = os.getenv("DATABASE_URL", "")
 MAX_BACKUPS = int(os.getenv("MAX_BACKUPS", "30"))
 GOOGLE_DRIVE_FOLDER = os.getenv("GOOGLE_DRIVE_FOLDER", "financoop_backups")
 
 # Crear carpeta de backups si no existe
 Path(BACKUP_DIR).mkdir(parents=True, exist_ok=True)
+
+# Log de configuración
+logger.info(f"📁 BACKUP_DIR: {BACKUP_DIR}")
+logger.info(f"🔍 DATABASE_URL: {'✅ Configurada' if DATABASE_URL else '❌ NO CONFIGURADA'}")
+logger.info(f"📁 GOOGLE_DRIVE_FOLDER: {GOOGLE_DRIVE_FOLDER}")
 
 # ============================================================
 # AUTENTICACIÓN CON GOOGLE DRIVE
@@ -122,6 +127,28 @@ def buscar_o_crear_carpeta(drive):
         return None
 
 # ============================================================
+# PARSEAR URL DE BASE DE DATOS
+# ============================================================
+
+def parsear_db_url(url):
+    """
+    Parsea una URL de PostgreSQL y devuelve sus componentes
+    Soporta formatos con y sin puerto
+    """
+    # Intentar con puerto
+    match = re.match(r"postgresql://([^:]+):([^@]+)@([^:]+):(\d+)/(.+)", url)
+    if match:
+        return match.groups()
+    
+    # Intentar sin puerto (asumir 5432)
+    match = re.match(r"postgresql://([^:]+):([^@]+)@([^/]+)/(.+)", url)
+    if match:
+        user, password, host, dbname = match.groups()
+        return (user, password, host, "5432", dbname)
+    
+    return None
+
+# ============================================================
 # FUNCIÓN PRINCIPAL: CREAR BACKUP
 # ============================================================
 
@@ -130,6 +157,11 @@ def crear_backup():
     Crea un backup completo de la base de datos y lo sube a Google Drive
     """
     try:
+        # Verificar DATABASE_URL
+        if not DATABASE_URL:
+            logger.error("❌ DATABASE_URL no está configurada en el entorno")
+            return False
+        
         drive = autenticar_google_drive()
         if not drive:
             logger.error("❌ No se pudo autenticar con Google Drive")
@@ -141,12 +173,15 @@ def crear_backup():
         
         logger.info(f"📦 Iniciando backup: {backup_sql}")
         
-        match = re.match(r"postgresql://([^:]+):([^@]+)@([^:]+):(\d+)/(.+)", DATABASE_URL)
-        if not match:
-            logger.error("❌ URL de base de datos no válida")
+        # Parsear URL
+        parsed = parsear_db_url(DATABASE_URL)
+        if not parsed:
+            logger.error(f"❌ URL de base de datos no válida: {DATABASE_URL}")
             return False
         
-        user, password, host, port, dbname = match.groups()
+        user, password, host, port, dbname = parsed
+        logger.info(f"📊 Conectando a: {host}:{port}/{dbname} como {user}")
+        
         env = os.environ.copy()
         env["PGPASSWORD"] = password
         
@@ -224,22 +259,23 @@ def restaurar_backup(backup_file: str):
     Restaura un backup desde un archivo en Google Drive
     """
     try:
+        if not DATABASE_URL:
+            logger.error("❌ DATABASE_URL no está configurada en el entorno")
+            return False
+        
         logger.info(f"🔄 Iniciando restauración: {backup_file}")
         
-        # 1. Verificar que el archivo existe
         if not os.path.exists(backup_file):
             logger.error(f"❌ Archivo no encontrado: {backup_file}")
             return False
         
-        # 2. Parsear URL de la base de datos
-        match = re.match(r"postgresql://([^:]+):([^@]+)@([^:]+):(\d+)/(.+)", DATABASE_URL)
-        if not match:
-            logger.error("❌ URL de base de datos no válida")
+        parsed = parsear_db_url(DATABASE_URL)
+        if not parsed:
+            logger.error(f"❌ URL de base de datos no válida: {DATABASE_URL}")
             return False
         
-        user, password, host, port, dbname = match.groups()
+        user, password, host, port, dbname = parsed
         
-        # 3. Descomprimir si es .zip
         sql_file = backup_file
         if backup_file.endswith('.zip'):
             with zipfile.ZipFile(backup_file, 'r') as zipf:
@@ -248,20 +284,10 @@ def restaurar_backup(backup_file: str):
                 sql_file = os.path.join(BACKUP_DIR, sql_name)
                 logger.info(f"📦 Archivo descomprimido: {sql_file}")
         
-        # 4. Configurar variable de entorno para la contraseña
         env = os.environ.copy()
         env["PGPASSWORD"] = password
         
-        # 5. Ejecutar psql para restaurar
-        cmd = [
-            "psql",
-            "-h", host,
-            "-p", port,
-            "-U", user,
-            "-d", dbname,
-            "-f", sql_file
-        ]
-        
+        cmd = ["psql", "-h", host, "-p", port, "-U", user, "-d", dbname, "-f", sql_file]
         logger.info(f"🔄 Ejecutando: {' '.join(cmd)}")
         
         result = subprocess.run(cmd, env=env, capture_output=True, text=True)
@@ -272,7 +298,6 @@ def restaurar_backup(backup_file: str):
         
         logger.info(f"✅ Backup restaurado exitosamente: {backup_file}")
         
-        # 6. Limpiar archivo SQL extraído (si era zip)
         if backup_file.endswith('.zip') and os.path.exists(sql_file):
             os.remove(sql_file)
             logger.info(f"🗑️ Archivo SQL temporal eliminado: {sql_file}")
