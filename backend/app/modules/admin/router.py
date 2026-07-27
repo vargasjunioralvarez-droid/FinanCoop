@@ -11,7 +11,7 @@ from app.modules.users.models import Usuario, Tienda, Cliente
 from app.modules.loans.models import Financiamiento
 from app.modules.payments.models import Pago
 from app.core.security import get_current_admin, hash_password
-from app.core.audit import audit, registrar_auditoria  # ✅ NUEVO
+from app.core.audit import audit, registrar_auditoria
 import os
 from app.core.backup import crear_backup, listar_backups, restaurar_backup
 
@@ -86,7 +86,7 @@ def listar_tiendas(db: Session = Depends(get_db), current_user = Depends(get_cur
     return [{"id": t.id, "nombre": t.nombre, "codigo": t.codigo, "direccion": t.direccion, "telefono": t.telefono, "activo": t.activo, "total_clientes": db.query(Cliente).filter(Cliente.tienda_id == t.id).count(), "total_creditos": db.query(Financiamiento).filter(Financiamiento.tienda_id == t.id).count(), "creado_en": t.creado_en.isoformat() if t.creado_en else None} for t in tiendas]
 
 @router.post("/tiendas")
-@audit(accion="CREAR_TIENDA", tabla="tiendas")  # ✅ NUEVO
+@audit(accion="CREAR_TIENDA", tabla="tiendas")
 def crear_tienda(data: TiendaCreate, db: Session = Depends(get_db), current_user = Depends(get_current_admin)):
     if current_user.rol != "admin_central":
         raise HTTPException(status_code=403, detail="Solo el administrador central puede crear tiendas")
@@ -97,7 +97,6 @@ def crear_tienda(data: TiendaCreate, db: Session = Depends(get_db), current_user
     db.add(tienda); db.commit(); db.refresh(tienda)
     logger.info(f"✅ Tienda creada: {tienda.nombre} ({tienda.codigo})")
     
-    # ✅ NUEVO: Registrar auditoría manual
     registrar_auditoria(
         db=db,
         usuario_id=current_user.id,
@@ -112,7 +111,7 @@ def crear_tienda(data: TiendaCreate, db: Session = Depends(get_db), current_user
     return {"success": True, "id": tienda.id, "nombre": tienda.nombre}
 
 @router.put("/tiendas/{id}")
-@audit(accion="ACTUALIZAR_TIENDA", tabla="tiendas")  # ✅ NUEVO
+@audit(accion="ACTUALIZAR_TIENDA", tabla="tiendas")
 def actualizar_tienda(id: int, data: TiendaUpdate, db: Session = Depends(get_db), current_user = Depends(get_current_admin)):
     if current_user.rol != "admin_central":
         raise HTTPException(status_code=403, detail="Solo el administrador central")
@@ -148,7 +147,7 @@ def actualizar_tienda(id: int, data: TiendaUpdate, db: Session = Depends(get_db)
     return {"success": True, "mensaje": "Tienda actualizada"}
 
 @router.delete("/tiendas/{id}")
-@audit(accion="ELIMINAR_TIENDA", tabla="tiendas")  # ✅ NUEVO
+@audit(accion="ELIMINAR_TIENDA", tabla="tiendas")
 def eliminar_tienda(id: int, db: Session = Depends(get_db), current_user = Depends(get_current_admin)):
     if current_user.rol != "admin_central":
         raise HTTPException(status_code=403, detail="Solo el administrador central puede eliminar tiendas")
@@ -197,7 +196,7 @@ def listar_usuarios(skip: int = Query(0, ge=0), limit: int = Query(50, ge=1, le=
 # CREAR USUARIO (SOLO admin_central)
 # ============================================================
 @router.post("/usuarios")
-@audit(accion="CREAR_USUARIO", tabla="usuarios")  # ✅ NUEVO
+@audit(accion="CREAR_USUARIO", tabla="usuarios")
 def crear_usuario(usuario_data: UsuarioCreate, db: Session = Depends(get_db), current_user = Depends(get_current_admin)):
     if current_user.rol != "admin_central":
         raise HTTPException(status_code=403, detail="Solo el administrador central puede crear usuarios")
@@ -232,7 +231,7 @@ def crear_usuario(usuario_data: UsuarioCreate, db: Session = Depends(get_db), cu
 # ACTUALIZAR USUARIO (SOLO admin_central)
 # ============================================================
 @router.put("/usuarios/{id}")
-@audit(accion="ACTUALIZAR_USUARIO", tabla="usuarios")  # ✅ NUEVO
+@audit(accion="ACTUALIZAR_USUARIO", tabla="usuarios")
 def actualizar_usuario(id: int, usuario_data: UsuarioUpdate, db: Session = Depends(get_db), current_user = Depends(get_current_admin)):
     if current_user.rol != "admin_central": raise HTTPException(status_code=403, detail="Solo el administrador central puede modificar usuarios")
     try:
@@ -271,7 +270,7 @@ def actualizar_usuario(id: int, usuario_data: UsuarioUpdate, db: Session = Depen
 # ELIMINAR USUARIO (SOLO admin_central)
 # ============================================================
 @router.delete("/usuarios/{id}")
-@audit(accion="ELIMINAR_USUARIO", tabla="usuarios")  # ✅ NUEVO
+@audit(accion="ELIMINAR_USUARIO", tabla="usuarios")
 def eliminar_usuario(id: int, db: Session = Depends(get_db), current_user = Depends(get_current_admin)):
     if current_user.rol != "admin_central": raise HTTPException(status_code=403, detail="Solo el administrador central puede eliminar usuarios")
     try:
@@ -326,7 +325,7 @@ def financiamientos_pendientes(db: Session = Depends(get_db), current_user = Dep
         return {"total": len(resultado), "financiamientos": resultado}
     except Exception as e: logger.error(f"❌ Error: {e}"); raise HTTPException(status_code=500, detail=str(e))
 
-    # ============================================================
+# ============================================================
 # BACKUPS
 # ============================================================
 
@@ -356,23 +355,115 @@ def listar_backups_disponibles(
     
     return {"backups": listar_backups()}
 
+# ============================================================
+# RESTAURAR BACKUP (VERSIÓN MEJORADA)
+# ============================================================
 @router.post("/backup/restaurar")
 def restaurar_backup_manual(
     archivo: str,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin)
 ):
-    """Restaurar backup (solo admin_central)"""
+    """
+    Restaurar backup (solo admin_central)
+    Versión mejorada con manejo de errores y timeout
+    """
     if current_user.rol != "admin_central":
         raise HTTPException(status_code=403, detail="Solo admin_central")
     
-    backup_path = os.path.join(os.getenv("BACKUP_DIR", "./backups"), archivo)
-    resultado = restaurar_backup(backup_path)
+    try:
+        backup_dir = os.getenv("BACKUP_DIR", "./backups")
+        backup_path = os.path.join(backup_dir, archivo)
+        
+        # Verificar que el archivo existe
+        if not os.path.exists(backup_path):
+            raise HTTPException(status_code=404, detail="Archivo no encontrado")
+        
+        # Verificar que es un ZIP
+        if not archivo.endswith('.zip'):
+            raise HTTPException(status_code=400, detail="Solo se permiten archivos ZIP")
+        
+        logger.info(f"🔄 Iniciando restauración manual: {archivo}")
+        
+        # Ejecutar restauración con timeout
+        resultado = restaurar_backup(backup_path)
+        
+        if resultado:
+            # Limpiar conexiones inactivas después de restaurar
+            try:
+                from sqlalchemy import text
+                db.execute(text("""
+                    SELECT pg_terminate_backend(pid) 
+                    FROM pg_stat_activity 
+                    WHERE datname = current_database() 
+                    AND pid <> pg_backend_pid() 
+                    AND state = 'idle'
+                """))
+                db.commit()
+                logger.info("🧹 Conexiones inactivas limpiadas después de restauración")
+            except Exception as e:
+                logger.warning(f"⚠️ No se pudieron limpiar conexiones: {e}")
+            
+            return {"success": True, "mensaje": f"Backup {archivo} restaurado correctamente"}
+        else:
+            raise HTTPException(status_code=500, detail="Error restaurando backup")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error en restauración manual: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ============================================================
+# LIMPIAR CONEXIONES (NUEVO ENDPOINT)
+# ============================================================
+@router.post("/backup/limpiar-conexiones")
+def limpiar_conexiones(
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_admin)
+):
+    """
+    Limpiar conexiones inactivas (solo admin_central)
+    """
+    if current_user.rol != "admin_central":
+        raise HTTPException(status_code=403, detail="Solo admin_central")
     
-    if resultado:
-        return {"success": True, "mensaje": f"Backup {archivo} restaurado"}
-    else:
-        raise HTTPException(status_code=500, detail="Error restaurando backup")
+    try:
+        from sqlalchemy import text
+        
+        # Cerrar conexiones inactivas
+        result = db.execute(text("""
+            SELECT pg_terminate_backend(pid) 
+            FROM pg_stat_activity 
+            WHERE datname = current_database() 
+            AND pid <> pg_backend_pid() 
+            AND state = 'idle'
+        """))
+        db.commit()
+        
+        # Cerrar conexiones activas que lleven más de 5 minutos
+        result2 = db.execute(text("""
+            SELECT pg_terminate_backend(pid) 
+            FROM pg_stat_activity 
+            WHERE datname = current_database() 
+            AND pid <> pg_backend_pid() 
+            AND state = 'active'
+            AND now() - query_start > interval '5 minutes'
+        """))
+        db.commit()
+        
+        logger.info(f"🧹 Conexiones limpiadas: idle={result.rowcount}, long_running={result2.rowcount}")
+        
+        return {
+            "success": True, 
+            "mensaje": "Conexiones inactivas limpiadas",
+            "idle_terminadas": result.rowcount,
+            "long_running_terminadas": result2.rowcount
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Error limpiando conexiones: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ============================================================
 # REPORTES
@@ -381,11 +472,27 @@ def restaurar_backup_manual(
 def reportes(db: Session = Depends(get_db), current_user = Depends(get_current_admin)):
     try:
         tienda_id = None if current_user.rol == "admin_central" else current_user.tienda_id
-        q_clientes = db.query(Cliente); q_creditos = db.query(Financiamiento); q_pagos = db.query(Pago)
-        if tienda_id: q_clientes = q_clientes.filter(Cliente.tienda_id == tienda_id); q_creditos = q_creditos.filter(Financiamiento.tienda_id == tienda_id); q_pagos = q_pagos.join(Financiamiento).filter(Financiamiento.tienda_id == tienda_id)
-        return {"fecha_reporte": datetime.now(timezone.utc).isoformat(), "tienda": current_user.tienda.nombre if current_user.tienda else "Todas las tiendas", "clientes": {"total": q_clientes.count()}, "creditos": {"total": q_creditos.count(), "activos": q_creditos.filter(Financiamiento.estado == "activo").count(), "completados": q_creditos.filter(Financiamiento.estado == "completado").count()}, "pagos": {"pendientes": q_pagos.filter(Pago.estado == "pendiente").count(), "conciliados": q_pagos.filter(Pago.estado == "conciliado").count()}}
-    except Exception as e: logger.error(f"❌ Error generando reportes: {e}"); raise HTTPException(status_code=500, detail=str(e))
+        q_clientes = db.query(Cliente)
+        q_creditos = db.query(Financiamiento)
+        q_pagos = db.query(Pago)
+        if tienda_id:
+            q_clientes = q_clientes.filter(Cliente.tienda_id == tienda_id)
+            q_creditos = q_creditos.filter(Financiamiento.tienda_id == tienda_id)
+            q_pagos = q_pagos.join(Financiamiento).filter(Financiamiento.tienda_id == tienda_id)
+        return {
+            "fecha_reporte": datetime.now(timezone.utc).isoformat(),
+            "tienda": current_user.tienda.nombre if current_user.tienda else "Todas las tiendas",
+            "clientes": {"total": q_clientes.count()},
+            "creditos": {"total": q_creditos.count(), "activos": q_creditos.filter(Financiamiento.estado == "activo").count(), "completados": q_creditos.filter(Financiamiento.estado == "completado").count()},
+            "pagos": {"pendientes": q_pagos.filter(Pago.estado == "pendiente").count(), "conciliados": q_pagos.filter(Pago.estado == "conciliado").count()}
+        }
+    except Exception as e:
+        logger.error(f"❌ Error generando reportes: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
+# ============================================================
+# DESCARGAR BACKUP
+# ============================================================
 @router.get("/backup/descargar")
 def descargar_backup(
     archivo: str,
@@ -416,8 +523,19 @@ def descargar_backup(
     if not archivo.endswith('.zip'):
         raise HTTPException(status_code=400, detail="Solo se permiten archivos ZIP")
     
+    # Verificar tamaño
+    file_size = os.path.getsize(backup_path)
+    if file_size == 0:
+        raise HTTPException(status_code=400, detail="El archivo está vacío")
+    
+    logger.info(f"📤 Descargando backup: {archivo} ({file_size} bytes)")
+    
     return FileResponse(
         backup_path,
         media_type="application/zip",
-        filename=archivo
+        filename=archivo,
+        headers={
+            "Content-Disposition": f"attachment; filename={archivo}",
+            "Content-Length": str(file_size)
+        }
     )

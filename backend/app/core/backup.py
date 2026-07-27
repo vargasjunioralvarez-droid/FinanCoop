@@ -373,12 +373,13 @@ def listar_backups():
         return []
 
 # ============================================================
-# RESTAURAR BACKUP
+# RESTAURAR BACKUP (VERSIÓN MEJORADA)
 # ============================================================
 
 def restaurar_backup(backup_file: str):
     """
     Restaura un backup desde un archivo local
+    Versión mejorada con timeout y uso de URL completa
     """
     try:
         if not DATABASE_URL:
@@ -391,13 +392,9 @@ def restaurar_backup(backup_file: str):
             logger.error(f"❌ Archivo no encontrado: {backup_file}")
             return False
         
-        parsed = parsear_db_url(DATABASE_URL)
-        if not parsed:
-            logger.error(f"❌ URL de base de datos no válida: {DATABASE_URL}")
-            return False
-        
-        user, password, host, port, dbname = parsed
-        
+        # ============================================================
+        # DESCOMPRIMIR SI ES ZIP
+        # ============================================================
         sql_file = backup_file
         if backup_file.endswith('.zip'):
             with zipfile.ZipFile(backup_file, 'r') as zipf:
@@ -411,13 +408,30 @@ def restaurar_backup(backup_file: str):
             logger.error(f"❌ Archivo SQL no encontrado: {sql_file}")
             return False
         
+        # ============================================================
+        # USAR LA URL COMPLETA (más estable)
+        # ============================================================
         env = os.environ.copy()
-        env["PGPASSWORD"] = password
         
-        cmd = ["psql", "-h", host, "-p", port, "-U", user, "-d", dbname, "-f", sql_file]
+        # Usar la URL completa en lugar de parámetros separados
+        cmd = [
+            "psql",
+            DATABASE_URL,
+            "-f", sql_file,
+            "--quiet",
+            "--set", "ON_ERROR_STOP=on"
+        ]
+        
         logger.info(f"🔄 Ejecutando: {' '.join(cmd)}")
         
-        result = subprocess.run(cmd, env=env, capture_output=True, text=True)
+        # Ejecutar con timeout de 5 minutos para evitar que se cuelgue
+        result = subprocess.run(
+            cmd, 
+            env=env, 
+            capture_output=True, 
+            text=True,
+            timeout=300  # 5 minutos máximo
+        )
         
         if result.returncode != 0:
             logger.error(f"❌ Error restaurando: {result.stderr}")
@@ -425,12 +439,29 @@ def restaurar_backup(backup_file: str):
         
         logger.info(f"✅ Backup restaurado exitosamente: {backup_file}")
         
+        # ============================================================
+        # LIMPIAR ARCHIVOS TEMPORALES
+        # ============================================================
         if backup_file.endswith('.zip') and os.path.exists(sql_file):
             os.remove(sql_file)
             logger.info(f"🗑️ Archivo SQL temporal eliminado: {sql_file}")
         
+        # ============================================================
+        # FORZAR CIERRE DE CONEXIONES
+        # ============================================================
+        try:
+            import psycopg2
+            conn = psycopg2.connect(DATABASE_URL)
+            conn.close()
+            logger.info("🔌 Conexión temporal cerrada")
+        except Exception as e:
+            logger.warning(f"⚠️ No se pudo cerrar conexión temporal: {e}")
+        
         return True
         
+    except subprocess.TimeoutExpired:
+        logger.error("❌ La restauración excedió el tiempo límite (5 minutos)")
+        return False
     except Exception as e:
         logger.error(f"❌ Error restaurando backup: {e}")
         return False

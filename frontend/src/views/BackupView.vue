@@ -183,24 +183,44 @@ const restaurarBackup = (nombre) => {
 const confirmarRestauracion = async () => {
   cargando.value = true
   dialogConfirmacion.value = false
+  
+  // Mostrar mensaje de espera
+  mensaje.value = '⏳ Restaurando backup... Esto puede tomar varios minutos. Por favor, espera.'
+  tipoMensaje.value = 'info'
+  
   try {
     const response = await api.post('/admin/backup/restaurar', null, {
-      params: { archivo: backupSeleccionado.value }
+      params: { archivo: backupSeleccionado.value },
+      timeout: 600000 // 10 minutos máximo
     })
+    
     if (response.success) {
       mensaje.value = `✅ Backup ${backupSeleccionado.value} restaurado correctamente`
       tipoMensaje.value = 'success'
+      
+      // Limpiar conexiones después de restaurar
+      await api.post('/admin/backup/limpiar-conexiones')
+      
+      // Recargar después de 2 segundos
+      setTimeout(() => {
+        location.reload()
+      }, 2000)
     }
   } catch (error) {
     console.error('Error restaurando backup:', error)
-    mensaje.value = '❌ Error restaurando backup'
+    mensaje.value = '❌ Error restaurando backup. Revisa los logs.'
     tipoMensaje.value = 'error'
+    
+    // Intentar limpiar conexiones incluso si falló
+    try {
+      await api.post('/admin/backup/limpiar-conexiones')
+    } catch (e) {
+      console.error('Error limpiando conexiones:', e)
+    }
   } finally {
     cargando.value = false
-    backupSeleccionado.value = ''
   }
 }
-
 const descargarBackup = async (nombre) => {
   try {
     const token = localStorage.getItem('access_token')
