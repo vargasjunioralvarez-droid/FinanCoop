@@ -1,17 +1,18 @@
 """
 Sistema de Backups Automáticos con Google Drive
+Usa google-api-python-client directamente (sin pydrive2)
 """
 
 import os
 import subprocess
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 import zipfile
 import re
-import json
-from pydrive2.auth import GoogleAuth
-from pydrive2.drive import GoogleDrive
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +42,6 @@ def autenticar_google_drive():
     Autentica con Google Drive usando credenciales de cuenta de servicio
     """
     try:
-        # Obtener credenciales desde variable de entorno
         creds_json = os.getenv("GOOGLE_CREDENTIALS")
         if not creds_json:
             logger.error("❌ GOOGLE_CREDENTIALS no está configurada")
@@ -52,24 +52,20 @@ def autenticar_google_drive():
         with open(creds_file, "w") as f:
             f.write(creds_json)
         
-        gauth = GoogleAuth()
-        gauth.LoadCredentialsFile(creds_file)
+        # Autenticar con Google
+        credentials = service_account.Credentials.from_service_account_file(
+            creds_file,
+            scopes=['https://www.googleapis.com/auth/drive.file']
+        )
         
-        if gauth.credentials is None:
-            gauth.ServiceAuth()
-            gauth.SaveCredentialsFile(creds_file)
-        elif gauth.access_token_expired:
-            gauth.Refresh()
-        else:
-            gauth.Authorize()
-        
-        drive = GoogleDrive(gauth)
-        logger.info("✅ Autenticación con Google Drive exitosa")
+        drive_service = build('drive', 'v3', credentials=credentials)
         
         # Limpiar archivo temporal
         os.remove(creds_file)
         
-        return drive
+        logger.info("✅ Autenticación con Google Drive exitosa")
+        return drive_service
+        
     except Exception as e:
         logger.error(f"❌ Error autenticando con Google Drive: {e}")
         return None
@@ -78,50 +74,65 @@ def autenticar_google_drive():
 # SUBIR A GOOGLE DRIVE
 # ============================================================
 
-def subir_a_google_drive(drive, archivo_zip):
+def subir_a_google_drive(drive_service, archivo_zip):
     """
     Sube un archivo a Google Drive
     """
     try:
-        folder_id = buscar_o_crear_carpeta(drive)
+        folder_id = buscar_o_crear_carpeta(drive_service)
         if not folder_id:
             return False
         
-        file_drive = drive.CreateFile({
-            'title': os.path.basename(archivo_zip),
-            'parents': [{'id': folder_id}],
-            'mimeType': 'application/zip'
-        })
-        file_drive.SetContentFile(archivo_zip)
-        file_drive.Upload()
+        file_metadata = {
+            'name': os.path.basename(archivo_zip),
+            'parents': [folder_id]
+        }
+        
+        media = MediaFileUpload(archivo_zip, mimetype='application/zip')
+        
+        file = drive_service.files().create(
+            body=file_metadata,
+            media_body=media,
+            fields='id'
+        ).execute()
         
         logger.info(f"📤 Backup subido a Google Drive: {os.path.basename(archivo_zip)}")
         return True
+        
     except Exception as e:
         logger.error(f"❌ Error subiendo a Google Drive: {e}")
         return False
 
-def buscar_o_crear_carpeta(drive):
+def buscar_o_crear_carpeta(drive_service):
     """
     Busca o crea la carpeta de backups en Google Drive
     """
     try:
-        file_list = drive.ListFile({
-            'q': f"title='{GOOGLE_DRIVE_FOLDER}' and mimeType='application/vnd.google-apps.folder' and trashed=false"
-        }).GetList()
+        # Buscar carpeta existente
+        results = drive_service.files().list(
+            q=f"name='{GOOGLE_DRIVE_FOLDER}' and mimeType='application/vnd.google-apps.folder' and trashed=false",
+            spaces='drive',
+            fields='files(id, name)'
+        ).execute()
         
-        if file_list:
-            folder_id = file_list[0]['id']
+        files = results.get('files', [])
+        
+        if files:
+            folder_id = files[0]['id']
             logger.info(f"📁 Carpeta encontrada: {GOOGLE_DRIVE_FOLDER}")
             return folder_id
         
-        folder = drive.CreateFile({
-            'title': GOOGLE_DRIVE_FOLDER,
+        # Crear carpeta si no existe
+        file_metadata = {
+            'name': GOOGLE_DRIVE_FOLDER,
             'mimeType': 'application/vnd.google-apps.folder'
-        })
-        folder.Upload()
+        }
+        file = drive_service.files().create(body=file_metadata, fields='id').execute()
+        folder_id = file.get('id')
+        
         logger.info(f"📁 Carpeta creada: {GOOGLE_DRIVE_FOLDER}")
-        return folder['id']
+        return folder_id
+        
     except Exception as e:
         logger.error(f"❌ Error buscando/creando carpeta: {e}")
         return None
@@ -133,14 +144,11 @@ def buscar_o_crear_carpeta(drive):
 def parsear_db_url(url):
     """
     Parsea una URL de PostgreSQL y devuelve sus componentes
-    Soporta formatos con y sin puerto
     """
-    # Intentar con puerto
     match = re.match(r"postgresql://([^:]+):([^@]+)@([^:]+):(\d+)/(.+)", url)
     if match:
         return match.groups()
     
-    # Intentar sin puerto (asumir 5432)
     match = re.match(r"postgresql://([^:]+):([^@]+)@([^/]+)/(.+)", url)
     if match:
         user, password, host, dbname = match.groups()
@@ -157,13 +165,12 @@ def crear_backup():
     Crea un backup completo de la base de datos y lo sube a Google Drive
     """
     try:
-        # Verificar DATABASE_URL
         if not DATABASE_URL:
             logger.error("❌ DATABASE_URL no está configurada en el entorno")
             return False
         
-        drive = autenticar_google_drive()
-        if not drive:
+        drive_service = autenticar_google_drive()
+        if not drive_service:
             logger.error("❌ No se pudo autenticar con Google Drive")
             return False
         
@@ -173,7 +180,6 @@ def crear_backup():
         
         logger.info(f"📦 Iniciando backup: {backup_sql}")
         
-        # Parsear URL
         parsed = parsear_db_url(DATABASE_URL)
         if not parsed:
             logger.error(f"❌ URL de base de datos no válida: {DATABASE_URL}")
@@ -202,7 +208,7 @@ def crear_backup():
         
         os.remove(backup_sql)
         
-        if subir_a_google_drive(drive, backup_zip):
+        if subir_a_google_drive(drive_service, backup_zip):
             os.remove(backup_zip)
             logger.info("🗑️ Archivo local eliminado después de subir a Google Drive")
             logger.info("✅ Backup completado y guardado en Google Drive")
@@ -224,27 +230,32 @@ def listar_backups():
     Lista los backups disponibles en Google Drive
     """
     try:
-        drive = autenticar_google_drive()
-        if not drive:
+        drive_service = autenticar_google_drive()
+        if not drive_service:
             return []
         
-        folder_id = buscar_o_crear_carpeta(drive)
+        folder_id = buscar_o_crear_carpeta(drive_service)
         if not folder_id:
             return []
         
-        file_list = drive.ListFile({
-            'q': f"'{folder_id}' in parents and trashed=false"
-        }).GetList()
+        results = drive_service.files().list(
+            q=f"'{folder_id}' in parents and trashed=false",
+            spaces='drive',
+            fields='files(id, name, size, createdTime)',
+            orderBy='createdTime desc'
+        ).execute()
+        
+        files = results.get('files', [])
         
         backups = []
-        for file in file_list:
+        for file in files:
             backups.append({
-                "nombre": file['title'],
-                "tamaño_bytes": int(file['fileSize']),
-                "tamaño_mb": round(int(file['fileSize']) / (1024 * 1024), 2),
-                "fecha": file['createdDate']
+                "nombre": file['name'],
+                "tamaño_bytes": int(file.get('size', 0)),
+                "tamaño_mb": round(int(file.get('size', 0)) / (1024 * 1024), 2),
+                "fecha": file['createdTime']
             })
-        return sorted(backups, key=lambda x: x["fecha"], reverse=True)
+        return backups
         
     except Exception as e:
         logger.error(f"❌ Error listando backups: {e}")
@@ -256,7 +267,7 @@ def listar_backups():
 
 def restaurar_backup(backup_file: str):
     """
-    Restaura un backup desde un archivo en Google Drive
+    Restaura un backup desde un archivo
     """
     try:
         if not DATABASE_URL:
