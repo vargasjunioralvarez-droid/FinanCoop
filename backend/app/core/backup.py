@@ -15,6 +15,9 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
+# Importar init_db desde main
+from app.main import init_db
+
 logger = logging.getLogger(__name__)
 
 # ============================================================
@@ -407,13 +410,13 @@ def listar_backups():
         return []
 
 # ============================================================
-# RESTAURAR BACKUP (VERSIÓN MEJORADA CON LIMPIEZA PREVIA)
+# RESTAURAR BACKUP (VERSIÓN MEJORADA CON INICIALIZACIÓN)
 # ============================================================
 
 def restaurar_backup(backup_file: str):
     """
     Restaura un backup desde un archivo local
-    Versión mejorada con limpieza previa de la base de datos
+    Versión mejorada con limpieza previa, timeout e inicialización de datos
     """
     try:
         if not DATABASE_URL:
@@ -521,6 +524,21 @@ def restaurar_backup(backup_file: str):
         logger.info(f"✅ Backup restaurado exitosamente: {backup_file}")
         
         # ============================================================
+        # INICIALIZAR DATOS MÍNIMOS DESPUÉS DE RESTAURAR
+        # ============================================================
+        logger.info("🔄 Inicializando datos de configuración mínimos...")
+        try:
+            # Llamar a la función de inicialización de la base de datos
+            # que crea registros como la tasa de cambio y los niveles.
+            init_db()
+            logger.info("✅ Datos de configuración inicializados correctamente.")
+        except Exception as e:
+            logger.error(f"❌ Error crítico inicializando datos después de restauración: {e}")
+            # La restauración fue exitosa pero la inicialización falló
+            # Devolvemos False para que el endpoint sepa que hubo un problema
+            return False
+        
+        # ============================================================
         # LIMPIAR ARCHIVOS TEMPORALES
         # ============================================================
         if backup_file.endswith('.zip') and os.path.exists(sql_file):
@@ -538,6 +556,7 @@ def restaurar_backup(backup_file: str):
         except Exception as e:
             logger.warning(f"⚠️ No se pudo cerrar conexión temporal: {e}")
         
+        logger.info(f"✅ Proceso de restauración y post-inicialización completado.")
         return True
         
     except subprocess.TimeoutExpired:
