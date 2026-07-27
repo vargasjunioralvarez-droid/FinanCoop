@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 # ============================================================
 
 BACKUP_DIR = os.getenv("BACKUP_DIR", "./backups")
-DATABASE_URL = os.getenv("DATABASE_URL", "")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://financash_user:nd4tC0TcZk1hytHbwhwT9VGGmbJce4it@dpg-d9d59jurnols73ct1qvg-a.oregon-postgres.render.com/financash_db_6ge7")
 MAX_BACKUPS = int(os.getenv("MAX_BACKUPS", "30"))
 GOOGLE_DRIVE_FOLDER = os.getenv("GOOGLE_DRIVE_FOLDER", "financoop_backups")
 
