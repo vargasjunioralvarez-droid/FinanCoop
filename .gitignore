@@ -1,5 +1,4 @@
-﻿@'
-# ============================================
+﻿# ============================================
 # PYTHON (Backend)
 # ============================================
 __pycache__/
@@ -15,8 +14,7 @@ venv.bak/
 backend/venv/
 backend/__pycache__/
 *.pyc
-backend/*.db
-backend/financash.db
+*.db
 
 # ============================================
 # NODE.JS (Frontend/Mobile)
@@ -35,7 +33,6 @@ yarn-error.log*
 # CAPACITOR - ANDROID
 # Ignorar SOLO archivos generados, NO configuración
 # ============================================
-# Build outputs
 mobile/android/app/build/
 mobile/android/build/
 mobile/android/capacitor-cordova-android-plugins/build/
@@ -51,6 +48,10 @@ mobile/android/.idea/
 mobile/android/captures/
 mobile/android/externalNativeBuild/
 mobile/android/.cxx/
+# Android generated files (adicionales)
+mobile/android/.gitignore
+mobile/android/app/src/androidTest/
+mobile/android/app/src/test/
 
 # iOS
 mobile/ios/App/build/
@@ -71,15 +72,23 @@ mobile/ios/App/App.xcodeproj/project.xcworkspace/
 Thumbs.db
 
 # ============================================
-# ENV / SECRETS
+# ENV / SECRETS (CORREGIDO)
 # ============================================
 .env
-.env.local
-.env.*.local
+.env.*              # Cubre .env.local, .env.production, .env.staging, etc.
+!.env.example       # Si tienes un ejemplo, no lo ignores
+
+# Keystore y contraseñas
 key.properties
 *.keystore
 *.jks
 google-services.json
+
+# ============================================
+# DATOS SENSIBLES Y BACKUPS (NUEVO)
+# ============================================
+backend/backups/
+backend/uploads/comprobantes/
 
 # ============================================
 # TESTING
@@ -95,9 +104,3 @@ coverage/
 .cache/
 dev-dist/
 dist-ssr/
-'@ | Out-File -FilePath ".gitignore" -Encoding utf8
-# Android generated files
-mobile/android/.gitignore
-mobile/android/app/src/androidTest/
-mobile/android/app/src/test/
-mobile/android/dependencies.txt
