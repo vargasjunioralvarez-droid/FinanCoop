@@ -1,7 +1,7 @@
 services:
   # BACKEND - FastAPI
   - type: web
-    name: financash-backend
+    name: financoop-backend
     runtime: python
     rootDir: backend
     buildCommand: pip install -r requirements.txt
@@ -10,15 +10,23 @@ services:
       - key: DATABASE_URL
         sync: false
       - key: FRONTEND_URL
-        value: https://financash-frontend.onrender.com
-      - key: SECRET_KEY
+        value: https://financoop-frontend.onrender.com
+      - key: JWT_SECRET_KEY
         generateValue: true
       - key: PYTHON_VERSION
         value: 3.11.0
+      - key: DATA_ENCRYPTION_KEY
+        generateValue: true
+      - key: BACKUP_ENCRYPTION_KEY
+        generateValue: true
+      - key: BANCO_WEBHOOK_SECRET
+        generateValue: true
+      - key: REDIS_URL
+        sync: false
 
   # FRONTEND - Vue.js con Vue Router (history mode)
   - type: web
-    name: financash-frontend
+    name: financoop-frontend
     runtime: static
     rootDir: frontend
     buildCommand: npm install && npm run build
@@ -29,4 +37,4 @@ services:
         destination: /index.html
     envVars:
       - key: VITE_API_URL
-        value: https://financoop.onrender.com
+        value: https://financoop-backend.onrender.com

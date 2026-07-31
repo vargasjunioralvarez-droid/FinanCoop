@@ -27,13 +27,34 @@ MAX_CREDITOS_ACTIVOS = 3
 
 
 @router.post("")
-@audit(accion="CREAR_FINANCIAMIENTO", tabla="financiamientos")  # ✅ NUEVO
+@audit(accion="CREAR_FINANCIAMIENTO", tabla="financiamientos")
 def crear_financiamiento(
     f: FinanciamientoCreate, 
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
     try:
+        # 🔒 Verificar permisos según rol
+        if current_user.rol == "cliente":
+            # Un cliente solo puede crear financiamientos para sí mismo
+            if f.cliente_id != current_user.id:
+                raise HTTPException(
+                    status_code=403,
+                    detail="No puedes crear un financiamiento para otro cliente"
+                )
+        else:
+            # Cajero o admin: verificar que el cliente pertenezca a su tienda
+            if current_user.rol != "admin_central" and current_user.tienda_id:
+                cliente_verif = db.query(Cliente).filter(Cliente.id == f.cliente_id).first()
+                if not cliente_verif:
+                    raise HTTPException(status_code=404, detail="Cliente no encontrado")
+                if cliente_verif.tienda_id != current_user.tienda_id:
+                    raise HTTPException(
+                        status_code=403,
+                        detail="El cliente no pertenece a tu tienda"
+                    )
+
+        # Validaciones de negocio (código original)
         cliente = db.query(Cliente).filter(Cliente.id == f.cliente_id).first()
         if not cliente:
             raise HTTPException(status_code=404, detail="Cliente no encontrado")
@@ -117,7 +138,13 @@ def crear_financiamiento(
         db.add(fin); db.commit(); db.refresh(fin)
         
         for i in range(1, cuotas_aprobadas + 1):
-            cuota = Cuota(financiamiento_id=fin.id, numero=i, monto_base_bs=monto_cuota_bs, monto_total_bs=monto_cuota_bs, monto_base_usd=monto_cuota_usd_ref, monto_total_usd=monto_cuota_usd_ref, fecha_vencimiento=fecha_primera + timedelta(days=15 * (i - 1)), estado="pendiente")
+            cuota = Cuota(
+                financiamiento_id=fin.id, numero=i, monto_base_bs=monto_cuota_bs,
+                monto_total_bs=monto_cuota_bs, monto_base_usd=monto_cuota_usd_ref,
+                monto_total_usd=monto_cuota_usd_ref,
+                fecha_vencimiento=fecha_primera + timedelta(days=15 * (i - 1)),
+                estado="pendiente"
+            )
             db.add(cuota)
         db.commit()
         
@@ -146,8 +173,12 @@ def crear_financiamiento(
             "mensaje": f"Entrada: Bs {entrada_bs:,.2f}. {cuotas_aprobadas} cuotas de Bs {monto_cuota_bs:,.2f}",
             "advertencia": "Requiere aprobación adicional" if requiere_aprobacion else None
         }
-    except HTTPException: raise
-    except Exception as e: logger.error(f"❌ Error: {e}"); db.rollback(); raise HTTPException(status_code=500, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error: {e}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Error interno del servidor")
 
 
 @router.post("/{id}/aprobar")

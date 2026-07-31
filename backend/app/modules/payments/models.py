@@ -1,5 +1,5 @@
 # app/modules/payments/models.py
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Float, ForeignKey, Text
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Float, ForeignKey, Text, Numeric
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -28,17 +28,15 @@ class Pago(Base):
     __tablename__ = "pagos"
     
     id = Column(Integer, primary_key=True, index=True)
-    financiamiento_id = Column(Integer, ForeignKey("financiamientos.id"), nullable=False)
-    cuota_id = Column(Integer, ForeignKey("cuotas.id"), nullable=True)
+    financiamiento_id = Column(Integer, ForeignKey("financiamientos.id"), nullable=False, index=True)
+    cuota_id = Column(Integer, ForeignKey("cuotas.id"), nullable=True, index=True)
     
-    monto = Column(Float, nullable=False, default=0)
-    monto_usd = Column(Float, nullable=False, default=0)
     metodo = Column(String(50), nullable=False, default="efectivo")
     referencia = Column(String(100), nullable=True)
     
-    monto_reportado_bs = Column(Float, nullable=True)
-    monto_confirmado_bs = Column(Float, nullable=True)
-    monto_original_bs = Column(Float, nullable=True)
+    monto_reportado_bs = Column(Numeric(20, 2), nullable=True)
+    monto_confirmado_bs = Column(Numeric(20, 2), nullable=True)
+    monto_original_bs = Column(Numeric(20, 2), nullable=True)
     banco_origen = Column(String(100), nullable=True)
     telefono_pago = Column(String(20), nullable=True)
     cedula_pago = Column(String(20), nullable=True)

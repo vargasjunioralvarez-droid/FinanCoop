@@ -1,4 +1,3 @@
-# app/core/security.py
 """
 🔒 FinanCoop - Sistema de Autenticación Ultra-Seguro
 Soporte dual: Admin (Frontend Vue) + Cliente (App Móvil)
@@ -11,7 +10,7 @@ from jose import JWTError, jwt
 from jose.exceptions import ExpiredSignatureError
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, timezone
-from app.core.database import get_db  # <-- Actualizado: usar core
+from app.core.database import get_db
 from app.modules.users.models import Cliente, Usuario
 from app.modules.auth.models import TokenBlacklist
 import os
@@ -20,6 +19,7 @@ import logging
 import secrets
 import hashlib
 import hmac
+import redis
 from typing import Optional, Union
 
 # Configurar logger
@@ -29,23 +29,33 @@ logger = logging.getLogger(__name__)
 # 🛡️ CONFIGURACIÓN DE SEGURIDAD (ahora desde config central)
 # ──────────────────────────────────────────────────────────────
 
-# Importar config desde core
 from app.core.config import settings
 
-# Usar variables de config central
 SECRET_KEY = settings.JWT_SECRET_KEY
 ALGORITHM = settings.JWT_ALGORITHM
 ACCESS_TOKEN_EXPIRE_MINUTES = settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES
 REFRESH_TOKEN_EXPIRE_DAYS = settings.REFRESH_TOKEN_EXPIRE_DAYS
 
-# Configuración adicional (mantenemos tus valores)
 BCRYPT_ROUNDS = 12
 MAX_LOGIN_ATTEMPTS = 5
 LOGIN_LOCKOUT_MINUTES = 15
 
-# Redis (opcional - mantienes tu lógica)
-USE_REDIS = False  # Cambiar a True si configuras Redis
+# ──────────────────────────────────────────────────────────────
+# 🔴 REDIS (Rate Limiting compartido + Recuperación de PIN)
+# ──────────────────────────────────────────────────────────────
+
+REDIS_URL = os.getenv("REDIS_URL")
+USE_REDIS = REDIS_URL is not None
 redis_client = None
+
+if USE_REDIS:
+    try:
+        redis_client = redis.from_url(REDIS_URL)
+        redis_client.ping()
+        logger.info("✅ Redis conectado correctamente")
+    except Exception as e:
+        logger.warning(f"⚠️ No se pudo conectar a Redis: {e}. Usando memoria local.")
+        USE_REDIS = False
 
 # ──────────────────────────────────────────────────────────────
 # 🔑 OAUTH2 SCHEMES
@@ -71,7 +81,7 @@ def _generate_jti() -> str:
 
 def _check_rate_limit(identifier: str) -> bool:
     now = datetime.now(timezone.utc)
-    if USE_REDIS:
+    if USE_REDIS and redis_client:
         key = f"rate_limit:{identifier}"
         attempts = redis_client.get(key)
         if attempts and int(attempts) >= MAX_LOGIN_ATTEMPTS:
@@ -90,7 +100,7 @@ def _check_rate_limit(identifier: str) -> bool:
 
 def _record_failed_attempt(identifier: str):
     now = datetime.now(timezone.utc)
-    if USE_REDIS:
+    if USE_REDIS and redis_client:
         key = f"rate_limit:{identifier}"
         attempts = redis_client.incr(key)
         if attempts == 1:
@@ -106,7 +116,7 @@ def _record_failed_attempt(identifier: str):
                 _login_attempts[identifier] = (attempts, first_attempt, locked_until)
 
 def _record_successful_attempt(identifier: str):
-    if USE_REDIS:
+    if USE_REDIS and redis_client:
         redis_client.delete(f"rate_limit:{identifier}")
     else:
         if identifier in _login_attempts:
@@ -197,7 +207,6 @@ def get_current_user_optional(
     token: str = Depends(oauth2_scheme_optional), 
     db: Session = Depends(get_db)
 ):
-    """Retorna el usuario si hay token válido, o None si no hay sesión"""
     if not token:
         return None
     try:
@@ -264,11 +273,8 @@ def get_current_cliente(token: str = Depends(oauth2_scheme), db: Session = Depen
 # ──────────────────────────────────────────────────────────────
 
 def get_current_tienda(current_user = Depends(get_current_user)):
-    # Admin central ve todo
     if hasattr(current_user, 'rol') and current_user.rol == "admin_central":
-        return None  # Sin filtro = ve todo
-    
-    # Admin tienda y cajero SOLO ven su tienda
+        return None
     return getattr(current_user, 'tienda_id', None)
 
 # ──────────────────────────────────────────────────────────────
@@ -301,9 +307,3 @@ def blacklist_token(jti: str, exp: datetime, db: Session):
     blacklisted = TokenBlacklist(jti=jti, expira_en=exp)
     db.add(blacklisted)
     db.commit()
-
-# ──────────────────────────────────────────────────────────────
-# 🔥 MANTENER COMPATIBILIDAD CON CÓDIGO EXISTENTE
-# ──────────────────────────────────────────────────────────────
-# Para que `from app.auth import get_current_user` siga funcionando
-# No necesitamos hacer nada extra porque ya exportamos todo

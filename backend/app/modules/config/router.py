@@ -70,7 +70,7 @@ def obtener_tasa(db: Session = Depends(get_db)):
         }
     except Exception as e:
         logger.error(f"❌ Error obteniendo tasa: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Error interno del servidor")
 
 @router.post("/tasa-dolar")
 @audit(accion="ACTUALIZAR_TASA", tabla="tasa_dolar")  # ✅ NUEVO
@@ -141,7 +141,7 @@ def actualizar_tasa(
     except Exception as e:
         logger.error(f"❌ Error actualizando tasa: {e}")
         db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Error interno del servidor")
 
 @router.post("/tasa-dolar/bcv")
 @audit(accion="ACTUALIZAR_TASA_BCV", tabla="tasa_dolar")  # ✅ NUEVO
@@ -208,7 +208,7 @@ async def actualizar_tasa_bcv(db: Session = Depends(get_db), current_user = Depe
         raise
     except Exception as e:
         logger.error(f"❌ Error consultando BCV: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Error interno del servidor")
 
 # ============================================================
 # NIVELES DE FINANCIAMIENTO
@@ -260,7 +260,7 @@ def obtener_niveles(db: Session = Depends(get_db)):
         return {"niveles": niveles_ordenados}
     except Exception as e:
         logger.error(f"❌ Error obteniendo niveles: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Error interno del servidor")
 
 @router.put("/niveles/{nivel}")
 @audit(accion="ACTUALIZAR_NIVEL", tabla="niveles_config")  # ✅ NUEVO
@@ -325,7 +325,7 @@ def actualizar_nivel(
     except Exception as e:
         logger.error(f"❌ Error actualizando nivel: {e}")
         db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Error interno del servidor")
 
 @router.post("/niveles/reset")
 @audit(accion="RESET_NIVELES", tabla="niveles_config")  # ✅ NUEVO
@@ -372,7 +372,7 @@ def reset_niveles(
     except Exception as e:
         logger.error(f"❌ Error reseteando niveles: {e}")
         db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Error interno del servidor")
 
 # ============================================================
 # CONFIGURACIÓN DE PAGOS
@@ -402,7 +402,7 @@ def obtener_config_pago(db: Session = Depends(get_db)):
         raise
     except Exception as e:
         logger.error(f"❌ Error obteniendo config pago: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Error interno del servidor")
 
 @router.put("/pago")
 @audit(accion="ACTUALIZAR_CONFIG_PAGO", tabla="configuracion_pago")  # ✅ NUEVO
@@ -465,4 +465,4 @@ def actualizar_config_pago(
     except Exception as e:
         logger.error(f"❌ Error actualizando config pago: {e}")
         db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Error interno del servidor")

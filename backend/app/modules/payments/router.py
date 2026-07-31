@@ -17,55 +17,52 @@ from app.shared.utils import (
     enviar_notificacion_generica
 )
 from app.core.security import get_current_admin, get_current_user, get_current_tienda
-from app.core.audit import audit, registrar_auditoria  # ✅ NUEVO
+from app.core.audit import audit, registrar_auditoria
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/pagos", tags=["Pagos"])
 
 
 @router.post("/reportar")
-@audit(accion="REPORTAR_PAGO", tabla="pagos")  # ✅ NUEVO
-async def reportar_pago(request: Request, db: Session = Depends(get_db)):
-    """Reporta un pago realizado por el cliente. Puede ser cuota única, abono, adelantar o liquidar."""
+@audit(accion="REPORTAR_PAGO", tabla="pagos")
+async def reportar_pago(
+    pago_data: PagoReporte,  # ✅ FastAPI valida automáticamente
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """Reporta un pago realizado por el cliente. Requiere sesión activa."""
     try:
-        logger.info("📝 Reportar pago - INICIO")
-        
+        logger.info(f"📝 Reportar pago - Usuario: {getattr(current_user, 'username', current_user.id)}")
+
+        # Leer el body para obtener campos adicionales que no están en PagoReporte
         body = await request.body()
         try:
-            data = json.loads(body)
+            extra_data = json.loads(body)
         except json.JSONDecodeError:
             raise HTTPException(status_code=400, detail="JSON inválido en el cuerpo de la solicitud")
-
-        # Validar campos requeridos
-        campos_requeridos = ['cuota_id', 'monto_bs', 'metodo', 'referencia']
-        for campo in campos_requeridos:
-            if campo not in data or not str(data.get(campo, '')).strip():
-                raise HTTPException(status_code=422, detail=f"Campo requerido faltante: {campo}")
-
-        try:
-            pago_data = PagoReporte(
-                cuota_id=int(data['cuota_id']),
-                monto_bs=float(data['monto_bs']),
-                metodo=str(data['metodo']),
-                referencia=str(data['referencia']),
-                banco_origen=str(data.get('banco_origen', '')),
-                telefono_pago=str(data.get('telefono_pago', '')),
-                cedula_pago=str(data.get('cedula_pago', '')),
-                comprobante=str(data.get('comprobante', ''))
-            )
-        except (ValueError, TypeError) as e:
-            raise HTTPException(status_code=422, detail=f"Error de tipo en campos: {str(e)}")
 
         cuota = db.query(Cuota).filter(Cuota.id == pago_data.cuota_id).first()
         if not cuota:
             raise HTTPException(status_code=404, detail="Cuota no encontrada")
-        
+
+        financiamiento = db.query(Financiamiento).filter(Financiamiento.id == cuota.financiamiento_id).first()
+        if not financiamiento:
+            raise HTTPException(status_code=404, detail="Financiamiento no encontrado")
+
+        if current_user.rol == "cliente":
+            if financiamiento.cliente_id != current_user.id:
+                raise HTTPException(status_code=403, detail="No tienes permiso para reportar pagos de otro cliente")
+        else:
+            if current_user.rol != "admin_central" and current_user.tienda_id:
+                if financiamiento.tienda_id != current_user.tienda_id:
+                    raise HTTPException(status_code=403, detail="El financiamiento no pertenece a tu tienda")
+
         if cuota.estado == "pagada":
             raise HTTPException(status_code=400, detail="Esta cuota ya fue pagada")
 
-        # Verificar si ya existe un pago pendiente para esta cuota
         pago_existente = db.query(Pago).filter(
-            Pago.cuota_id == pago_data.cuota_id, 
+            Pago.cuota_id == pago_data.cuota_id,
             Pago.estado == "pendiente"
         ).first()
         if pago_existente:
@@ -74,10 +71,9 @@ async def reportar_pago(request: Request, db: Session = Depends(get_db)):
                 detail=f"Ya existe un pago pendiente para esta cuota (ID: {pago_existente.id})"
             )
 
-        # Soporte para múltiples cuotas
-        cuotas_incluidas_raw = data.get('cuotas_incluidas', [pago_data.cuota_id])
-        modo_pago = data.get('modo_pago', 'cuota')
-        monto_original = data.get('monto_original')
+        cuotas_incluidas_raw = extra_data.get('cuotas_incluidas', [pago_data.cuota_id])
+        modo_pago = extra_data.get('modo_pago', 'cuota')
+        monto_original = extra_data.get('monto_original')
 
         if isinstance(cuotas_incluidas_raw, str):
             try:
@@ -89,7 +85,6 @@ async def reportar_pago(request: Request, db: Session = Depends(get_db)):
 
         logger.info(f"📋 Modo de pago: {modo_pago}, Cuotas: {cuotas_incluidas}")
 
-        # Manejo especial para abono
         if modo_pago == 'abono':
             total_cuota = monto_original or cuota.monto_total_bs
             if pago_data.monto_bs >= total_cuota:
@@ -104,7 +99,6 @@ async def reportar_pago(request: Request, db: Session = Depends(get_db)):
                 referencia=pago_data.referencia,
                 metodo=pago_data.metodo,
                 monto_reportado_bs=pago_data.monto_bs,
-                monto=pago_data.monto_bs,
                 banco_origen=pago_data.banco_origen,
                 telefono_pago=pago_data.telefono_pago,
                 cedula_pago=pago_data.cedula_pago,
@@ -131,14 +125,12 @@ async def reportar_pago(request: Request, db: Session = Depends(get_db)):
                 "mensaje": f"Abono de Bs {pago_data.monto_bs:,.2f} reportado. Saldo pendiente: Bs {round(total_cuota - pago_data.monto_bs, 2):,.2f}"
             }
 
-        # Pago completo
         nuevo_pago = Pago(
             cuota_id=pago_data.cuota_id,
             financiamiento_id=cuota.financiamiento_id,
             referencia=pago_data.referencia,
             metodo=pago_data.metodo,
             monto_reportado_bs=pago_data.monto_bs,
-            monto=pago_data.monto_bs,
             banco_origen=pago_data.banco_origen,
             telefono_pago=pago_data.telefono_pago,
             cedula_pago=pago_data.cedula_pago,
@@ -151,7 +143,6 @@ async def reportar_pago(request: Request, db: Session = Depends(get_db)):
         db.add(nuevo_pago)
         cuota.estado = "conciliando"
 
-        # Crear pagos para cuotas adicionales (adelantar/liquidar)
         pagos_creados = 1
         for cid in cuotas_incluidas:
             if cid == pago_data.cuota_id:
@@ -159,6 +150,12 @@ async def reportar_pago(request: Request, db: Session = Depends(get_db)):
 
             cuota_extra = db.query(Cuota).filter(Cuota.id == cid).first()
             if cuota_extra and cuota_extra.estado == 'pendiente':
+                fin_extra = db.query(Financiamiento).filter(Financiamiento.id == cuota_extra.financiamiento_id).first()
+                if current_user.rol == "cliente" and fin_extra.cliente_id != current_user.id:
+                    continue
+                if current_user.rol != "admin_central" and current_user.tienda_id and fin_extra.tienda_id != current_user.tienda_id:
+                    continue
+
                 pago_extra = Pago(
                     cuota_id=cid,
                     financiamiento_id=cuota_extra.financiamiento_id,
@@ -182,7 +179,7 @@ async def reportar_pago(request: Request, db: Session = Depends(get_db)):
 
         db.commit()
         db.refresh(nuevo_pago)
-        
+
         logger.info(f"✅ Pago reportado ID: {nuevo_pago.id}, Cuotas afectadas: {pagos_creados}")
 
         return {
@@ -199,108 +196,100 @@ async def reportar_pago(request: Request, db: Session = Depends(get_db)):
     except Exception as e:
         logger.error(f"❌ Error reportando pago: {e}")
         db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Error interno del servidor")
 
 
 @router.get("/pendientes")
 def pagos_pendientes_conciliacion(
-    db: Session = Depends(get_db), 
+    db: Session = Depends(get_db),
     current_admin = Depends(get_current_admin),
     tienda_id: Optional[int] = Depends(get_current_tienda)
 ):
-    """Lista pagos pendientes de conciliación (solo admin, filtrado por tienda)."""
+    """Lista pagos pendientes de conciliación con una sola consulta optimizada."""
     try:
-        query = db.query(Pago).filter(Pago.estado == "pendiente")
-        
-        # ✅ FILTRAR POR TIENDA
+        # Obtener la tasa UNA SOLA VEZ
+        tasa = obtener_tasa_actual(db)
+
+        # Consulta base con JOINs para traer todo en una sola ida a la BD
+        query = db.query(Pago, Cuota, Financiamiento, Cliente).join(
+            Cuota, Pago.cuota_id == Cuota.id, isouter=True
+        ).join(
+            Financiamiento, Pago.financiamiento_id == Financiamiento.id
+        ).join(
+            Cliente, Financiamiento.cliente_id == Cliente.id
+        ).filter(Pago.estado == "pendiente")
+
+        # Filtrar por tienda si aplica
         if tienda_id:
-            query = query.join(Financiamiento, Pago.financiamiento_id == Financiamiento.id)
             query = query.filter(Financiamiento.tienda_id == tienda_id)
-        
-        pagos = query.order_by(Pago.fecha_reporte.desc()).all()
-        resultado = []
-        
-        for p in pagos:
-            cuota = db.query(Cuota).filter(Cuota.id == p.cuota_id).first() if p.cuota_id else None
-            cliente = None
-            fin = db.query(Financiamiento).filter(Financiamiento.id == p.financiamiento_id).first()
-            if fin:
-                cliente = db.query(Cliente).filter(Cliente.id == fin.cliente_id).first()
-            
-            tasa = obtener_tasa_actual(db)
-            monto_bs = p.monto_reportado_bs or p.monto or 0
+
+        resultados = query.order_by(Pago.fecha_reporte.desc()).all()
+
+        pagos_lista = []
+        for pago, cuota, fin, cliente in resultados:
+            monto_bs = p.monto_reportado_bs or 0
             monto_usd = round(monto_bs / tasa, 2) if tasa > 0 else 0
 
             cuotas_incl = []
             try:
-                if p.cuotas_incluidas:
-                    cuotas_incl = json.loads(p.cuotas_incluidas)
+                if pago.cuotas_incluidas:
+                    cuotas_incl = json.loads(pago.cuotas_incluidas)
             except:
                 pass
 
-            resultado.append({
-                "id": p.id,
-                "fecha_reporte": p.fecha_reporte.isoformat() if p.fecha_reporte else None,
+            pagos_lista.append({
+                "id": pago.id,
+                "fecha_reporte": pago.fecha_reporte.isoformat() if pago.fecha_reporte else None,
                 "cliente_nombre": cliente.nombre if cliente else "Desconocido",
                 "cliente_cedula": cliente.cedula if cliente else "",
                 "cuota_numero": cuota.numero if cuota else 0,
-                "cuota_id": p.cuota_id,
+                "cuota_id": pago.cuota_id,
                 "monto_reportado_bs": monto_bs,
                 "monto_reportado_usd": monto_usd,
-                "metodo": p.metodo,
-                "referencia": p.referencia,
-                "banco_origen": p.banco_origen,
-                "telefono_pago": p.telefono_pago,
-                "comprobante": p.comprobante,
-                "estado": p.estado,
-                "modo_pago": p.modo_pago or "cuota",
+                "metodo": pago.metodo,
+                "referencia": pago.referencia,
+                "banco_origen": pago.banco_origen,
+                "telefono_pago": pago.telefono_pago,
+                "comprobante": pago.comprobante,
+                "estado": pago.estado,
+                "modo_pago": pago.modo_pago or "cuota",
                 "cuotas_incluidas": cuotas_incl,
-                "es_pago_padre": p.pago_padre_id is None,
-                "monto_original_bs": p.monto_original_bs,
+                "es_pago_padre": pago.pago_padre_id is None,
+                "monto_original_bs": pago.monto_original_bs,
                 "tienda_nombre": fin.tienda.nombre if fin and fin.tienda else None
             })
-        
-        return {"total": len(resultado), "pagos": resultado}
-        
+
+        return {"total": len(pagos_lista), "pagos": pagos_lista}
+
     except Exception as e:
         logger.error(f"❌ Error listando pagos pendientes: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Error interno del servidor")
 
 
 @router.post("/conciliar")
-@audit(accion="CONCILIAR", tabla="pagos")  # ✅ NUEVO
+@audit(accion="CONCILIAR", tabla="pagos")
 def conciliar_pago(
-    conciliacion: ConciliacionPago, 
-    db: Session = Depends(get_db), 
+    conciliacion: ConciliacionPago,
+    db: Session = Depends(get_db),
     current_admin = Depends(get_current_admin)
 ):
-    """Conciliar (aprobar o rechazar) un pago reportado (solo admin)."""
     try:
         logger.info(f"📝 Conciliando pago: {conciliacion.pago_id}")
-        
+
         pago = db.query(Pago).filter(Pago.id == conciliacion.pago_id).first()
         if not pago:
             raise HTTPException(status_code=404, detail="Pago no encontrado")
-        
+
         if pago.estado != "pendiente":
             raise HTTPException(status_code=400, detail="Este pago ya fue procesado")
-
-        pago.monto_confirmado_bs = conciliacion.monto_confirmado_bs
-        pago.estado = conciliacion.estado
-        pago.conciliado_por = conciliacion.conciliado_por
-        pago.fecha_confirmacion = datetime.now(timezone.utc)
 
         cuota = db.query(Cuota).filter(Cuota.id == pago.cuota_id).first()
         if not cuota:
             raise HTTPException(status_code=404, detail="Cuota no encontrada")
 
         fin = db.query(Financiamiento).filter(Financiamiento.id == pago.financiamiento_id).first()
-        cliente = db.query(Cliente).filter(Cliente.id == fin.cliente_id).first() if fin else None
-
-        pagos_hijos = db.query(Pago).filter(Pago.pago_padre_id == pago.id).all()
 
         if conciliacion.estado == "conciliado":
-            # Manejo especial para abono
             if pago.modo_pago == 'abono':
                 cuota.monto_pagado = (cuota.monto_pagado or 0) + conciliacion.monto_confirmado_bs
                 cuota.estado = "pendiente"
@@ -318,12 +307,18 @@ def conciliar_pago(
                     "mensaje": f"Abono de Bs {conciliacion.monto_confirmado_bs:,.2f} conciliado"
                 }
 
-            # Pago completo
-            cuota.estado = "pagada"
-            cuota.fecha_pago = datetime.now(timezone.utc)
-            cuota.monto_pagado = conciliacion.monto_confirmado_bs
+            # Pago completo - Usar la función centralizada
+            from app.domain.conciliacion import procesar_cuota_pagada
 
-            # Conciliar pagos hijos
+            resultado = procesar_cuota_pagada(
+                db=db,
+                pago=pago,
+                cuota=cuota,
+                monto_confirmado=conciliacion.monto_confirmado_bs,
+                conciliado_por=conciliacion.conciliado_por
+            )
+
+            pagos_hijos = db.query(Pago).filter(Pago.pago_padre_id == pago.id).all()
             for ph in pagos_hijos:
                 ph.estado = "conciliado"
                 ph.fecha_confirmacion = datetime.now(timezone.utc)
@@ -336,18 +331,20 @@ def conciliar_pago(
                     cuota_hija.fecha_pago = datetime.now(timezone.utc)
                     cuota_hija.monto_pagado = ph.monto_reportado_bs
 
-            # Verificar si el financiamiento se completa
-            cuotas_pendientes = db.query(Cuota).filter(
-                Cuota.financiamiento_id == fin.id,
-                Cuota.estado.in_(["pendiente", "conciliando"])
-            ).count()
-            
-            if cuotas_pendientes == 0 and fin:
-                fin.estado = "completado"
-                fin.fecha_completado = datetime.now(timezone.utc)
-                logger.info(f"✅ Financiamiento {fin.codigo} completado")
-                
-                # ✅ NUEVO: Registrar auditoría manual
+            db.commit()
+
+            registrar_auditoria(
+                db=db,
+                usuario_id=current_admin.id,
+                usuario_nombre=current_admin.nombre,
+                usuario_rol=current_admin.rol,
+                accion="CONCILIAR",
+                tabla="pagos",
+                registro_id=pago.id,
+                detalles=f"Pago #{pago.id} conciliado por {current_admin.nombre}"
+            )
+
+            if resultado["financiamiento_completado"]:
                 registrar_auditoria(
                     db=db,
                     usuario_id=current_admin.id,
@@ -355,14 +352,9 @@ def conciliar_pago(
                     usuario_rol=current_admin.rol,
                     accion="COMPLETAR_FINANCIAMIENTO",
                     tabla="financiamientos",
-                    registro_id=fin.id,
-                    detalles=f"Financiamiento #{fin.codigo} completado al conciliar última cuota"
+                    registro_id=pago.financiamiento_id,
+                    detalles="Financiamiento completado al conciliar última cuota"
                 )
-
-            db.commit()
-
-            if cliente:
-                actualizar_score_cliente(cliente, db)
 
             return {
                 "success": True,
@@ -370,17 +362,16 @@ def conciliar_pago(
                 "cuota_pagada": cuota.numero,
                 "cuotas_adicionales": len(pagos_hijos),
                 "monto_bs": conciliacion.monto_confirmado_bs,
-                "score_actualizado": cliente.score if cliente else None,
-                "nivel_actual": cliente.nivel if cliente else None,
+                "score_actualizado": resultado["score_actualizado"],
+                "nivel_actual": resultado["nivel_actual"],
                 "mensaje": "Pago conciliado correctamente"
             }
         else:
-            # Rechazado
             cuota.estado = "pendiente"
             pago.rechazado_por = conciliacion.conciliado_por
             pago.fecha_rechazo = datetime.now(timezone.utc)
 
-            for ph in pagos_hijos:
+            for ph in db.query(Pago).filter(Pago.pago_padre_id == pago.id).all():
                 ph.estado = "rechazado"
                 ph.fecha_rechazo = datetime.now(timezone.utc)
                 ph.rechazado_por = conciliacion.conciliado_por
@@ -390,45 +381,47 @@ def conciliar_pago(
                     cuota_hija.estado = "pendiente"
 
             db.commit()
-            
+
             return {
                 "success": True,
                 "estado": "rechazado",
                 "mensaje": "Pago rechazado. Cuota vuelve a pendiente."
             }
-            
+
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"❌ Error conciliando pago: {e}")
         db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Error interno del servidor")
 
 
 @router.post("/cuotas/{id}/pagar-efectivo")
-@audit(accion="PAGAR_EFECTIVO", tabla="cuotas")  # ✅ NUEVO
+@audit(accion="PAGAR_EFECTIVO", tabla="cuotas")
 def pagar_cuota_efectivo(
-    id: int, 
-    db: Session = Depends(get_db), 
+    id: int,
+    db: Session = Depends(get_db),
     current_admin = Depends(get_current_admin)
 ):
-    """Registrar pago en efectivo de una cuota (solo admin, para pagos en tienda)."""
     try:
         cuota = db.query(Cuota).filter(Cuota.id == id).first()
         if not cuota:
             raise HTTPException(status_code=404, detail="Cuota no encontrada")
-        
+
         if cuota.estado == "pagada":
             raise HTTPException(status_code=400, detail="Esta cuota ya fue pagada")
-        
+
         fin = db.query(Financiamiento).filter(Financiamiento.id == cuota.financiamiento_id).first()
         if not fin:
             raise HTTPException(status_code=404, detail="Financiamiento no encontrado")
-        
+
         cliente = db.query(Cliente).filter(Cliente.id == fin.cliente_id).first()
         hoy = datetime.now(timezone.utc)
 
-        # Calcular intereses de mora si aplica
+        # Forzar timezone en fecha_vencimiento si no la tiene (compatibilidad SQLite)
+        if cuota.fecha_vencimiento and cuota.fecha_vencimiento.tzinfo is None:
+            cuota.fecha_vencimiento = cuota.fecha_vencimiento.replace(tzinfo=timezone.utc)
+
         interes_bs = 0
         if hoy > cuota.fecha_vencimiento:
             dias_atraso = (hoy - cuota.fecha_vencimiento).days
@@ -445,38 +438,31 @@ def pagar_cuota_efectivo(
         else:
             cuota.monto_total_bs = cuota.monto_base_bs
 
-        cuota.estado = "pagada"
-        cuota.fecha_pago = hoy
-        cuota.monto_pagado = cuota.monto_total_bs
+        from app.domain.conciliacion import procesar_cuota_pagada
 
-        # Registrar pago
         pago = Pago(
             cuota_id=cuota.id,
             financiamiento_id=fin.id,
             metodo="efectivo",
             monto_reportado_bs=cuota.monto_total_bs,
             monto_confirmado_bs=cuota.monto_total_bs,
-            monto=cuota.monto_total_bs,
             estado="conciliado",
             fecha_confirmacion=hoy,
             conciliado_por=current_admin.username if hasattr(current_admin, 'username') else "admin",
             modo_pago="cuota"
         )
         db.add(pago)
-        db.commit()
+        db.flush()
 
-        # Verificar si el financiamiento se completa
-        cuotas_pendientes = db.query(Cuota).filter(
-            Cuota.financiamiento_id == fin.id,
-            Cuota.estado.in_(["pendiente", "conciliando"])
-        ).count()
-        
-        if cuotas_pendientes == 0:
-            fin.estado = "completado"
-            fin.fecha_completado = hoy
-            db.commit()
-            
-            # ✅ NUEVO: Registrar auditoría manual
+        resultado = procesar_cuota_pagada(
+            db=db,
+            pago=pago,
+            cuota=cuota,
+            monto_confirmado=cuota.monto_total_bs,
+            conciliado_por=current_admin.username if hasattr(current_admin, 'username') else "admin"
+        )
+
+        if resultado["financiamiento_completado"]:
             registrar_auditoria(
                 db=db,
                 usuario_id=current_admin.id,
@@ -488,23 +474,20 @@ def pagar_cuota_efectivo(
                 detalles=f"Financiamiento #{fin.codigo} completado al pagar última cuota en efectivo"
             )
 
-        if cliente:
-            actualizar_score_cliente(cliente, db)
-
         return {
             "success": True,
             "cuota_pagada": cuota.numero,
             "monto_base_bs": cuota.monto_base_bs,
             "interes_mora_bs": cuota.monto_interes_mora_bs or 0,
             "total_pagado_bs": cuota.monto_total_bs,
-            "score_actualizado": cliente.score if cliente else None,
-            "nivel_actual": cliente.nivel if cliente else None,
-            "financiamiento_estado": fin.estado
+            "score_actualizado": resultado["score_actualizado"],
+            "nivel_actual": resultado["nivel_actual"],
+            "financiamiento_estado": "completado" if resultado["financiamiento_completado"] else "activo"
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"❌ Error pagando cuota en efectivo: {e}")
         db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Error interno del servidor")

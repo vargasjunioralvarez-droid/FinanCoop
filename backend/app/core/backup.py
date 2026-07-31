@@ -1,6 +1,7 @@
 """
 Sistema de Backups Automáticos con Google Drive
 Usa google-api-python-client directamente (sin pydrive2)
+Backups cifrados con AES-256 (Fernet)
 """
 
 import os
@@ -14,7 +15,7 @@ import shutil
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
-
+from cryptography.fernet import Fernet
 
 from app.core.init_db import init_db
 
@@ -57,6 +58,7 @@ BACKUP_DIR = os.getenv("BACKUP_DIR", "./backups")
 DATABASE_URL = os.getenv("DATABASE_URL", "")
 MAX_BACKUPS = int(os.getenv("MAX_BACKUPS", "30"))
 GOOGLE_DRIVE_FOLDER = os.getenv("GOOGLE_DRIVE_FOLDER", "financoop_backups")
+BACKUP_ENCRYPTION_KEY = os.getenv("BACKUP_ENCRYPTION_KEY", "")
 
 # Crear carpeta de backups si no existe
 Path(BACKUP_DIR).mkdir(parents=True, exist_ok=True)
@@ -68,6 +70,7 @@ if DATABASE_URL:
 else:
     logger.info("🔍 DATABASE_URL: ❌ NO CONFIGURADA")
 logger.info(f"📁 GOOGLE_DRIVE_FOLDER: {GOOGLE_DRIVE_FOLDER}")
+logger.info(f"🔐 Cifrado de backups: {'ACTIVADO' if BACKUP_ENCRYPTION_KEY else 'DESACTIVADO'}")
 
 # ============================================================
 # AUTENTICACIÓN CON GOOGLE DRIVE
@@ -251,7 +254,6 @@ def crear_backup():
         # Logs de depuración (sin credenciales)
         logger.info(f"🔍 Código de retorno: {result.returncode}")
         if result.stderr:
-            # Sanitizar posibles credenciales en stderr
             stderr_safe = result.stderr.replace(DATABASE_URL, sanitize_url(DATABASE_URL))
             logger.warning(f"⚠️ stderr: {stderr_safe[:500]}")
         if result.stdout:
@@ -280,7 +282,6 @@ def crear_backup():
                 cur = conn.cursor()
                 
                 with open(backup_sql, 'w') as f:
-                    # Obtener todas las tablas
                     cur.execute("""
                         SELECT tablename FROM pg_tables 
                         WHERE schemaname = 'public'
@@ -293,12 +294,10 @@ def crear_backup():
                         table_name = table[0]
                         f.write(f"\n-- Datos de la tabla: {table_name}\n")
                         
-                        # Obtener datos de la tabla
                         cur.execute(f"SELECT * FROM {table_name}")
                         rows = cur.fetchall()
                         
                         if rows:
-                            # Obtener nombres de columnas
                             col_names = [desc[0] for desc in cur.description]
                             f.write(f"INSERT INTO {table_name} ({', '.join(col_names)}) VALUES\n")
                             
@@ -308,7 +307,6 @@ def crear_backup():
                                     if val is None:
                                         f.write("NULL")
                                     elif isinstance(val, str):
-                                        # Escapar comillas simples
                                         val_escaped = val.replace("'", "''")
                                         f.write(f"'{val_escaped}'")
                                     elif isinstance(val, bool):
@@ -328,7 +326,6 @@ def crear_backup():
                 
                 conn.close()
                 
-                # Verificar tamaño del backup generado con psycopg2
                 sql_size = os.path.getsize(backup_sql)
                 logger.info(f"📄 Tamaño del SQL (psycopg2): {sql_size} bytes ({sql_size/1024:.2f} KB)")
                 
@@ -351,7 +348,6 @@ def crear_backup():
         with zipfile.ZipFile(backup_zip, 'w', zipfile.ZIP_DEFLATED) as zipf:
             zipf.write(backup_sql, os.path.basename(backup_sql))
         
-        # Verificar que el ZIP se creó correctamente
         if not os.path.exists(backup_zip) or os.path.getsize(backup_zip) == 0:
             logger.error("❌ El archivo ZIP no se creó correctamente")
             return False
@@ -362,6 +358,25 @@ def crear_backup():
         # Eliminar el SQL temporal
         os.remove(backup_sql)
         logger.info("🗑️ Archivo SQL temporal eliminado")
+
+        # ============================================================
+        # CIFRAR EL BACKUP (AES-256 con Fernet)
+        # ============================================================
+        if BACKUP_ENCRYPTION_KEY:
+            try:
+                cipher = Fernet(BACKUP_ENCRYPTION_KEY.encode())
+                with open(backup_zip, 'rb') as f:
+                    datos_backup = f.read()
+                datos_cifrados = cipher.encrypt(datos_backup)
+                backup_cifrado = backup_zip + '.enc'
+                with open(backup_cifrado, 'wb') as f:
+                    f.write(datos_cifrados)
+                os.remove(backup_zip)
+                backup_zip = backup_cifrado
+                logger.info("🔐 Backup cifrado con AES-256")
+            except Exception as e:
+                logger.error(f"❌ Error cifrando backup: {e}")
+                return False
         
         # ============================================================
         # INTENTAR SUBIR A GOOGLE DRIVE (OPCIONAL)
@@ -394,7 +409,7 @@ def listar_backups():
     """
     try:
         backups = []
-        for file in Path(BACKUP_DIR).glob("*.zip"):
+        for file in Path(BACKUP_DIR).glob("*.zip*"):
             size_bytes = file.stat().st_size
             backups.append({
                 "nombre": file.name,
@@ -416,7 +431,8 @@ def listar_backups():
 def restaurar_backup(backup_file: str):
     """
     Restaura un backup desde un archivo local
-    Versión mejorada con limpieza previa, timeout e inicialización de datos
+    Versión mejorada con limpieza previa, timeout, inicialización de datos
+    y descifrado AES-256 si es necesario
     """
     try:
         if not DATABASE_URL:
@@ -428,6 +444,23 @@ def restaurar_backup(backup_file: str):
         if not os.path.exists(backup_file):
             logger.error(f"❌ Archivo no encontrado: {backup_file}")
             return False
+
+        # ============================================================
+        # DESCIFRAR SI ES NECESARIO
+        # ============================================================
+        if backup_file.endswith('.enc') and BACKUP_ENCRYPTION_KEY:
+            try:
+                cipher = Fernet(BACKUP_ENCRYPTION_KEY.encode())
+                with open(backup_file, 'rb') as f:
+                    datos_cifrados = f.read()
+                datos_descifrados = cipher.decrypt(datos_cifrados)
+                backup_file = backup_file[:-4]  # quitar .enc
+                with open(backup_file, 'wb') as f:
+                    f.write(datos_descifrados)
+                logger.info("🔓 Backup descifrado correctamente")
+            except Exception as e:
+                logger.error(f"❌ Error descifrando backup: {e}")
+                return False
         
         # ============================================================
         # DESCOMPRIMIR SI ES ZIP
@@ -455,7 +488,6 @@ def restaurar_backup(backup_file: str):
             conn.autocommit = True
             cur = conn.cursor()
             
-            # Obtener todas las tablas
             cur.execute("""
                 SELECT tablename FROM pg_tables 
                 WHERE schemaname = 'public'
@@ -464,7 +496,6 @@ def restaurar_backup(backup_file: str):
             
             logger.info(f"📊 Tablas encontradas: {len(tables)}")
             
-            # Eliminar todas las tablas en orden inverso (para respetar FK)
             for table in tables:
                 try:
                     cur.execute(f"DROP TABLE IF EXISTS {table[0]} CASCADE")
@@ -472,7 +503,6 @@ def restaurar_backup(backup_file: str):
                 except Exception as e:
                     logger.warning(f"⚠️ No se pudo eliminar {table[0]}: {e}")
             
-            # Eliminar secuencias
             cur.execute("""
                 SELECT sequence_name FROM information_schema.sequences 
                 WHERE sequence_schema = 'public'
@@ -497,7 +527,6 @@ def restaurar_backup(backup_file: str):
         # ============================================================
         env = os.environ.copy()
         
-        # Usar la URL completa en lugar de parámetros separados
         cmd = [
             "psql",
             DATABASE_URL,
@@ -508,13 +537,12 @@ def restaurar_backup(backup_file: str):
         
         logger.info(f"🔄 Ejecutando: psql {sanitize_url(DATABASE_URL)} -f {sql_file}")
         
-        # Ejecutar con timeout de 5 minutos para evitar que se cuelgue
         result = subprocess.run(
             cmd, 
             env=env, 
             capture_output=True, 
             text=True,
-            timeout=300  # 5 minutos máximo
+            timeout=300
         )
         
         if result.returncode != 0:
@@ -528,14 +556,10 @@ def restaurar_backup(backup_file: str):
         # ============================================================
         logger.info("🔄 Inicializando datos de configuración mínimos...")
         try:
-            # Llamar a la función de inicialización de la base de datos
-            # que crea registros como la tasa de cambio y los niveles.
             init_db()
             logger.info("✅ Datos de configuración inicializados correctamente.")
         except Exception as e:
             logger.error(f"❌ Error crítico inicializando datos después de restauración: {e}")
-            # La restauración fue exitosa pero la inicialización falló
-            # Devolvemos False para que el endpoint sepa que hubo un problema
             return False
         
         # ============================================================

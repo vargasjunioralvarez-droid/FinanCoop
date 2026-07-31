@@ -2,7 +2,8 @@
 🔒 FinanCoop - Router de Autenticación Ultra-Seguro
 Login Admin (Frontend Vue) + Login Cliente (App Móvil) + Login Biométrico (Huella)
 """
-import logging  # <-- AGREGAR ESTA LÍNEA
+import logging
+import json
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, Field, validator
@@ -39,24 +40,24 @@ from app.core.security import (
     SECRET_KEY,
     ALGORITHM
 )
-from app.core.audit import audit_login, registrar_auditoria  # ✅ NUEVO
+from app.core.audit import audit_login, registrar_auditoria
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["Autenticación"])
 
 DUMMY_HASH = "$2b$12$LJ3m4ys3GZfnYMz8kVsKaOmLp1GpGmB0qJX3PzV3QXjKtHqKw8m5u"
 
-# ============================================================
+# ──────────────────────────────────────────────────────────────
 # 📧 CONFIGURACIÓN SMTP
-# ============================================================
+# ──────────────────────────────────────────────────────────────
 SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 SMTP_USER = os.getenv("SMTP_USER", "")
 SMTP_PASS = os.getenv("SMTP_PASS", "")
 
-# ============================================================
+# ──────────────────────────────────────────────────────────────
 # 📋 MODELOS Pydantic
-# ============================================================
+# ──────────────────────────────────────────────────────────────
 
 class LoginClienteRequest(BaseModel):
     """Login para app móvil - Cédula + PIN (6 caracteres alfanumérico)"""
@@ -121,7 +122,7 @@ class RegistroAdminRequest(BaseModel):
     email: str = Field(default="", max_length=200)
     tienda_id: int = None
 
-# ✅ MODELOS PARA RECUPERACIÓN DE PIN (6 caracteres)
+# ✅ MODELOS PARA RECUPERACIÓN DE PIN
 class SolicitarCodigoRequest(BaseModel):
     """Solicitar código de recuperación por correo"""
     cedula: str = Field(..., min_length=6, max_length=20, pattern=r"^[0-9Vv-]+$")
@@ -135,12 +136,47 @@ class CambiarPinRequest(BaseModel):
     """Cambiar PIN después de verificar código (6 caracteres alfanumérico)"""
     nuevo_pin: str = Field(..., min_length=4, max_length=6, pattern=r"^[A-Z0-9]+$")
 
-# Almacenamiento temporal de códigos
-codigos_recuperacion = {}
 
-# ============================================================
-# 📧 FUNCIÓN DE ENVÍO DE CORREO (SMTP GMAIL)
-# ============================================================
+# ──────────────────────────────────────────────────────────────
+# 🧠 ALMACENAMIENTO DE CÓDIGOS DE RECUPERACIÓN (Redis + fallback)
+# ──────────────────────────────────────────────────────────────
+
+_codigos_memoria = {}  # fallback si no hay Redis
+
+def _guardar_codigo(cedula: str, datos: dict):
+    """Guarda un código de recuperación en Redis (o memoria)."""
+    from app.core.security import USE_REDIS, redis_client
+    clave = f"recuperar_pin:{cedula}"
+    datos_json = json.dumps(datos)
+    if USE_REDIS and redis_client:
+        redis_client.setex(clave, 1800, datos_json)  # expira en 30 min
+    else:
+        _codigos_memoria[cedula] = datos
+
+def _obtener_codigo(cedula: str):
+    """Obtiene un código desde Redis (o memoria)."""
+    from app.core.security import USE_REDIS, redis_client
+    clave = f"recuperar_pin:{cedula}"
+    if USE_REDIS and redis_client:
+        datos_json = redis_client.get(clave)
+        if datos_json:
+            return json.loads(datos_json)
+        return None
+    return _codigos_memoria.get(cedula)
+
+def _eliminar_codigo(cedula: str):
+    """Elimina un código de Redis (o memoria)."""
+    from app.core.security import USE_REDIS, redis_client
+    clave = f"recuperar_pin:{cedula}"
+    if USE_REDIS and redis_client:
+        redis_client.delete(clave)
+    else:
+        _codigos_memoria.pop(cedula, None)
+
+
+# ──────────────────────────────────────────────────────────────
+# 📧 ENVÍO DE CORREO
+# ──────────────────────────────────────────────────────────────
 
 def enviar_correo_recuperacion(destinatario: str, nombre: str, codigo: str) -> bool:
     """Envía un correo con el código de recuperación usando SMTP Gmail"""
@@ -194,12 +230,12 @@ def enviar_correo_recuperacion(destinatario: str, nombre: str, codigo: str) -> b
         logger.error(f"❌ Error enviando correo: {e}")
         return False
 
-# ============================================================
+# ──────────────────────────────────────────────────────────────
 # 🔐 LOGIN ADMIN - JSON
-# ============================================================
+# ──────────────────────────────────────────────────────────────
 
 @router.post("/login-json")
-@audit_login()  # ✅ NUEVO
+@audit_login()
 def login_admin_json(
     request_data: LoginAdminRequest,
     request: Request,
@@ -245,12 +281,12 @@ def login_admin_json(
         "tienda_nombre": usuario.tienda.nombre if usuario.tienda else None
     }
 
-# ============================================================
+# ──────────────────────────────────────────────────────────────
 # 🔐 LOGIN ADMIN - FORM
-# ============================================================
+# ──────────────────────────────────────────────────────────────
 
 @router.post("/login")
-@audit_login()  # ✅ NUEVO
+@audit_login()
 def login_admin_form(
     request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
@@ -296,12 +332,12 @@ def login_admin_form(
         "tienda_nombre": usuario.tienda.nombre if usuario.tienda else None
     }
 
-# ============================================================
+# ──────────────────────────────────────────────────────────────
 # 🔐 LOGIN CLIENTE (App Móvil)
-# ============================================================
+# ──────────────────────────────────────────────────────────────
 
 @router.post("/login-cliente")
-@audit_login()  # ✅ NUEVO
+@audit_login()
 def login_cliente(
     request_data: LoginClienteRequest,
     request: Request,
@@ -317,7 +353,8 @@ def login_cliente(
     if not _check_rate_limit(rate_key):
         raise HTTPException(status_code=429, detail="Demasiados intentos fallidos")
     
-    cliente = db.query(Cliente).filter(Cliente.cedula == cedula).first()
+    from app.core.crypto import hash_cedula
+    cliente = db.query(Cliente).filter(Cliente.cedula_hash == hash_cedula(cedula)).first()
     
     if not cliente:
         verify_pin(pin, DUMMY_HASH)
@@ -329,13 +366,8 @@ def login_cliente(
         raise HTTPException(status_code=403, detail="Cuenta pendiente de aprobación")
     
     if not cliente.pin_hash:
-        if cliente.pin and cliente.pin == pin:
-            cliente.pin_hash = hash_pin(pin)
-            cliente.pin = None
-            db.commit()
-        else:
-            _record_failed_attempt(rate_key)
-            raise HTTPException(status_code=401, detail="Credenciales incorrectas")
+        _record_failed_attempt(rate_key)
+        raise HTTPException(status_code=401, detail="PIN no configurado. Contacte a su cooperativa.")
     else:
         if not verify_pin(pin, cliente.pin_hash):
             _record_failed_attempt(rate_key)
@@ -358,62 +390,29 @@ def login_cliente(
         }
     }
 
-# ============================================================
-# 🔐 LOGIN BIOMÉTRICO (Huella Dactilar)
-# ============================================================
+# ──────────────────────────────────────────────────────────────
+# 🔐 LOGIN BIOMÉTRICO (DESHABILITADO TEMPORALMENTE)
+# ──────────────────────────────────────────────────────────────
 
 @router.post("/login-biometrico")
-@audit_login()  # ✅ NUEVO
+@audit_login()
 def login_biometrico(
     request_data: LoginBiometricoRequest,
     request: Request,
     db: Session = Depends(get_db)
 ):
     """
-    Login con autenticación biométrica verificada por el dispositivo.
-    La huella ya fue validada por el sistema operativo del teléfono.
-    Solo se requiere la cédula para identificar al usuario.
+    Login biométrico DESHABILITADO TEMPORALMENTE (H11).
+    Pendiente de implementar challenge-response con Android Keystore.
     """
-    cedula = request_data.cedula
-    
-    client_ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "unknown")
-    rate_key = f"biometric:{cedula}:{client_ip}"
-    
-    if not _check_rate_limit(rate_key):
-        raise HTTPException(status_code=429, detail="Demasiados intentos fallidos")
-    
-    cliente = db.query(Cliente).filter(Cliente.cedula == cedula).first()
-    
-    if not cliente:
-        _record_failed_attempt(rate_key)
-        raise HTTPException(status_code=401, detail="Credenciales incorrectas")
-    
-    if cliente.estado != "aprobado":
-        _record_failed_attempt(rate_key)
-        raise HTTPException(status_code=403, detail="Cuenta pendiente de aprobación")
-    
-    _record_successful_attempt(rate_key)
-    cliente.ultimo_acceso = datetime.now(timezone.utc)
-    db.commit()
-    
-    access_token = create_access_token(data={"sub": str(cliente.id), "rol": "cliente"})
-    refresh_token = create_refresh_token(str(cliente.id), "cliente")
-    
-    logger.info(f"✅ Login biométrico exitoso: {cliente.nombre} (dispositivo: {request_data.device_id or 'desconocido'})")
-    
-    return {
-        "access_token": access_token, "token_type": "bearer",
-        "expires_in": ACCESS_TOKEN_EXPIRE_MINUTES * 60, "refresh_token": refresh_token,
-        "cliente": {
-            "id": cliente.id, "nombre": cliente.nombre,
-            "cedula": cliente.cedula[:4] + "****", "nivel": cliente.nivel,
-            "score": cliente.score, "telefono": cliente.telefono
-        }
-    }
+    raise HTTPException(
+        status_code=503,
+        detail="El acceso biométrico está temporalmente deshabilitado. Use su cédula y PIN para ingresar."
+    )
 
-# ============================================================
+# ──────────────────────────────────────────────────────────────
 # 🔄 REFRESH TOKEN
-# ============================================================
+# ──────────────────────────────────────────────────────────────
 
 @router.post("/refresh")
 def refresh_token(request_data: RefreshTokenRequest, db: Session = Depends(get_db)):
@@ -440,9 +439,9 @@ def refresh_token(request_data: RefreshTokenRequest, db: Session = Depends(get_d
         "expires_in": ACCESS_TOKEN_EXPIRE_MINUTES * 60, "refresh_token": new_refresh
     }
 
-# ============================================================
+# ──────────────────────────────────────────────────────────────
 # 🔍 VERIFICAR TOKEN
-# ============================================================
+# ──────────────────────────────────────────────────────────────
 
 @router.get("/verificar")
 def verificar_token(current_user: Usuario = Depends(get_current_admin)):
@@ -453,9 +452,9 @@ def verificar_token(current_user: Usuario = Depends(get_current_admin)):
         "tienda_nombre": current_user.tienda.nombre if current_user.tienda else None
     }
 
-# ============================================================
+# ──────────────────────────────────────────────────────────────
 # 📝 REGISTRO DE ADMIN
-# ============================================================
+# ──────────────────────────────────────────────────────────────
 
 @router.post("/registro")
 def registrar_admin(
@@ -483,9 +482,9 @@ def registrar_admin(
         "rol": nuevo.rol, "nombre": nuevo.nombre, "tienda_id": nuevo.tienda_id
     }
 
-# ============================================================
+# ──────────────────────────────────────────────────────────────
 # 🔒 CAMBIAR CONTRASEÑA
-# ============================================================
+# ──────────────────────────────────────────────────────────────
 
 @router.post("/cambiar-password")
 def cambiar_password(
@@ -504,12 +503,12 @@ def cambiar_password(
     
     return {"mensaje": "Contraseña actualizada"}
 
-# ============================================================
+# ──────────────────────────────────────────────────────────────
 # 🚪 LOGOUT
-# ============================================================
+# ──────────────────────────────────────────────────────────────
 
 @router.post("/logout")
-@audit_login(logout=True)  # ✅ NUEVO
+@audit_login(logout=True)
 def logout(
     request: Request,
     current_user: Usuario = Depends(get_current_user),
@@ -526,9 +525,9 @@ def logout(
     except:
         return {"mensaje": "Sesión cerrada"}
 
-# ============================================================
-# 📧 RECUPERACIÓN DE PIN POR CORREO
-# ============================================================
+# ──────────────────────────────────────────────────────────────
+# 📧 RECUPERACIÓN DE PIN POR CORREO (con Redis)
+# ──────────────────────────────────────────────────────────────
 
 @router.post("/recuperar-pin/solicitar-codigo")
 def solicitar_codigo_recuperacion(
@@ -545,7 +544,8 @@ def solicitar_codigo_recuperacion(
     if not _check_rate_limit(rate_key):
         raise HTTPException(status_code=429, detail="Demasiados intentos. Intente en 15 minutos.")
     
-    cliente = db.query(Cliente).filter(Cliente.cedula == cedula).first()
+    from app.core.crypto import hash_cedula
+    cliente = db.query(Cliente).filter(Cliente.cedula_hash == hash_cedula(cedula)).first()
     
     if not cliente:
         import time
@@ -560,12 +560,12 @@ def solicitar_codigo_recuperacion(
     
     codigo = str(random.randint(100000, 999999))
     
-    codigos_recuperacion[cedula] = {
+    _guardar_codigo(cedula, {
         "codigo": codigo,
         "cliente_id": cliente.id,
-        "expiracion": datetime.now(timezone.utc) + timedelta(minutes=30),
+        "expiracion": (datetime.now(timezone.utc) + timedelta(minutes=30)).isoformat(),
         "intentos": 0
-    }
+    })
     
     correo_enviado = enviar_correo_recuperacion(cliente.email, cliente.nombre, codigo)
     
@@ -597,20 +597,22 @@ def verificar_codigo_recuperacion(
     cedula = request_data.cedula.strip().upper()
     codigo = request_data.codigo.strip()
     
-    datos = codigos_recuperacion.get(cedula)
+    datos = _obtener_codigo(cedula)
     
     if not datos:
         raise HTTPException(status_code=400, detail="Código no solicitado o expirado")
     
-    if datetime.now(timezone.utc) > datos["expiracion"]:
-        del codigos_recuperacion[cedula]
+    expiracion = datetime.fromisoformat(datos["expiracion"])
+    if datetime.now(timezone.utc) > expiracion:
+        _eliminar_codigo(cedula)
         raise HTTPException(status_code=400, detail="Código expirado. Solicite uno nuevo.")
     
     if datos["intentos"] >= 3:
-        del codigos_recuperacion[cedula]
+        _eliminar_codigo(cedula)
         raise HTTPException(status_code=400, detail="Demasiados intentos. Solicite un nuevo código.")
     
     datos["intentos"] += 1
+    _guardar_codigo(cedula, datos)  # actualizar intentos
     
     if datos["codigo"] != codigo:
         raise HTTPException(status_code=400, detail="Código incorrecto")
@@ -630,7 +632,7 @@ def verificar_codigo_recuperacion(
         expires_delta=timedelta(minutes=5)
     )
     
-    del codigos_recuperacion[cedula]
+    _eliminar_codigo(cedula)
     
     return {
         "mensaje": "Código verificado correctamente",

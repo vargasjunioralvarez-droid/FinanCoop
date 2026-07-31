@@ -73,22 +73,7 @@ app = FastAPI(
 )
 
 # ─────────────────────────────────────────────────────────────
-# ✅ CORS PREFLIGHT - DEBE IR ANTES QUE OTROS MIDDLEWARES
-# ─────────────────────────────────────────────────────────────
-@app.middleware("http")
-async def cors_preflight_handler(request: Request, call_next):
-    if request.method == "OPTIONS":
-        response = Response()
-        response.headers["Access-Control-Allow-Origin"] = request.headers.get("origin", "*")
-        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, PATCH, OPTIONS"
-        response.headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type, X-Request-ID, X-Requested-With, Accept, Origin, Cache-Control, Pragma, Expires"
-        response.headers["Access-Control-Allow-Credentials"] = "true"
-        response.headers["Access-Control-Max-Age"] = "86400"
-        return response
-    return await call_next(request)
-
-# ─────────────────────────────────────────────────────────────
-# 🌐 CORS: SIEMPRE PERMITIR ORÍGENES DE RENDER Y LOCAL
+# 🌐 CORS CONFIGURACIÓN SEGURA (sin middleware manual inseguro)
 # ─────────────────────────────────────────────────────────────
 ALLOWED_ORIGINS = [
     # Desarrollo local
@@ -123,9 +108,9 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-    expose_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],  # Restringido
+    allow_headers=["Authorization", "Content-Type", "X-Request-ID", "X-Requested-With", "Accept"],  # Restringido
+    expose_headers=["X-Request-ID"],
     max_age=86400
 )
 
@@ -212,8 +197,32 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 # ─────────────────────────────────────────────────────────────
+# ❤️ HEALTH CHECK
+# ─────────────────────────────────────────────────────────────
+@app.get("/health", include_in_schema=False)
+def health_check():
+    """Endpoint de monitoreo para balanceadores de carga."""
+    try:
+        from app.core.database import SessionLocal
+        db = SessionLocal()
+        db.execute("SELECT 1")
+        db.close()
+        return {"status": "healthy", "database": "connected"}
+    except Exception as e:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "unhealthy", "database": "disconnected", "error": str(e)}
+        )
+
+# ─────────────────────────────────────────────────────────────
 # 🗄️ CREAR TABLAS
 # ─────────────────────────────────────────────────────────────
+import app.modules.users.models as _users_models
+import app.modules.loans.models as _loans_models
+import app.modules.payments.models as _payments_models
+import app.modules.config.models as _config_models
+import app.modules.auth.models as _auth_models
+import app.modules.audit.models as _audit_models
 Base.metadata.create_all(bind=engine, checkfirst=True)
 
 # ─────────────────────────────────────────────────────────────

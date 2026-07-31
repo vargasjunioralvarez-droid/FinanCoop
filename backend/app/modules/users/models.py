@@ -3,9 +3,7 @@ from sqlalchemy import Column, Integer, String, Boolean, DateTime, Float, Foreig
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.core.database import Base
-
-# Importar modelos de otros módulos (para relaciones)
-from app.modules.loans.models import Financiamiento
+from app.core.crypto import EncryptedString
 
 # ============================================================
 # MODELO: TIENDA
@@ -54,10 +52,11 @@ class Cliente(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     nombre = Column(String(200), nullable=False)
-    cedula = Column(String(20), unique=True, nullable=False)
-    telefono = Column(String(20), nullable=True)
-    email = Column(String(200), nullable=True)
-    direccion = Column(Text, nullable=True)
+    cedula = Column(EncryptedString(20), unique=True, nullable=False)
+    cedula_hash = Column(String(64), unique=True, nullable=True, index=True)
+    telefono = Column(EncryptedString(20), nullable=True)
+    email = Column(EncryptedString(200), nullable=True)
+    direccion = Column(EncryptedString(500), nullable=True)
     referencia_nombre = Column(String(200), nullable=True)
     referencia_telefono = Column(String(20), nullable=True)
     referencia_parentesco = Column(String(100), nullable=True)

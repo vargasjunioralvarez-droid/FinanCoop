@@ -73,8 +73,7 @@ def dashboard(db: Session = Depends(get_db), current_user = Depends(get_current_
         }
     except Exception as e:
         logger.error(f"❌ Error en dashboard: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
+        raise HTTPException(status_code=500, detail="Error interno del servidor")
 # ============================================================
 # CRUD TIENDAS (SOLO admin_central)
 # ============================================================
@@ -190,7 +189,7 @@ def listar_usuarios(skip: int = Query(0, ge=0), limit: int = Query(50, ge=1, le=
         return {"total": total, "skip": skip, "limit": limit, "usuarios": [{"id": u.id, "username": u.username, "nombre": u.nombre, "email": u.email, "rol": u.rol, "activo": u.activo, "tienda_id": u.tienda_id, "tienda_nombre": u.tienda.nombre if u.tienda else None, "ultimo_acceso": u.ultimo_acceso.isoformat() if u.ultimo_acceso else None, "creado_en": u.creado_en.isoformat() if u.creado_en else None} for u in usuarios]}
     except Exception as e:
         logger.error(f"❌ Error listando usuarios: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Error interno del servidor")
 
 # ============================================================
 # CREAR USUARIO (SOLO admin_central)
@@ -225,7 +224,7 @@ def crear_usuario(usuario_data: UsuarioCreate, db: Session = Depends(get_db), cu
         
         return {"id": nuevo.id, "username": nuevo.username, "nombre": nuevo.nombre, "email": nuevo.email, "rol": nuevo.rol, "activo": nuevo.activo, "tienda_id": nuevo.tienda_id}
     except HTTPException: raise
-    except Exception as e: logger.error(f"❌ Error creando usuario: {e}"); db.rollback(); raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e: logger.error(f"❌ Error creando usuario: {e}"); db.rollback(); raise HTTPException(status_code=500, detail="Error interno del servidor")
 
 # ============================================================
 # ACTUALIZAR USUARIO (SOLO admin_central)
@@ -264,7 +263,7 @@ def actualizar_usuario(id: int, usuario_data: UsuarioUpdate, db: Session = Depen
         
         return {"success": True, "mensaje": "Usuario actualizado"}
     except HTTPException: raise
-    except Exception as e: logger.error(f"❌ Error actualizando usuario: {e}"); db.rollback(); raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e: logger.error(f"❌ Error actualizando usuario: {e}"); db.rollback(); raise HTTPException(status_code=500, detail="Error interno del servidor")
 
 # ============================================================
 # ELIMINAR USUARIO (SOLO admin_central)
@@ -295,7 +294,7 @@ def eliminar_usuario(id: int, db: Session = Depends(get_db), current_user = Depe
         
         return {"mensaje": f"Usuario {usuario.username} eliminado"}
     except HTTPException: raise
-    except Exception as e: logger.error(f"❌ Error eliminando usuario: {e}"); db.rollback(); raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e: logger.error(f"❌ Error eliminando usuario: {e}"); db.rollback(); raise HTTPException(status_code=500, detail="Error interno del servidor") 
 
 # ============================================================
 # CLIENTES PENDIENTES
@@ -307,7 +306,7 @@ def clientes_pendientes(db: Session = Depends(get_db), current_user = Depends(ge
         if current_user.rol != "admin_central" and current_user.tienda_id: query = query.filter(Cliente.tienda_id == current_user.tienda_id)
         clientes = query.order_by(Cliente.creado_en.desc()).all()
         return {"total": len(clientes), "clientes": [{"id": c.id, "nombre": c.nombre, "cedula": c.cedula, "telefono": c.telefono, "email": c.email, "url_cedula": c.url_cedula, "tienda_nombre": c.tienda.nombre if c.tienda else None, "creado_en": c.creado_en.isoformat() if c.creado_en else None} for c in clientes]}
-    except Exception as e: logger.error(f"❌ Error listando pendientes: {e}"); raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e: logger.error(f"❌ Error listando pendientes: {e}"); raise HTTPException(status_code=500, detail="Error interno del servidor")
 
 # ============================================================
 # FINANCIAMIENTOS PENDIENTES
@@ -323,7 +322,7 @@ def financiamientos_pendientes(db: Session = Depends(get_db), current_user = Dep
             cliente = db.query(Cliente).filter(Cliente.id == fin.cliente_id).first()
             resultado.append({"id": fin.id, "codigo": fin.codigo, "cliente_nombre": cliente.nombre if cliente else "Desconocido", "cliente_cedula": cliente.cedula if cliente else "", "monto_total_bs": round(fin.monto_total_bs, 2), "monto_total_usd": round(fin.monto_total_usd, 2), "cuotas_solicitadas": fin.cuotas_solicitadas, "tienda_nombre": fin.tienda.nombre if fin.tienda else None, "creado_en": fin.creado_en.isoformat() if fin.creado_en else None})
         return {"total": len(resultado), "financiamientos": resultado}
-    except Exception as e: logger.error(f"❌ Error: {e}"); raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e: logger.error(f"❌ Error: {e}"); raise HTTPException(status_code=500, detail="Error interno del servidor")
 
 # ============================================================
 # BACKUPS
@@ -416,7 +415,7 @@ def restaurar_backup_manual(
         raise
     except Exception as e:
         logger.error(f"❌ Error en restauración manual: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Error interno del servidor")
 
 # ============================================================
 # LIMPIAR CONEXIONES (NUEVO ENDPOINT)
@@ -467,7 +466,7 @@ def limpiar_conexiones(
         
     except Exception as e:
         logger.error(f"❌ Error limpiando conexiones: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Error interno del servidor")
 
 # ============================================================
 # DESCARGAR BACKUP

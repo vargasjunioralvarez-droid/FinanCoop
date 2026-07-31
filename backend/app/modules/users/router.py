@@ -14,6 +14,7 @@ import logging
 # Imports del proyecto
 # ============================================================
 
+from app.modules.users.models import Cliente, Usuario
 from app.core.database import get_db
 from app.modules.users.models import Cliente
 from app.modules.loans.models import Financiamiento, Cuota
@@ -103,7 +104,7 @@ async def subir_imagen_cloudflare_base64(base64_string: str, nombre_archivo: str
 # ✅ CREAR CLIENTE (CON TIENDA AUTOMÁTICA)
 # ============================================================
 @router.post("")
-@audit(accion="CREAR_CLIENTE", tabla="clientes")  # ✅ NUEVO
+@audit(accion="CREAR_CLIENTE", tabla="clientes")
 async def crear_cliente(
     nombre: str = Form(...),
     cedula: str = Form(...),
@@ -146,9 +147,13 @@ async def crear_cliente(
         if current_user and hasattr(current_user, 'tienda_id') and current_user.tienda_id:
            tienda_id = current_user.tienda_id
 
+        from app.core.crypto import hash_cedula
+        cedula_hash = hash_cedula(cedula)
+
         db_cliente = Cliente(
             nombre=nombre,
             cedula=cedula,
+            cedula_hash=cedula_hash,
             telefono=telefono,
             email=email or "",
             direccion=direccion or "",
@@ -175,7 +180,7 @@ async def crear_cliente(
             "success": True,
             "id": db_cliente.id,
             "mensaje": "✅ Registro exitoso. Tu cuenta está en verificación.",
-            "pin": pin_generado,
+            "pin": pin_generado if os.getenv("ENVIRONMENT") == "development" else "****",
             "cliente": {
                 "id": db_cliente.id,
                 "nombre": db_cliente.nombre,
@@ -193,13 +198,13 @@ async def crear_cliente(
     except Exception as e:
         logger.error(f"❌ Error en registro: {e}")
         db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Error interno del servidor")
 
 # ============================================================
 # CREAR CLIENTE VIA JSON
 # ============================================================
 @router.post("/json")
-@audit(accion="CREAR_CLIENTE_JSON", tabla="clientes")  # ✅ NUEVO
+@audit(accion="CREAR_CLIENTE_JSON", tabla="clientes")
 async def crear_cliente_json(
     cliente_data: ClienteCreate,
     db: Session = Depends(get_db),
@@ -219,9 +224,13 @@ async def crear_cliente_json(
         if hasattr(current_user, 'tienda_id') and current_user.tienda_id:
             tienda_id = current_user.tienda_id
 
+        from app.core.crypto import hash_cedula
+        cedula_hash = hash_cedula(cliente_data.cedula)
+
         db_cliente = Cliente(
             nombre=cliente_data.nombre,
             cedula=cliente_data.cedula,
+            cedula_hash=cedula_hash,
             telefono=cliente_data.telefono,
             email=cliente_data.email or "",
             direccion=cliente_data.direccion or "",
@@ -245,7 +254,7 @@ async def crear_cliente_json(
             "success": True,
             "id": db_cliente.id,
             "mensaje": "Registro exitoso.",
-            "pin": pin_generado,
+            "pin": pin_generado if os.getenv("ENVIRONMENT") == "development" else "****",
             "cliente": {
                 "id": db_cliente.id,
                 "nombre": db_cliente.nombre,
@@ -259,13 +268,13 @@ async def crear_cliente_json(
         raise
     except Exception as e:
         logger.error(f"❌ Error en registro JSON: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Error interno del servidor")
 
 # ============================================================
 # APROBAR CLIENTE (SOLO admin_central)
 # ============================================================
 @router.post("/aprobar")
-@audit(accion="APROBAR_CLIENTE", tabla="clientes")  # ✅ NUEVO
+@audit(accion="APROBAR_CLIENTE", tabla="clientes")
 async def aprobar_cliente(
     data: ClienteAprobar,
     db: Session = Depends(get_db),
@@ -326,7 +335,7 @@ async def aprobar_cliente(
         raise
     except Exception as e:
         logger.error(f"❌ Error aprobando cliente: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Error interno del servidor")
 
 # ============================================================
 # LISTAR CLIENTES (CON FILTRO POR TIENDA)
@@ -414,7 +423,7 @@ def obtener_cliente(
 # ACTUALIZAR CLIENTE (SOLO admin_central)
 # ============================================================
 @router.put("/{id}")
-@audit(accion="ACTUALIZAR_CLIENTE", tabla="clientes")  # ✅ NUEVO
+@audit(accion="ACTUALIZAR_CLIENTE", tabla="clientes")
 def actualizar_cliente(
     id: int,
     cliente_data: ClienteUpdate,
@@ -479,7 +488,7 @@ def actualizar_cliente(
 # ELIMINAR CLIENTE (SOLO admin_central)
 # ============================================================
 @router.delete("/{id}")
-@audit(accion="ELIMINAR_CLIENTE", tabla="clientes")  # ✅ NUEVO
+@audit(accion="ELIMINAR_CLIENTE", tabla="clientes")
 def eliminar_cliente(
     id: int,
     db: Session = Depends(get_db),
@@ -530,30 +539,48 @@ def eliminar_cliente(
     return {"success": True, "mensaje": f"Cliente {nombre} eliminado"}
 
 # ============================================================
-# BUSCAR CLIENTE POR CÉDULA (TODOS PUEDEN BUSCAR)
+# BUSCAR CLIENTE POR CÉDULA (protegido)
 # ============================================================
 @router.get("/buscar/{cedula}")
-def buscar_cliente_por_cedula(cedula: str, db: Session = Depends(get_db)):
-    cliente = db.query(Cliente).filter(Cliente.cedula == cedula).first()
+def buscar_cliente_por_cedula(
+    cedula: str,
+    db: Session = Depends(get_db),
+    current_admin: Usuario = Depends(get_current_admin)
+):
+    """
+    Buscar un cliente por cédula. Solo para personal autorizado.
+    - Admin central: puede buscar cualquier cliente.
+    - Admin tienda / cajero: solo clientes de su tienda.
+    """
+    from app.core.crypto import hash_cedula
+    cliente = db.query(Cliente).filter(Cliente.cedula_hash == hash_cedula(cedula)).first()
     if not cliente:
         raise HTTPException(status_code=404, detail="Cliente no encontrado")
     
-    actualizar_score_cliente(cliente, db)
-    db.refresh(cliente)
+    if current_admin.rol != "admin_central" and current_admin.tienda_id:
+        if cliente.tienda_id != current_admin.tienda_id:
+            raise HTTPException(
+                status_code=403,
+                detail="El cliente no pertenece a tu tienda"
+            )
     
-    nivel, config = calcular_nivel(cliente.score)
-    tasa = obtener_tasa_actual(db)
-    disponible = calcular_usado_disponible(cliente.id, db)
-    
-    # 🔥 CONTAR CUOTAS VENCIDAS
-    cuotas_vencidas = db.query(Cuota).join(Financiamiento).filter(
-        Financiamiento.cliente_id == cliente.id,
-        Cuota.estado == "pendiente",
-        Cuota.fecha_vencimiento < datetime.now(timezone.utc)
-    ).count()
-    
+    from app.shared.utils import calcular_usado_disponible, obtener_tasa_actual
+    try:
+        disponible = calcular_usado_disponible(cliente.id, db)
+        tasa = obtener_tasa_actual(db)
+        hoy = datetime.now(timezone.utc)
+        cuotas_vencidas = db.query(Cuota).join(Financiamiento).filter(
+            Financiamiento.cliente_id == cliente.id,
+            Cuota.estado == "pendiente",
+            Cuota.fecha_vencimiento < hoy
+        ).count()
+    except Exception as e:
+        logger.error(f"Error calculando datos de cliente {cliente.id}: {e}")
+        disponible = {"disponible_usd": 0, "puede_comprar": False}
+        tasa = 0
+        cuotas_vencidas = 0
+
     return {
-        "encontrado": True,
         "id": cliente.id,
         "nombre": cliente.nombre,
         "cedula": cliente.cedula,
@@ -562,22 +589,13 @@ def buscar_cliente_por_cedula(cedula: str, db: Session = Depends(get_db)):
         "direccion": cliente.direccion,
         "score": cliente.score,
         "nivel": cliente.nivel,
-        "total_compras": cliente.total_compras,
-        "url_cedula": cliente.url_cedula,
-        "estado": cliente.estado or "pendiente",
-        "tienda_id": cliente.tienda_id,
+        "estado": cliente.estado,
+        "limite_disponible_usd": disponible.get("disponible_usd", 0),
+        "puede_comprar": disponible.get("puede_comprar", False),
+        "tasa_actual": tasa,
+        "cuotas_vencidas": cuotas_vencidas,
         "tienda_nombre": cliente.tienda.nombre if cliente.tienda else None,
-        "limite_disponible": disponible,
-        "nivel_config": {
-            "monto_max_usd": config["monto_max_usd"],
-            "monto_max_bs": round(config["monto_max_usd"] * tasa, 2),
-            "entrada_pct": config["entrada_pct"],
-            "financia_pct": config["financia_pct"],
-            "cuotas_base": config["cuotas_base"],
-            "cuotas_max": config["cuotas_max"],
-            "mora_diaria": config["mora_diaria"],
-            "aprobacion_extra": config["aprobacion_extra"]
-        }
+        "creado_en": cliente.creado_en.isoformat() if cliente.creado_en else None
     }
 
 # ============================================================
@@ -614,8 +632,8 @@ def obtener_estado_cuenta(
             pendientes = [c for c in cuotas if c.estado != "pagada"]
             
             monto_financiado = fin.monto_total_bs or 0
-            monto_pagado = sum(c.monto_total_bs or c.monto or c.monto_base_bs or 0 for c in pagadas)
-            monto_deuda = sum(c.monto_total_bs or c.monto or c.monto_base_bs or 0 for c in pendientes)
+            monto_pagado = sum(c.monto_total_bs or c.monto_base_bs or 0 for c in pagadas)
+            monto_deuda = sum(c.monto_total_bs or c.monto_base_bs or 0 for c in pendientes)
             
             total_financiado += monto_financiado
             total_pagado += monto_pagado
@@ -668,7 +686,7 @@ def obtener_estado_cuenta(
         raise
     except Exception as e:
         logger.error(f"❌ Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Error interno del servidor")
 
 # ============================================================
 # PROPUESTA DE NIVEL
@@ -723,4 +741,4 @@ def calcular_propuesta_nivel(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Error interno del servidor")
