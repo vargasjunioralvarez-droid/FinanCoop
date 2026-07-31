@@ -1,5 +1,5 @@
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional
 
 # ============================================================
@@ -18,8 +18,7 @@ class TasaResponse(BaseModel):
     fuente: str
     fecha: datetime
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class NivelConfigUpdate(BaseModel):
     """Schema para actualizar configuración de niveles"""
@@ -45,5 +44,4 @@ class NivelConfigResponse(BaseModel):
     mora_diaria: float
     aprobacion_extra: bool
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
