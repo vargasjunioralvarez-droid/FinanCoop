@@ -16,7 +16,6 @@ import logging
 
 from app.modules.users.models import Cliente, Usuario
 from app.core.database import get_db
-from app.modules.users.models import Cliente
 from app.modules.loans.models import Financiamiento, Cuota
 from app.modules.payments.models import Pago
 from app.core.security import (
@@ -35,7 +34,8 @@ from app.shared.utils import (
     generar_token,
     enviar_pin_cliente_completo
 )
-from app.core.audit import audit, registrar_auditoria  # ✅ NUEVO
+from app.core.audit import audit, registrar_auditoria
+from app.core.crypto import hash_cedula
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/clientes", tags=["Clientes"])
@@ -101,7 +101,7 @@ async def subir_imagen_cloudflare_base64(base64_string: str, nombre_archivo: str
         return None
 
 # ============================================================
-# ✅ CREAR CLIENTE (CON TIENDA AUTOMÁTICA)
+# ✅ CREAR CLIENTE (FORM DATA)
 # ============================================================
 @router.post("")
 @audit(accion="CREAR_CLIENTE", tabla="clientes")
@@ -122,10 +122,12 @@ async def crear_cliente(
     try:
         logger.info(f"📝 Registrando cliente: {cedula}")
 
-        existe = db.query(Cliente).filter(Cliente.cedula == cedula).first()
+        # Validar duplicado usando hash
+        existe = db.query(Cliente).filter(Cliente.cedula_hash == hash_cedula(cedula)).first()
         if existe:
             raise HTTPException(status_code=409, detail=f"Cliente con cédula {cedula} ya existe")
 
+        # Subir imagen de cédula si se proporciona
         url_cedula = None
         if cedula_foto and cedula_foto.size and cedula_foto.size > 0:
             try:
@@ -140,20 +142,18 @@ async def crear_cliente(
             except:
                 pass
 
-        pin_generado = generar_pin()
-        pin_hasheado = hash_pin(pin_generado)
-
+        # Obtener tienda del usuario autenticado
         tienda_id = None
         if current_user and hasattr(current_user, 'tienda_id') and current_user.tienda_id:
-           tienda_id = current_user.tienda_id
+            tienda_id = current_user.tienda_id
 
-        from app.core.crypto import hash_cedula
-        cedula_hash = hash_cedula(cedula)
+        # Delegar al servicio
+        from app.services.cliente_service import ClienteService
 
-        db_cliente = Cliente(
+        db_cliente, pin_generado = ClienteService.crear(
+            db=db,
             nombre=nombre,
             cedula=cedula,
-            cedula_hash=cedula_hash,
             telefono=telefono,
             email=email or "",
             direccion=direccion or "",
@@ -161,18 +161,8 @@ async def crear_cliente(
             referencia_telefono=referencia_telefono or "",
             referencia_parentesco=referencia_parentesco or "",
             url_cedula=url_cedula,
-            pin_hash=pin_hasheado,
-            pin=None,
-            token_app=generar_token(),
-            estado="pendiente",
-            nivel="nuevo",
-            score=0,
             tienda_id=tienda_id
         )
-        
-        db.add(db_cliente)
-        db.commit()
-        db.refresh(db_cliente)
 
         logger.info(f"✅ Cliente registrado: ID {db_cliente.id} - Tienda: {tienda_id}")
 
@@ -193,6 +183,8 @@ async def crear_cliente(
             }
         }
 
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except HTTPException:
         raise
     except Exception as e:
@@ -212,43 +204,32 @@ async def crear_cliente_json(
 ):
     try:
         logger.info(f"📝 Registrando cliente (JSON): {cliente_data.cedula}")
-        
-        existe = db.query(Cliente).filter(Cliente.cedula == cliente_data.cedula).first()
+
+        # Validar duplicado usando hash
+        existe = db.query(Cliente).filter(Cliente.cedula_hash == hash_cedula(cliente_data.cedula)).first()
         if existe:
             raise HTTPException(status_code=409, detail=f"Cliente con cédula {cliente_data.cedula} ya existe")
 
-        pin_generado = generar_pin()
-        pin_hasheado = hash_pin(pin_generado)
-
+        # Obtener tienda del usuario autenticado
         tienda_id = None
         if hasattr(current_user, 'tienda_id') and current_user.tienda_id:
             tienda_id = current_user.tienda_id
 
-        from app.core.crypto import hash_cedula
-        cedula_hash = hash_cedula(cliente_data.cedula)
+        # Delegar al servicio
+        from app.services.cliente_service import ClienteService
 
-        db_cliente = Cliente(
+        db_cliente, pin_generado = ClienteService.crear(
+            db=db,
             nombre=cliente_data.nombre,
             cedula=cliente_data.cedula,
-            cedula_hash=cedula_hash,
             telefono=cliente_data.telefono,
             email=cliente_data.email or "",
             direccion=cliente_data.direccion or "",
             referencia_nombre=cliente_data.referencia_nombre or "",
             referencia_telefono=cliente_data.referencia_telefono or "",
             referencia_parentesco=cliente_data.referencia_parentesco or "",
-            pin_hash=pin_hasheado,
-            pin=None,
-            token_app=generar_token(),
-            estado="pendiente",
-            nivel="nuevo",
-            score=0,
             tienda_id=tienda_id
         )
-        
-        db.add(db_cliente)
-        db.commit()
-        db.refresh(db_cliente)
 
         return {
             "success": True,
@@ -264,6 +245,8 @@ async def crear_cliente_json(
             }
         }
 
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except HTTPException:
         raise
     except Exception as e:
@@ -305,7 +288,6 @@ async def aprobar_cliente(
             pin=pin_generado
         )
         
-        # ✅ NUEVO: Registrar auditoría manual
         registrar_auditoria(
             db=db,
             usuario_id=current_user.id,
@@ -438,7 +420,6 @@ def actualizar_cliente(
     if not cliente:
         raise HTTPException(status_code=404, detail="Cliente no encontrado")
     
-    # Guardar datos antes de actualizar
     datos_antes = {
         "nombre": cliente.nombre,
         "telefono": cliente.telefono,
@@ -458,7 +439,6 @@ def actualizar_cliente(
     db.commit()
     db.refresh(cliente)
     
-    # ✅ NUEVO: Registrar auditoría manual
     registrar_auditoria(
         db=db,
         usuario_id=current_admin.id,
@@ -494,7 +474,6 @@ def eliminar_cliente(
     db: Session = Depends(get_db),
     current_admin = Depends(get_current_admin)
 ):
-    # 🔥 SOLO admin_central
     if current_admin.rol != "admin_central":
         raise HTTPException(status_code=403, detail="Solo el administrador central puede eliminar clientes")
     
@@ -505,7 +484,6 @@ def eliminar_cliente(
     nombre = cliente.nombre
     cedula = cliente.cedula
     
-    # Guardar datos antes de eliminar
     datos_antes = {
         "nombre": nombre,
         "cedula": cedula,
@@ -523,7 +501,6 @@ def eliminar_cliente(
     db.delete(cliente)
     db.commit()
     
-    # ✅ NUEVO: Registrar auditoría manual
     registrar_auditoria(
         db=db,
         usuario_id=current_admin.id,
@@ -552,7 +529,6 @@ def buscar_cliente_por_cedula(
     - Admin central: puede buscar cualquier cliente.
     - Admin tienda / cajero: solo clientes de su tienda.
     """
-    from app.core.crypto import hash_cedula
     cliente = db.query(Cliente).filter(Cliente.cedula_hash == hash_cedula(cedula)).first()
     if not cliente:
         raise HTTPException(status_code=404, detail="Cliente no encontrado")

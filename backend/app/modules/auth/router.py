@@ -6,7 +6,7 @@ import logging
 import json
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordRequestForm
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone, timedelta
 from typing import Optional
@@ -64,23 +64,27 @@ class LoginClienteRequest(BaseModel):
     cedula: str = Field(..., min_length=6, max_length=20, pattern=r"^[0-9Vv-]+$")
     pin: str = Field(..., min_length=4, max_length=6, pattern=r"^[A-Z0-9]+$")
     
-    @validator('cedula')
-    def validate_cedula(cls, v):
+    @field_validator('cedula')
+    @classmethod
+    def validate_cedula(cls, v: str) -> str:
         v = v.strip().upper()
         if not re.match(r"^[0-9Vv-]+$", v):
             raise ValueError("Cédula contiene caracteres inválidos")
         return v
     
-    @validator('pin')
-    def validate_pin(cls, v):
+    @field_validator('pin')
+    @classmethod
+    def validate_pin(cls, v: str) -> str:
         if len(v) < 4:
             raise ValueError("PIN debe tener al menos 4 caracteres")
         return v.strip().upper()
+
 
 class LoginAdminRequest(BaseModel):
     """Login para panel admin - Username + Password (JSON)"""
     username: str = Field(..., min_length=3, max_length=50)
     password: str = Field(..., min_length=1, max_length=128)
+
 
 class LoginBiometricoRequest(BaseModel):
     """Login con huella dactilar - Cédula + confirmación biométrica del dispositivo"""
@@ -88,22 +92,26 @@ class LoginBiometricoRequest(BaseModel):
     biometric_verified: bool = True
     device_id: Optional[str] = None
     
-    @validator('cedula')
-    def validate_cedula(cls, v):
+    @field_validator('cedula')
+    @classmethod
+    def validate_cedula(cls, v: str) -> str:
         v = v.strip().upper()
         if not re.match(r"^[0-9Vv-]+$", v):
             raise ValueError("Cédula contiene caracteres inválidos")
         return v
 
+
 class RefreshTokenRequest(BaseModel):
     refresh_token: str = Field(..., min_length=20)
+
 
 class PasswordChangeRequest(BaseModel):
     old_password: str = Field(..., min_length=8, max_length=128)
     new_password: str = Field(..., min_length=12, max_length=128)
     
-    @validator('new_password')
-    def validate_password_strength(cls, v):
+    @field_validator('new_password')
+    @classmethod
+    def validate_password_strength(cls, v: str) -> str:
         if not re.search(r"[A-Z]", v):
             raise ValueError("Debe contener al menos una mayúscula")
         if not re.search(r"[a-z]", v):
@@ -114,6 +122,7 @@ class PasswordChangeRequest(BaseModel):
             raise ValueError("Debe contener al menos un carácter especial")
         return v
 
+
 class RegistroAdminRequest(BaseModel):
     username: str = Field(..., min_length=3, max_length=50, pattern=r"^[a-zA-Z0-9_]+$")
     password: str = Field(..., min_length=12, max_length=128)
@@ -122,15 +131,18 @@ class RegistroAdminRequest(BaseModel):
     email: str = Field(default="", max_length=200)
     tienda_id: int = None
 
+
 # ✅ MODELOS PARA RECUPERACIÓN DE PIN
 class SolicitarCodigoRequest(BaseModel):
     """Solicitar código de recuperación por correo"""
     cedula: str = Field(..., min_length=6, max_length=20, pattern=r"^[0-9Vv-]+$")
 
+
 class VerificarCodigoRequest(BaseModel):
     """Verificar código de recuperación"""
     cedula: str = Field(..., min_length=6, max_length=20)
     codigo: str = Field(..., min_length=4, max_length=6)
+
 
 class CambiarPinRequest(BaseModel):
     """Cambiar PIN después de verificar código (6 caracteres alfanumérico)"""
@@ -230,6 +242,7 @@ def enviar_correo_recuperacion(destinatario: str, nombre: str, codigo: str) -> b
         logger.error(f"❌ Error enviando correo: {e}")
         return False
 
+
 # ──────────────────────────────────────────────────────────────
 # 🔐 LOGIN ADMIN - JSON
 # ──────────────────────────────────────────────────────────────
@@ -281,6 +294,7 @@ def login_admin_json(
         "tienda_nombre": usuario.tienda.nombre if usuario.tienda else None
     }
 
+
 # ──────────────────────────────────────────────────────────────
 # 🔐 LOGIN ADMIN - FORM
 # ──────────────────────────────────────────────────────────────
@@ -331,6 +345,7 @@ def login_admin_form(
         "tienda_id": usuario.tienda_id,
         "tienda_nombre": usuario.tienda.nombre if usuario.tienda else None
     }
+
 
 # ──────────────────────────────────────────────────────────────
 # 🔐 LOGIN CLIENTE (App Móvil)
@@ -390,6 +405,7 @@ def login_cliente(
         }
     }
 
+
 # ──────────────────────────────────────────────────────────────
 # 🔐 LOGIN BIOMÉTRICO (DESHABILITADO TEMPORALMENTE)
 # ──────────────────────────────────────────────────────────────
@@ -409,6 +425,7 @@ def login_biometrico(
         status_code=503,
         detail="El acceso biométrico está temporalmente deshabilitado. Use su cédula y PIN para ingresar."
     )
+
 
 # ──────────────────────────────────────────────────────────────
 # 🔄 REFRESH TOKEN
@@ -439,6 +456,7 @@ def refresh_token(request_data: RefreshTokenRequest, db: Session = Depends(get_d
         "expires_in": ACCESS_TOKEN_EXPIRE_MINUTES * 60, "refresh_token": new_refresh
     }
 
+
 # ──────────────────────────────────────────────────────────────
 # 🔍 VERIFICAR TOKEN
 # ──────────────────────────────────────────────────────────────
@@ -451,6 +469,7 @@ def verificar_token(current_user: Usuario = Depends(get_current_admin)):
         "tienda_id": current_user.tienda_id,
         "tienda_nombre": current_user.tienda.nombre if current_user.tienda else None
     }
+
 
 # ──────────────────────────────────────────────────────────────
 # 📝 REGISTRO DE ADMIN
@@ -482,6 +501,7 @@ def registrar_admin(
         "rol": nuevo.rol, "nombre": nuevo.nombre, "tienda_id": nuevo.tienda_id
     }
 
+
 # ──────────────────────────────────────────────────────────────
 # 🔒 CAMBIAR CONTRASEÑA
 # ──────────────────────────────────────────────────────────────
@@ -502,6 +522,7 @@ def cambiar_password(
     db.commit()
     
     return {"mensaje": "Contraseña actualizada"}
+
 
 # ──────────────────────────────────────────────────────────────
 # 🚪 LOGOUT
@@ -524,6 +545,7 @@ def logout(
         return {"mensaje": "Sesión cerrada"}
     except:
         return {"mensaje": "Sesión cerrada"}
+
 
 # ──────────────────────────────────────────────────────────────
 # 📧 RECUPERACIÓN DE PIN POR CORREO (con Redis)
