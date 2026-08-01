@@ -25,6 +25,8 @@ jobs:
           pip install -r requirements.txt
 
       - name: Ejecutar tests
+        env:
+          JWT_SECRET_KEY: "clave-secreta-temporal-para-tests-ci-32chars"
         run: |
           cd backend
           python -m pytest tests/ -v
