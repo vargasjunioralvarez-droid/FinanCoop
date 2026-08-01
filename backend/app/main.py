@@ -223,7 +223,8 @@ import app.modules.payments.models as _payments_models
 import app.modules.config.models as _config_models
 import app.modules.auth.models as _auth_models
 import app.modules.audit.models as _audit_models
-Base.metadata.create_all(bind=engine, checkfirst=True)
+if not os.getenv("SKIP_DB_INIT"):
+    Base.metadata.create_all(bind=engine, checkfirst=True)
 
 # ─────────────────────────────────────────────────────────────
 # 🔌 ROUTERS CON PREFIJO /api/v1

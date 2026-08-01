@@ -27,6 +27,7 @@ jobs:
       - name: Ejecutar tests
         env:
           JWT_SECRET_KEY: "clave-secreta-temporal-para-tests-ci-32chars"
+          SKIP_DB_INIT: "true"
         run: |
           cd backend
           python -m pytest tests/ -v
