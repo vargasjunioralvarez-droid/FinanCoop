@@ -50,7 +50,7 @@ redis_client = None
 
 if USE_REDIS:
     try:
-        redis_client = redis.from_url(REDIS_URL, ssl=True)
+        redis_client = redis.from_url(REDIS_URL)
         redis_client.ping()
         logger.info("✅ Redis conectado correctamente")
     except Exception as e:
