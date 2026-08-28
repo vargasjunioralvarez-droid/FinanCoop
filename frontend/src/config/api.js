@@ -48,10 +48,19 @@ api.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       if (!window.location.pathname.includes('/login')) {
-        localStorage.clear()
+        localStorage.removeItem('admin_token')
+        localStorage.removeItem('admin_rol')
+        localStorage.removeItem('admin_username')
+        localStorage.removeItem('admin_nombre')
         window.location.href = '/login'
       }
     }
+    
+    if (error.response?.status === 403) {
+      alert('No tienes permisos para esta acción')
+      window.location.href = '/inicio'
+    }
+    
     return Promise.reject(error)
   }
 )

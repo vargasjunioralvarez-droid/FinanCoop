@@ -152,10 +152,9 @@ const usuarioAEliminar = ref(null)
 
 const formUsuario = ref({ username: '', password: '', nombre: '', email: '', rol: 'cajero', tienda_id: null, activo: true })
 
-const esAdmin = computed(() => {
-  const rol = localStorage.getItem('admin_rol')
-  return rol === 'admin_central'
-})
+import { useAuthStore } from '@/stores/auth'
+const auth = useAuthStore()
+const esAdmin = computed(() => auth.esAdmin)
 
 const rolesDisponibles = [
   { title: 'Administrador Central (ve todo)', value: 'admin_central' },

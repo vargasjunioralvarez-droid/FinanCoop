@@ -231,10 +231,9 @@ const tiendaForm = ref({ nombre: '', codigo: '', direccion: '', telefono: '' })
 const usuarioForm = ref({ username: '', password: '', nombre: '', email: '', rol: 'cajero', tienda_id: null })
 const snackbar = ref({ show: false, text: '', color: 'success' })
 
-const esAdmin = computed(() => {
-  const rol = localStorage.getItem('admin_rol')
-  return rol === 'admin_central' || rol === 'admin'
-})
+import { useAuthStore } from '@/stores/auth'
+const auth = useAuthStore()
+const esAdmin = computed(() => auth.esAdmin)
 
 const rolesDisponibles = [
   { title: 'Administrador Central (ve todo)', value: 'admin_central' },

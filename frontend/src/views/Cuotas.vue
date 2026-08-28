@@ -30,7 +30,10 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { api } from '@/config/api' // ✅ Usamos el objeto 'api' central
+import { api } from '@/config/api'
+import { useAuthStore } from '@/stores/auth'  // ✅ NUEVO
+
+const auth = useAuthStore()  // ✅ NUEVO
 
 const props = defineProps(['id'])
 const cuotas = ref([])
@@ -47,7 +50,6 @@ const headers = [
 
 const cargar = async () => {
   try {
-    // ✅ Usamos api.get, que se encarga de la URL y el proxy
     const data = await api.get(`/financiamientos/${props.id}/cuotas`)
     cuotas.value = data
   } catch (error) {
@@ -57,11 +59,14 @@ const cargar = async () => {
 
 const pagar = async (cuotaId) => {
   try {
-    // ✅ Usamos api.post, que se encarga de la URL y el proxy
-    await api.post(`/cuotas/${cuotaId}/pagar`)
-    await cargar() // Recargar la lista después de pagar
+    // ✅ CORREGIDO: URL del endpoint correcto
+    await api.post(`/pagos/cuotas/${cuotaId}/pagar-efectivo`, {}, {
+      headers: { 'Content-Type': 'application/json' }
+    })
+    await cargar()
   } catch (error) {
     console.error('Error pagando:', error)
+    alert('Error al pagar: ' + (error.response?.data?.detail || error.message))
   }
 }
 

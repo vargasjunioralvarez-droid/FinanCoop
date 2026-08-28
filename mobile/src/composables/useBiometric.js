@@ -42,8 +42,8 @@ async function verificarSoporte() {
   }
 }
 
-function guardarCredencialesHuella(cedula, pin) {
-  const credenciales = { cedula, pin, fecha: new Date().toISOString() }
+function guardarCredencialesHuella(cedula) {
+  const credenciales = { cedula, fecha: new Date().toISOString() }
   localStorage.setItem('financoop_huella_credenciales', JSON.stringify(credenciales))
   credencialesGuardadas.value = credenciales
   huellaActivada.value = true
@@ -80,7 +80,7 @@ async function toggleHuella(activar) {
         return { success: false, error: 'No se encontraron datos del usuario' }
       }
       
-      guardarCredencialesHuella(usuario.cedula, usuario.pin || '')
+      guardarCredencialesHuella(usuario.cedula)
       
       return { success: true }
     } else {
@@ -129,34 +129,12 @@ async function autenticarConHuella(cedula) {
 
     console.log('✅ Huella verificada para cédula:', cedula)
 
-    // ✅ USAR EL PIN GUARDADO
-    const pin = credencialesGuardadas.value.pin || '1234'
-    
-    const API_URL = 'https://financoop-agd5.onrender.com/api/v1'
-    
-    const response = await fetch(`${API_URL}/auth/login-cliente`, {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      },
-      body: JSON.stringify({ 
-        cedula: cedula,
-        pin: pin
-      })
-    })
-
-    const data = await response.json()
-    if (!response.ok) {
-      return { success: false, error: data.detail || data.error || 'Error en login' }
+    // ✅ EL LOGIN BIOMÉTRICO ESTÁ DESHABILITADO EN EL BACKEND
+    // Por seguridad (H11), no enviamos PIN ni hacemos login automático.
+    return { 
+      success: false, 
+      error: 'El acceso con huella está temporalmente deshabilitado. Usa tu PIN para ingresar.' 
     }
-    
-    const token = data.access_token || data.token
-    if (!token) {
-      return { success: false, error: 'No se recibió token' }
-    }
-    
-    return { success: true, data: { access_token: token, cliente: data.cliente } }
 
   } catch (e) {
     console.error('❌ Error:', e.message)

@@ -23,12 +23,12 @@ export default defineConfig({
     },
     proxy: {
       '/api': {
-        target: 'https://financoop.onrender.com', // ← CAMBIADO
+        target: 'https://financoop-agd5.onrender.com', // ✅ CORREGIDO
         changeOrigin: true
       }
     }
   },
-  base: '/', // ← CAMBIADO (era './')
+  base: '/',
   build: {
     outDir: 'dist',
     assetsDir: 'assets',

@@ -263,7 +263,9 @@ let chartInstance = null
 const filtros = ref({ busqueda: '', estado: 'todos', nivel: 'todos', morosidad: 'todos' })
 const stats = ref({ total: 0, total_entrada: 0, total_financiado: 0, total_pendiente: 0 })
 
-const esAdminCentral = computed(() => localStorage.getItem('admin_rol') === 'admin_central')
+import { useAuthStore } from '@/stores/auth'
+const auth = useAuthStore()
+const esAdminCentral = computed(() => auth.esAdmin)
 
 const headers = [
   { title: 'Código', key: 'codigo', width: '100px' },
@@ -377,7 +379,14 @@ const abrirPagoEfectivo = async (fin) => {
 }
 
 const confirmarPagoEfectivo = async () => {
-  try { await api.post(`/cuotas/${cuotaSeleccionada.value}/pagar-efectivo`); alert('✅ Pago registrado'); dialogPago.value = false; await cargarDatos() } catch (e) { alert('Error registrando pago') }
+  try { 
+    await api.post(`/pagos/cuotas/${cuotaSeleccionada.value}/pagar-efectivo`)  // ✅ CORRECTO
+    alert('✅ Pago registrado')
+    dialogPago.value = false
+    await cargarDatos() 
+  } catch (e) { 
+    alert('Error registrando pago: ' + (e.response?.data?.detail || e.message)) 
+  }
 }
 
 const confirmarEliminar = (item) => {

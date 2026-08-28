@@ -70,9 +70,10 @@
                       <v-chip color="success" size="small" variant="flat">✅ Aprobado</v-chip>
                     </template>
                     <template v-slot:item.pin="{ item }">
-                      <v-chip v-if="item.pin" color="primary" size="small" variant="tonal">{{ item.pin }}</v-chip>
-                      <span v-else class="text-caption" style="color: rgba(255,255,255,0.3);">Sin PIN</span>
-                    </template>
+  <v-chip v-if="item.pin && esAdminCentral" color="primary" size="small" variant="tonal">{{ item.pin }}</v-chip>
+  <span v-else-if="item.pin" class="text-caption" style="color: rgba(255,255,255,0.3);">••••••</span>
+  <span v-else class="text-caption" style="color: rgba(255,255,255,0.3);">Sin PIN</span>
+</template>
                     <template v-slot:item.nivel="{ item }">
                       <div class="d-flex align-center">
                         <div class="level-dot" :style="`background: ${nivelColor2(item.nivel)}`"></div>
@@ -236,7 +237,12 @@
                 <p class="text-white"><strong>Score:</strong> {{ clienteSeleccionado.score }} pts</p>
                 <p class="text-white"><strong>Compras:</strong> {{ clienteSeleccionado.total_compras }}</p>
                 <p class="text-white"><strong>Nivel:</strong> <v-chip :color="colorNivel(clienteSeleccionado.nivel)" size="x-small">{{ clienteSeleccionado.nivel }}</v-chip></p>
-                <p class="text-white"><strong>PIN:</strong> <v-chip v-if="clienteSeleccionado.pin" color="primary" size="x-small">{{ clienteSeleccionado.pin }}</v-chip><span v-else style="color: rgba(255,255,255,0.3);">Sin PIN</span></p>
+                <p class="text-white">
+  <strong>PIN:</strong> 
+  <v-chip v-if="clienteSeleccionado.pin && esAdminCentral" color="primary" size="x-small">{{ clienteSeleccionado.pin }}</v-chip>
+  <span v-else-if="clienteSeleccionado.pin" style="color: rgba(255,255,255,0.3);">••••••</span>
+  <span v-else style="color: rgba(255,255,255,0.3);">Sin PIN</span>
+</p>
               </div>
             </v-col>
           </v-row>
@@ -306,6 +312,8 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { api } from '@/config/api'
+import { useAuthStore } from '@/stores/auth'
+const auth = useAuthStore()
 
 const tabActiva = ref('verificados')
 const busquedaVerificados = ref('')
@@ -329,7 +337,7 @@ const cuotas = ref([])
 const snackbar = ref({ show: false, text: '', color: 'success' })
 const pinGenerado = ref(null)
 
-const esAdminCentral = computed(() => localStorage.getItem('admin_rol') === 'admin_central')
+const esAdminCentral = computed(() => auth.esAdmin)
 
 const headersVerificados = [
   { title: 'Nombre', key: 'nombre', sortable: true }, { title: 'Cédula', key: 'cedula', sortable: true },

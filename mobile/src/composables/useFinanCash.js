@@ -396,10 +396,9 @@ async function iniciarSesion() {
       token.value = tokenRecibido
       localStorage.setItem('financoop_token', tokenRecibido)
       
-      // ✅ GUARDAR USUARIO EN LOCALSTORAGE
+      // ✅ GUARDAR USUARIO EN LOCALSTORAGE (SIN PIN)
       const usuario = {
         cedula: cedula,
-        pin: pin,
         nombre: data.cliente?.nombre || '',
         id: data.cliente?.id || ''
       }

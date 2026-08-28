@@ -1,4 +1,3 @@
-// frontend/src/stores/auth.js
 import { defineStore } from 'pinia'
 import { api } from '@/config/api'
 
@@ -9,7 +8,7 @@ export const useAuthStore = defineStore('auth', {
     username: localStorage.getItem('admin_username') || '',
     nombre: localStorage.getItem('admin_nombre') || '',
     tiendaNombre: '',
-    tasaActual: 40,
+    tasaActual: null,  // Cambiado de 40 a null
   }),
 
   getters: {
@@ -55,7 +54,10 @@ export const useAuthStore = defineStore('auth', {
       this.username = ''
       this.nombre = ''
       this.tiendaNombre = ''
-      localStorage.clear()
+      localStorage.removeItem('admin_token')
+      localStorage.removeItem('admin_rol')
+      localStorage.removeItem('admin_username')
+      localStorage.removeItem('admin_nombre')
       window.location.href = '/login'
     }
   }
