@@ -6,8 +6,8 @@ Multi-tienda: admin_central ve todo, admin_tienda ve su tienda, cajero ve su tie
 
 from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError, jwt
-from jose.exceptions import ExpiredSignatureError
+import jwt
+from jwt import PyJWTError, ExpiredSignatureError
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, timezone
 from app.core.database import get_db
@@ -167,10 +167,9 @@ def _decode_and_validate_token(token: str, db: Optional[Session] = None) -> dict
         return payload
     except ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expirado")
-    except JWTError as e:
+    except PyJWTError as e:
         logger.warning(f"Error de token: {str(e)}")
         raise HTTPException(status_code=401, detail="Token inválido")
-
 # ──────────────────────────────────────────────────────────────
 # 👤 OBTENER USUARIO ACTUAL (mantenemos tu código)
 # ──────────────────────────────────────────────────────────────

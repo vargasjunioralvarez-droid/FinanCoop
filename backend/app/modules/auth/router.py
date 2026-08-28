@@ -16,7 +16,8 @@ import os
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from jose import jwt, JWTError, ExpiredSignatureError
+import jwt
+from jwt import PyJWTError, ExpiredSignatureError
 
 from app.core.database import get_db
 from app.modules.users.models import Cliente, Usuario
@@ -714,7 +715,7 @@ def cambiar_pin_recuperacion(
         
     except ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expirado. Solicite un nuevo código.")
-    except JWTError:
+    except PyJWTError:
         raise HTTPException(status_code=401, detail="Token inválido")
     except Exception as e:
         logger.error(f"Error cambiando PIN: {e}")
