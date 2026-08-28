@@ -2,6 +2,7 @@
 Programador de tareas automáticas (Backups)
 """
 
+import os
 import threading
 import time
 import logging
@@ -24,6 +25,14 @@ class Scheduler:
     def start(self):
         """Inicia el scheduler en un hilo separado"""
         if self.running:
+            return
+        
+        # 🔒 SOLO la instancia principal ejecuta backups automáticos
+        # En Render, RENDER_INSTANCE_ID está disponible en cada instancia
+        # La instancia principal suele tener ID "0" o no estar definida
+        instance_id = os.getenv("RENDER_INSTANCE_ID", "0")
+        if instance_id not in ["0", "", None]:
+            logger.info(f"⏭️ Instancia {instance_id} no ejecutará backups automáticos (solo la principal)")
             return
         
         self.running = True
