@@ -131,7 +131,11 @@
 </template>
 
 <script setup>
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { api } from '@/config/api'
+import { useAuthStore } from '@/stores/auth'
+
+const auth = useAuthStore()
 
 const pagosPendientes = ref([])
 const dialogConfirmar = ref(false)
@@ -166,14 +170,6 @@ const abrirConciliar = (pago, aprobar) => {
   pagoSeleccionado.value=pago; accionAprobar.value=aprobar; montoConfirmado.value=pago.monto_reportado_bs||0; dialogConfirmar.value=true
 }
 
-import { ref, onMounted, onUnmounted, computed } from 'vue'
-import { api } from '@/config/api'
-import { useAuthStore } from '@/stores/auth'  // ✅ NUEVO
-
-const auth = useAuthStore()  // ✅ NUEVO
-
-// ... resto del código ...
-
 const confirmarAccion = async () => {
   if(!pagoSeleccionado.value) return
   cargando.value=true
@@ -182,7 +178,7 @@ const confirmarAccion = async () => {
       pago_id:Number(pagoSeleccionado.value.id||pagoSeleccionado.value.pago_id),
       monto_confirmado_bs:accionAprobar.value?Number(montoConfirmado.value):0,
       estado:accionAprobar.value?'conciliado':'rechazado',
-      conciliado_por: auth.username || 'admin'  // ✅ USA EL USERNAME REAL
+      conciliado_por: auth.username || 'admin'
     })
     dialogConfirmar.value=false; await cargarPagos()
   } catch(e) { alert('Error: '+(e.response?.data?.detail||e.message)) }
