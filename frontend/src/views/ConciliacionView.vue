@@ -131,7 +131,6 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { api } from '@/config/api'
 
 const pagosPendientes = ref([])
