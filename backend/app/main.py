@@ -46,6 +46,7 @@ from app.core.scheduler import iniciar_scheduler
 # 📊 INICIALIZACIÓN DE DATOS (NUEVO ARCHIVO)
 # ============================================================
 from app.core.init_db import init_db
+from prometheus_fastapi_instrumentator import Instrumentator
 
 
 # ─────────────────────────────────────────────────────────────
@@ -71,6 +72,9 @@ app = FastAPI(
     redoc_url="/redoc" if not IS_PROD else None,
     openapi_url="/openapi.json" if not IS_PROD else None,
 )
+# 📊 Instrumentación de métricas Prometheus
+instrumentator = Instrumentator()
+instrumentator.instrument(app).expose(app, endpoint="/metrics")
 
 # ─────────────────────────────────────────────────────────────
 # 🌐 CORS CONFIGURACIÓN SEGURA (sin middleware manual inseguro)
