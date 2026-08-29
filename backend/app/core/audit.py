@@ -25,6 +25,40 @@ def _obtener_ultimo_hash(db: Session) -> str:
     return ultimo.hash_actual if ultimo else None
 
 
+def _obtener_request(args, kwargs):
+    """Obtener el objeto Request de forma segura desde args o kwargs."""
+    # Buscar en kwargs con diferentes nombres posibles
+    for key in ['request', '_request', 'req']:
+        if key in kwargs:
+            request = kwargs[key]
+            if hasattr(request, 'headers') and hasattr(request, 'client'):
+                return request
+    
+    # Buscar en args (argumentos posicionales)
+    for arg in args:
+        if hasattr(arg, 'headers') and hasattr(arg, 'client'):
+            return arg
+    
+    return None
+
+
+def _obtener_db(args, kwargs):
+    """Obtener la sesión de base de datos de forma segura."""
+    # Buscar en kwargs
+    for key in ['db', 'database', 'session']:
+        if key in kwargs:
+            db = kwargs[key]
+            if hasattr(db, 'query'):
+                return db
+    
+    # Buscar en args
+    for arg in args:
+        if hasattr(arg, 'query') and hasattr(arg, 'add'):
+            return arg
+    
+    return None
+
+
 def registrar_auditoria(
     db: Session,
     usuario_id: int = None,
@@ -100,8 +134,9 @@ def audit(accion: str, tabla: str = None):
         if is_async:
             @wraps(func)
             async def async_wrapper(*args, **kwargs):
-                request = kwargs.get('request')
-                db = kwargs.get('db')
+                # ✅ Obtener request y db de forma segura
+                request = _obtener_request(args, kwargs)
+                db = _obtener_db(args, kwargs)
 
                 usuario = None
                 usuario_id = None
@@ -118,7 +153,7 @@ def audit(accion: str, tabla: str = None):
                     usuario_nombre = getattr(usuario, 'nombre', getattr(usuario, 'username', None))
                     usuario_rol = getattr(usuario, 'rol', None)
 
-                registro_id = kwargs.get('id') or kwargs.get('registro_id') or kwargs.get('pago_id')
+                registro_id = kwargs.get('id') or kwargs.get('registro_id') or kwargs.get('pago_id') or kwargs.get('nivel')
 
                 try:
                     result = await func(*args, **kwargs)
@@ -170,8 +205,9 @@ def audit(accion: str, tabla: str = None):
         else:
             @wraps(func)
             def wrapper(*args, **kwargs):
-                request = kwargs.get('request')
-                db = kwargs.get('db')
+                # ✅ Obtener request y db de forma segura
+                request = _obtener_request(args, kwargs)
+                db = _obtener_db(args, kwargs)
 
                 usuario = None
                 usuario_id = None
@@ -188,7 +224,7 @@ def audit(accion: str, tabla: str = None):
                     usuario_nombre = getattr(usuario, 'nombre', getattr(usuario, 'username', None))
                     usuario_rol = getattr(usuario, 'rol', None)
 
-                registro_id = kwargs.get('id') or kwargs.get('registro_id') or kwargs.get('pago_id')
+                registro_id = kwargs.get('id') or kwargs.get('registro_id') or kwargs.get('pago_id') or kwargs.get('nivel')
 
                 try:
                     result = func(*args, **kwargs)
@@ -246,8 +282,8 @@ def audit_login(logout: bool = False):
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
-            request = kwargs.get('request')
-            db = kwargs.get('db')
+            request = _obtener_request(args, kwargs)
+            db = _obtener_db(args, kwargs)
 
             try:
                 result = func(*args, **kwargs)
