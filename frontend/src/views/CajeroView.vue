@@ -372,15 +372,26 @@ const porcentajeUsado = computed(() => {
 
 const opcionesCuotas = computed(() => {
   if (!propuesta.value) return []
+  
   const p = propuesta.value.propuesta || propuesta.value
   const config = propuesta.value.configuracion_nivel || {}
-  const cb = p.cuotas_base || config.cuotas_base || 4
-  const cm = p.cuotas_max || config.cuotas_max || 12
+  
+  // ✅ Obtener cuotas base y max del backend
+  const cb = p.cuotas_base || config.cuotas_base || 1
+  const cm = p.cuotas_max || config.cuotas_max || 1
+  
   const fb = p.financia_bs || propuesta.value.monto_financia_bs || 0
+  
+  console.log('📊 Cuotas base:', cb)
+  console.log('📊 Cuotas máx:', cm)
+  console.log('📊 Monto a financiar:', fb)
+  
   const o = []
   for (let i = cb; i <= cm; i++) {
     o.push({ value: i, monto: fb / i })
   }
+  
+  console.log('✅ Opciones de cuotas:', o)
   return o
 })
 
@@ -480,21 +491,50 @@ const registrarCliente = async () => {
 
 const calcularPropuesta = async () => {
   if (!montoTotalBS.value || parseFloat(montoTotalBS.value) <= 0 || !clienteEncontrado.value) {
-    propuesta.value = null; cuotasSeleccionadas.value = null; excedeLimite.value = false; return  }
+    propuesta.value = null
+    cuotasSeleccionadas.value = null
+    excedeLimite.value = false
+    return
+  }
+  
   const tasa = tasaDolar.value || 40
   const montoUSD = parseFloat(montoTotalBS.value) / tasa
   const disponibleUSD = clienteEncontrado.value?.limite_disponible?.disponible_usd || 0
-  if (montoUSD > disponibleUSD) { excedeLimite.value = true; return }
+  
+  if (montoUSD > disponibleUSD) {
+    excedeLimite.value = true
+    return
+  }
+  
   excedeLimite.value = false
+  
   try {
     const data = await api.get(`/clientes/${clienteEncontrado.value.id}/nivel-propuesta?monto_total_bs=${montoTotalBS.value}`)
     propuesta.value = data
-    cuotasSeleccionadas.value = data.propuesta?.cuotas_base || 4
-  } catch (e) { propuesta.value = null }
+    
+    // ✅ Seleccionar cuotas base del backend (no hardcodear 4)
+    const cuotasBase = data.propuesta?.cuotas_base || data.configuracion_nivel?.cuotas_base || 1
+    cuotasSeleccionadas.value = cuotasBase
+    
+    console.log('📦 Propuesta completa:', data)
+    console.log('✅ Cuota base seleccionada:', cuotasBase)
+    
+  } catch (e) {
+    console.error('❌ Error calculando propuesta:', e)
+    propuesta.value = null
+  }
 }
 
 const crearFinanciamiento = async () => {
   try {
+    console.log('📤 Enviando financiamiento:', {
+      cliente_id: clienteEncontrado.value.id,
+      descripcion: categoriaSeleccionada.value?.title || 'Compra',
+      monto_total_bs: parseFloat(montoTotalBS.value),
+      cuotas_solicitadas: cuotasSeleccionadas.value,
+      numero_factura: numeroFactura.value || null
+    })
+    
     const data = await api.post('/financiamientos', {
       cliente_id: clienteEncontrado.value.id,
       descripcion: categoriaSeleccionada.value?.title || 'Compra',
@@ -502,10 +542,23 @@ const crearFinanciamiento = async () => {
       cuotas_solicitadas: cuotasSeleccionadas.value,
       numero_factura: numeroFactura.value || null
     })
-    if (data.error) { alert('Error: ' + data.error); return }
+    
+    console.log('✅ Respuesta exitosa:', data)
+    
+    if (data.error) { 
+      alert('Error: ' + data.error)
+      return 
+    }
     resultado.value = data
     paso.value = 4
-  } catch (e) { alert('Error creando financiamiento') }
+  } catch (e) {
+    console.error('❌ Error completo:', e)
+    console.error('❌ Detalle del error:', e.response?.data?.detail)
+    
+    // Mostrar error detallado
+    const detalle = e.response?.data?.detail || 'Error creando financiamiento'
+    alert('❌ ' + detalle)
+  }
 }
 
 const resetear = () => {
