@@ -422,18 +422,41 @@ const buscarCliente = async () => {
   try {
     const data = await api.get(`/clientes/buscar/${busquedaCedula.value}`)
     
+    // 🔍 DEBUG: Ver qué devuelve el backend
+    console.log('📦 Respuesta del backend:', data)
+    
     // ✅ Si data tiene id, el cliente existe
     if (data && data.id) {
-      clienteEncontrado.value = data
+      // ✅ NORMALIZAR: Convertir limite_disponible_usd a estructura limite_disponible
+      clienteEncontrado.value = {
+        ...data,
+        limite_disponible: {
+          limite_usd: data.limite_total_usd || data.limite_usd || 0,
+          usado_usd: data.usado_usd || 0,
+          disponible_usd: data.limite_disponible_usd || data.disponible_usd || 0
+        }
+      }
+      
+      console.log('✅ Cliente normalizado:', clienteEncontrado.value)
+      
       clienteNoEncontrado.value = false
       
       // Obtener financiamientos activos
       try {
         const financiamientos = await api.get(`/financiamientos/cliente/${data.id}/activos`)
         const lista = Array.isArray(financiamientos) ? financiamientos : (financiamientos.financiamientos || [])
-        clienteEncontrado.value = { ...data, financiamientos_activos: lista }
+        clienteEncontrado.value = { 
+          ...clienteEncontrado.value, 
+          financiamientos_activos: lista 
+        }
+        
+        console.log('📋 Financiamientos:', lista)
       } catch (e) {
-        clienteEncontrado.value = { ...data, financiamientos_activos: [] }
+        console.warn('⚠️ Error obteniendo financiamientos:', e)
+        clienteEncontrado.value = { 
+          ...clienteEncontrado.value, 
+          financiamientos_activos: [] 
+        }
       }
     } else {
       clienteEncontrado.value = null
@@ -441,6 +464,7 @@ const buscarCliente = async () => {
       nuevoCliente.value.cedula = busquedaCedula.value
     }
   } catch (e) {
+    console.error('❌ Error buscando cliente:', e)
     clienteEncontrado.value = null
     clienteNoEncontrado.value = true
     nuevoCliente.value.cedula = busquedaCedula.value
