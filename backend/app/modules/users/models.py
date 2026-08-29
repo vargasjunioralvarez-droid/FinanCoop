@@ -52,10 +52,10 @@ class Cliente(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     nombre = Column(String(200), nullable=False)
-    cedula = Column(EncryptedString(20), unique=True, nullable=False)
+    cedula = Column(EncryptedString(500), unique=True, nullable=False)
     cedula_hash = Column(String(64), unique=True, nullable=True, index=True)
-    telefono = Column(EncryptedString(20), nullable=True)
-    email = Column(EncryptedString(200), nullable=True)
+    telefono = Column(EncryptedString(500), nullable=True)
+    email = Column(EncryptedString(500), nullable=True)
     direccion = Column(EncryptedString(500), nullable=True)
     referencia_nombre = Column(String(200), nullable=True)
     referencia_telefono = Column(String(20), nullable=True)
