@@ -509,15 +509,55 @@ const calcularPropuesta = async () => {
   excedeLimite.value = false
   
   try {
+    // 1. Obtener propuesta del backend
     const data = await api.get(`/clientes/${clienteEncontrado.value.id}/nivel-propuesta?monto_total_bs=${montoTotalBS.value}`)
-    propuesta.value = data
     
-    // ✅ Seleccionar cuotas base del backend (no hardcodear 4)
-    const cuotasBase = data.propuesta?.cuotas_base || data.configuracion_nivel?.cuotas_base || 1
+    // 2. Obtener configuración ACTUALIZADA de niveles desde la BD
+    const nivelesData = await api.get('/config/niveles')
+    const niveles = nivelesData?.niveles || nivelesData || {}
+    
+    // 3. Obtener el nivel REAL del cliente
+    const nivelCliente = clienteEncontrado.value?.nivel || 'nuevo'
+    const configNivel = niveles[nivelCliente] || niveles.nuevo || {}
+    
+    console.log('🏷️ Nivel cliente:', nivelCliente)
+    console.log('📊 Config BD:', configNivel)
+    
+    // 4. Usar cuotas de la BD (siempre actualizadas)
+    const cuotasBase = configNivel.cuotas_base || 2
+    const cuotasMax = configNivel.cuotas_max || 2
+    const entradaPct = configNivel.entrada_pct || 50
+    const financiaPct = configNivel.financia_pct || 50
+    
+    // 5. Calcular montos con los porcentajes correctos
+    const entradaBS = parseFloat(montoTotalBS.value) * (entradaPct / 100)
+    const financiaBS = parseFloat(montoTotalBS.value) - entradaBS
+    
+    // 6. Actualizar propuesta con valores correctos
+    propuesta.value = {
+      ...data,
+      propuesta: {
+        ...data.propuesta,
+        cuotas_base: cuotasBase,
+        cuotas_max: cuotasMax,
+        entrada_pct: entradaPct,
+        financia_pct: financiaPct,
+        entrada_bs: entradaBS,
+        financia_bs: financiaBS
+      },
+      configuracion_nivel: {
+        ...data.configuracion_nivel,
+        ...configNivel,
+        cuotas_base: cuotasBase,
+        cuotas_max: cuotasMax
+      }
+    }
+    
+    // 7. Seleccionar cuota base por defecto
     cuotasSeleccionadas.value = cuotasBase
     
-    console.log('📦 Propuesta completa:', data)
-    console.log('✅ Cuota base seleccionada:', cuotasBase)
+    console.log('✅ Cuotas BD:', cuotasBase, '-', cuotasMax)
+    console.log('✅ Entrada:', entradaPct + '%', '| Financia:', financiaPct + '%')
     
   } catch (e) {
     console.error('❌ Error calculando propuesta:', e)
