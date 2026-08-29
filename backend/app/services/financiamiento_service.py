@@ -122,7 +122,6 @@ class FinanciamientoService:
     cliente_id=cliente_id,
     codigo=codigo,
     descripcion=descripcion,
-    monto=monto_total_bs,  # ✅ AGREGAR ESTE CAMPO
     monto_total_bs=monto_total_bs,
     monto_entrada_bs=entrada_bs,
     monto_financia_bs=financia_bs,

@@ -18,7 +18,6 @@ class Financiamiento(Base):
     numero_factura = Column(String(100), nullable=True)
     
     # ✅ CAMPO AGREGADO
-    monto = Column(Numeric(20, 2), nullable=True, default=0)
     
     monto_total_bs = Column(Numeric(20, 2), nullable=False, default=0)
     monto_entrada_bs = Column(Numeric(20, 2), nullable=False, default=0)
