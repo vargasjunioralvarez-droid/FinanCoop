@@ -1,4 +1,3 @@
-# backend/app/domain/scoring.py
 """
 🎯 Lógica de dominio: Scoring crediticio y límites del cliente.
 """
@@ -18,15 +17,15 @@ def calcular_nivel(score: int, db=None):
             for n in niveles_db:
                 if n.min_score <= score <= n.max_score:
                     return n.nivel, {
-                        "min_score": n.min_score,
-                        "max_score": n.max_score,
-                        "monto_max_usd": n.monto_max_usd,
-                        "entrada_pct": n.entrada_pct,
-                        "financia_pct": n.financia_pct,
-                        "cuotas_base": n.cuotas_base,
-                        "cuotas_max": n.cuotas_max,
-                        "mora_diaria": n.mora_diaria,
-                        "aprobacion_extra": n.aprobacion_extra
+                        "min_score": int(n.min_score or 0),
+                        "max_score": int(n.max_score or 0),
+                        "monto_max_usd": float(n.monto_max_usd or 0),
+                        "entrada_pct": float(n.entrada_pct or 0),
+                        "financia_pct": float(n.financia_pct or 0),
+                        "cuotas_base": int(n.cuotas_base or 0),
+                        "cuotas_max": int(n.cuotas_max or 0),
+                        "mora_diaria": float(n.mora_diaria or 0),
+                        "aprobacion_extra": bool(n.aprobacion_extra)
                     }
     
     niveles_ordenados = sorted(NIVELES_CONFIG.items(), key=lambda x: x[1]["min_score"])
@@ -88,23 +87,28 @@ def actualizar_score_cliente(cliente: Cliente, db):
 
 
 def calcular_usado_disponible(cliente_id: int, db):
-    from app.shared.utils import obtener_tasa_actual  # Evita dependencia circular
+    from app.shared.utils import obtener_tasa_actual
 
-    tasa = obtener_tasa_actual(db)
+    tasa = float(obtener_tasa_actual(db) or 0)
     cliente = db.query(Cliente).filter(Cliente.id == cliente_id).first()
     if not cliente:
         return {}
+    
     nivel, config = calcular_nivel(cliente.score, db)
-    limite_usd = config["monto_max_usd"]
+    limite_usd = float(config.get("monto_max_usd", 0) or 0)
     limite_bs = limite_usd * tasa
+    
     activos = db.query(Financiamiento).filter(
         Financiamiento.cliente_id == cliente_id,
         Financiamiento.estado == "activo"
     ).all()
-    usado_usd = sum(f.monto_total_usd for f in activos)
-    usado_bs = sum(f.monto_total_bs for f in activos)
+    
+    usado_usd = sum(float(f.monto_total_usd or 0) for f in activos)
+    usado_bs = sum(float(f.monto_total_bs or 0) for f in activos)
+    
     disponible_usd = max(0, limite_usd - usado_usd)
     disponible_bs = max(0, limite_bs - usado_bs)
+    
     return {
         "nivel": nivel,
         "limite_usd": round(limite_usd, 2),
