@@ -357,18 +357,12 @@ const nuevoCliente = ref({
 })
 
 const categorias = [
+  { title: 'Feria', icon: 'mdi-basket', color: '#FF9800' },
   { title: 'Salud', icon: 'mdi-hospital-box', color: '#EF5350' },
-  { title: 'Ropa', icon: 'mdi-tshirt-crew', color: '#42A5F5' },
-  { title: 'Comida', icon: 'mdi-food', color: '#FFA726' },
-  { title: 'Hogar', icon: 'mdi-home', color: '#66BB6A' },
-  { title: 'Tecnología', icon: 'mdi-laptop', color: '#AB47BC' },
-  { title: 'Educación', icon: 'mdi-school', color: '#26C6DA' },
-  { title: 'Transporte', icon: 'mdi-car', color: '#78909C' },
-  { title: 'Belleza', icon: 'mdi-content-cut', color: '#EC407A' },
-  { title: 'Deporte', icon: 'mdi-run', color: '#8D6E63' },
-  { title: 'Otro', icon: 'mdi-dots-horizontal', color: '#B0BEC5' }
+  { title: 'Odontología', icon: 'mdi-tooth', color: '#42A5F5' },
+  { title: 'Laboratorio', icon: 'mdi-flask', color: '#AB47BC' },
+  { title: 'Otros', icon: 'mdi-dots-horizontal', color: '#B0BEC5' }
 ]
-
 const porcentajeUsado = computed(() => {
   if (!clienteEncontrado.value) return 0
   const l = clienteEncontrado.value.limite_disponible?.limite_usd || 0
@@ -407,9 +401,11 @@ const nivelIcono = (n) => ({ nuevo: 'mdi-star-outline', bronce: 'mdi-medal-outli
 
 const colorCategoria = (cat) => {
   const colores = {
-    'Salud': '#EF5350', 'Ropa': '#42A5F5', 'Comida': '#FFA726',
-    'Hogar': '#66BB6A', 'Tecnología': '#AB47BC', 'Educación': '#26C6DA',
-    'Transporte': '#78909C', 'Belleza': '#EC407A', 'Deporte': '#8D6E63'
+    'Feria': '#FF9800',
+    'Salud': '#EF5350',
+    'Odontología': '#42A5F5',
+    'Laboratorio': '#AB47BC',
+    'Otros': '#B0BEC5'
   }
   return colores[cat] || '#B0BEC5'
 }
