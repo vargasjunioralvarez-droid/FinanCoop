@@ -1,4 +1,3 @@
-# app/modules/loans/models.py
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, Float, ForeignKey, Text, Numeric
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
@@ -17,6 +16,9 @@ class Financiamiento(Base):
     descripcion = Column(Text, nullable=True)
     url_factura = Column(String(500), nullable=True)
     numero_factura = Column(String(100), nullable=True)
+    
+    # ✅ CAMPO AGREGADO
+    monto = Column(Numeric(20, 2), nullable=True, default=0)
     
     monto_total_bs = Column(Numeric(20, 2), nullable=False, default=0)
     monto_entrada_bs = Column(Numeric(20, 2), nullable=False, default=0)

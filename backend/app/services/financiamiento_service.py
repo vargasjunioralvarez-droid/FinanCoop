@@ -119,29 +119,30 @@ class FinanciamientoService:
         fecha_primera = datetime.now(timezone.utc) + timedelta(days=15)
 
         fin = Financiamiento(
-            cliente_id=cliente_id,
-            codigo=codigo,
-            descripcion=descripcion,
-            monto_total_bs=monto_total_bs,
-            monto_entrada_bs=entrada_bs,
-            monto_financia_bs=financia_bs,
-            monto_cuota_bs=monto_cuota_bs,
-            monto_total_usd=monto_total_usd,
-            monto_entrada_usd=entrada_usd_ref,
-            monto_financia_usd=financia_usd_ref,
-            monto_cuota_usd=monto_cuota_usd_ref,
-            tasa_aplicada=tasa,
-            nivel_aplicado=nivel,
-            cuotas_solicitadas=cuotas_solicitadas,
-            cuotas_aprobadas=cuotas_aprobadas,
-            requiere_aprobacion=requiere_aprobacion,
-            entrada_pct=config["entrada_pct"],
-            financia_pct=config["financia_pct"],
-            fecha_primera_cuota=fecha_primera,
-            estado="activo",
-            tienda_id=tienda_id,
-            numero_factura=numero_factura
-        )
+    cliente_id=cliente_id,
+    codigo=codigo,
+    descripcion=descripcion,
+    monto=monto_total_bs,  # ✅ AGREGAR ESTE CAMPO
+    monto_total_bs=monto_total_bs,
+    monto_entrada_bs=entrada_bs,
+    monto_financia_bs=financia_bs,
+    monto_cuota_bs=monto_cuota_bs,
+    monto_total_usd=monto_total_usd,
+    monto_entrada_usd=entrada_usd_ref,
+    monto_financia_usd=financia_usd_ref,
+    monto_cuota_usd=monto_cuota_usd_ref,
+    tasa_aplicada=tasa,
+    nivel_aplicado=nivel,
+    cuotas_solicitadas=cuotas_solicitadas,
+    cuotas_aprobadas=cuotas_aprobadas,
+    requiere_aprobacion=requiere_aprobacion,
+    entrada_pct=config["entrada_pct"],
+    financia_pct=config["financia_pct"],
+    fecha_primera_cuota=fecha_primera,
+    estado="activo",
+    tienda_id=tienda_id,
+    numero_factura=numero_factura
+)
         db.add(fin)
         db.commit()
         db.refresh(fin)
