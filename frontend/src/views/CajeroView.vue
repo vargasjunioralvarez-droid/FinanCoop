@@ -421,19 +421,29 @@ const buscarCliente = async () => {
   cargando.value = true
   try {
     const data = await api.get(`/clientes/buscar/${busquedaCedula.value}`)
-    if (data.error || !data.encontrado) {
+    
+    // ✅ Si data tiene id, el cliente existe
+    if (data && data.id) {
+      clienteEncontrado.value = data
+      clienteNoEncontrado.value = false
+      
+      // Obtener financiamientos activos
+      try {
+        const financiamientos = await api.get(`/financiamientos/cliente/${data.id}/activos`)
+        const lista = Array.isArray(financiamientos) ? financiamientos : (financiamientos.financiamientos || [])
+        clienteEncontrado.value = { ...data, financiamientos_activos: lista }
+      } catch (e) {
+        clienteEncontrado.value = { ...data, financiamientos_activos: [] }
+      }
+    } else {
       clienteEncontrado.value = null
       clienteNoEncontrado.value = true
       nuevoCliente.value.cedula = busquedaCedula.value
-    } else {
-      const financiamientos = await api.get(`/financiamientos/cliente/${data.id}/activos`)
-const lista = Array.isArray(financiamientos) ? financiamientos : (financiamientos.financiamientos || [])
-      clienteEncontrado.value = { ...data, financiamientos_activos: lista }
-      clienteNoEncontrado.value = false
     }
   } catch (e) {
     clienteEncontrado.value = null
     clienteNoEncontrado.value = true
+    nuevoCliente.value.cedula = busquedaCedula.value
   } finally {
     cargando.value = false
   }

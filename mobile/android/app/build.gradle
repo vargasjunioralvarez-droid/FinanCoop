@@ -1,12 +1,5 @@
 apply plugin: 'com.android.application'
 
-// Leer credenciales del keystore desde key.properties (NO se versiona)
-def keystorePropertiesFile = rootProject.file("key.properties")
-def keystoreProperties = new Properties()
-if (keystorePropertiesFile.exists()) {
-    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
-}
-
 android {
     namespace "com.financoop.app"
     compileSdk rootProject.ext.compileSdkVersion
@@ -22,7 +15,6 @@ android {
         }
     }
     
-    // ✅ CONFIGURACIÓN DE FIRMA SEGURA (desde key.properties)
     signingConfigs {
         debug {
             storeFile file('debug.keystore')
@@ -32,12 +24,10 @@ android {
         }
         
         release {
-            if (keystorePropertiesFile.exists()) {
-                storeFile file(keystoreProperties['storeFile'])
-                storePassword keystoreProperties['storePassword']
-                keyAlias keystoreProperties['keyAlias']
-                keyPassword keystoreProperties['keyPassword']
-            }
+            storeFile file('financoop.keystore')
+            storePassword 'financoop2024'
+            keyAlias 'financoop'
+            keyPassword 'financoop2024'
         }
     }
     
