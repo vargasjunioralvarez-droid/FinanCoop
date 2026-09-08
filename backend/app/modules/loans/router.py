@@ -1,4 +1,3 @@
-# backend/app/modules/loans/router.py
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import Optional
@@ -18,7 +17,7 @@ from app.shared.utils import (
     obtener_tasa_actual
 )
 from app.core.security import get_current_admin, get_current_user, get_current_tienda
-from app.core.audit import audit, registrar_auditoria  # ✅ NUEVO
+from app.core.audit import audit, registrar_auditoria
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/financiamientos", tags=["Financiamientos"])
@@ -46,7 +45,6 @@ def crear_financiamiento(
                 if cliente_verif.tienda_id != current_user.tienda_id:
                     raise HTTPException(status_code=403, detail="El cliente no pertenece a tu tienda")
 
-        # Delegar la lógica de negocio al servicio
         from app.services.financiamiento_service import FinanciamientoService
 
         tienda_id = None
@@ -79,7 +77,7 @@ def crear_financiamiento(
 
 
 @router.post("/{id}/aprobar")
-@audit(accion="APROBAR_FINANCIAMIENTO", tabla="financiamientos")  # ✅ NUEVO
+@audit(accion="APROBAR_FINANCIAMIENTO", tabla="financiamientos")
 def aprobar_financiamiento(
     id: int, 
     aprobacion: AprobacionExtra, 
@@ -98,8 +96,8 @@ def aprobar_financiamiento(
         fin.requiere_aprobacion = False
         
         db.query(Cuota).filter(Cuota.financiamiento_id == fin.id).delete()
-        monto_cuota_bs = fin.monto_financia_bs / aprobacion.cuotas_aprobadas if aprobacion.cuotas_aprobadas > 0 else 0
-        monto_cuota_usd = fin.monto_financia_usd / aprobacion.cuotas_aprobadas if aprobacion.cuotas_aprobadas > 0 else 0
+        monto_cuota_bs = float(fin.monto_financia_bs) / aprobacion.cuotas_aprobadas if aprobacion.cuotas_aprobadas > 0 else 0
+        monto_cuota_usd = float(fin.monto_financia_usd) / aprobacion.cuotas_aprobadas if aprobacion.cuotas_aprobadas > 0 else 0
         
         for i in range(1, aprobacion.cuotas_aprobadas + 1):
             cuota = Cuota(
@@ -118,7 +116,6 @@ def aprobar_financiamiento(
         fin.monto_cuota_usd = monto_cuota_usd
         db.commit()
         
-        # ✅ NUEVO: Registrar auditoría manual con detalles
         registrar_auditoria(
             db=db,
             usuario_id=current_admin.id,
@@ -135,7 +132,8 @@ def aprobar_financiamiento(
             "mensaje": f"Aprobado con {aprobacion.cuotas_aprobadas} cuotas", 
             "aprobado_por": aprobacion.aprobado_por
         }
-    except HTTPException: raise
+    except HTTPException: 
+        raise
     except Exception as e: 
         db.rollback() 
         raise HTTPException(status_code=500, detail=str(e))
@@ -170,8 +168,8 @@ def get_financiamientos_activos_cliente(
                 "cuotas_aprobadas": fin.cuotas_aprobadas,
                 "cuotas_pagadas": cuotas_pagadas,
                 "estado": fin.estado,
-                "monto_total_bs": round(fin.monto_total_bs, 2),
-                "monto_total_usd": round(fin.monto_total_usd, 2)
+                "monto_total_bs": round(float(fin.monto_total_bs or 0), 2),
+                "monto_total_usd": round(float(fin.monto_total_usd or 0), 2)
             })
         
         return {"total": len(resultado), "financiamientos": resultado}
@@ -205,23 +203,58 @@ def listar_financiamientos(
         resultado = []
         for fin in financiamientos:
             cliente = db.query(Cliente).filter(Cliente.id == fin.cliente_id).first()
-            cuotas_pagadas = db.query(Cuota).filter(Cuota.financiamiento_id == fin.id, Cuota.estado == "pagada").count()
+            
+            # ✅ Obtener TODAS las cuotas en una sola consulta
+            cuotas = db.query(Cuota).filter(Cuota.financiamiento_id == fin.id).order_by(Cuota.numero).all()
+            cuotas_pagadas = sum(1 for c in cuotas if c.estado == "pagada")
+            cuotas_pendientes = sum(1 for c in cuotas if c.estado in ["pendiente", "conciliando"])
+            
+            # ✅ Calcular saldo pendiente
+            saldo_pendiente_bs = sum(float(c.monto_total_bs or 0) for c in cuotas if c.estado in ["pendiente", "conciliando"])
+            saldo_pendiente_usd = sum(float(c.monto_total_usd or 0) for c in cuotas if c.estado in ["pendiente", "conciliando"])
+            
+            # ✅ Calcular porcentaje pagado
+            total_cuotas = len(cuotas)
+            porcentaje_pagado = round((cuotas_pagadas / total_cuotas) * 100) if total_cuotas > 0 else 0
+            
             resultado.append({
-                "id": fin.id, "codigo": fin.codigo, "cliente_id": fin.cliente_id,
+                "id": fin.id, 
+                "codigo": fin.codigo, 
+                "cliente_id": fin.cliente_id,
                 "cliente_nombre": cliente.nombre if cliente else "Desconocido",
+                "cliente_cedula": cliente.cedula if cliente else "",
+                "cliente_nivel": cliente.nivel if cliente else "nuevo",
                 "descripcion": fin.descripcion,
-                "monto_total_bs": round(fin.monto_total_bs, 2),
-                "monto_total_usd": round(fin.monto_total_usd, 2),
-                "monto_entrada_bs": round(fin.monto_entrada_bs, 2),
-                "monto_entrada_usd": round(fin.monto_entrada_usd, 2),
+                "monto_total_bs": round(float(fin.monto_total_bs or 0), 2),
+                "monto_total_usd": round(float(fin.monto_total_usd or 0), 2),
+                "monto_entrada_bs": round(float(fin.monto_entrada_bs or 0), 2),
+                "monto_entrada_usd": round(float(fin.monto_entrada_usd or 0), 2),
                 "cuotas_aprobadas": fin.cuotas_aprobadas,
+                "cuotas_solicitadas": fin.cuotas_solicitadas,
                 "cuotas_pagadas": cuotas_pagadas,
+                "cuotas_pendientes": cuotas_pendientes,
+                "saldo_pendiente_bs": round(saldo_pendiente_bs, 2),
+                "saldo_pendiente_usd": round(saldo_pendiente_usd, 2),
+                "porcentaje_pagado": porcentaje_pagado,
                 "estado": fin.estado,
                 "tienda_id": fin.tienda_id,
                 "tienda_nombre": fin.tienda.nombre if fin.tienda else None,
                 "creado_en": fin.creado_en.isoformat() if fin.creado_en else None,
                 "url_factura": fin.url_factura,
-                "numero_factura": fin.numero_factura
+                "numero_factura": fin.numero_factura,
+                "fecha_primera_cuota": fin.fecha_primera_cuota.isoformat() if fin.fecha_primera_cuota else None,
+                # ✅ Incluir cuotas completas en la MISMA respuesta
+                "cuotas": [
+                    {
+                        "id": c.id,
+                        "numero": c.numero,
+                        "monto_total_bs": round(float(c.monto_total_bs or 0), 2),
+                        "monto_total_usd": round(float(c.monto_total_usd or 0), 2),
+                        "fecha_vencimiento": c.fecha_vencimiento.isoformat() if c.fecha_vencimiento else None,
+                        "estado": c.estado
+                    }
+                    for c in cuotas
+                ]
             })
         
         return {
@@ -252,19 +285,21 @@ def obtener_financiamiento(
         cuotas = db.query(Cuota).filter(Cuota.financiamiento_id == fin.id).order_by(Cuota.numero).all()
         
         return {
-            "id": fin.id, "codigo": fin.codigo,
+            "id": fin.id, 
+            "codigo": fin.codigo,
             "cliente": {"id": cliente.id if cliente else None, "nombre": cliente.nombre if cliente else "Desconocido"},
-            "monto_total_bs": round(fin.monto_total_bs, 2),
-            "monto_total_usd": round(fin.monto_total_usd, 2),
+            "monto_total_bs": round(float(fin.monto_total_bs or 0), 2),
+            "monto_total_usd": round(float(fin.monto_total_usd or 0), 2),
             "tasa_aplicada": fin.tasa_aplicada,
             "cuotas_aprobadas": fin.cuotas_aprobadas,
             "estado": fin.estado,
             "tienda_nombre": fin.tienda.nombre if fin.tienda else None,
             "url_factura": fin.url_factura,
             "numero_factura": fin.numero_factura,
-            "cuotas": [{"id": c.id, "numero": c.numero, "monto_total_bs": round(c.monto_total_bs, 2), "fecha_vencimiento": c.fecha_vencimiento.isoformat() if c.fecha_vencimiento else None, "estado": c.estado} for c in cuotas]
+            "cuotas": [{"id": c.id, "numero": c.numero, "monto_total_bs": round(float(c.monto_total_bs or 0), 2), "fecha_vencimiento": c.fecha_vencimiento.isoformat() if c.fecha_vencimiento else None, "estado": c.estado} for c in cuotas]
         }
-    except HTTPException: raise
+    except HTTPException: 
+        raise
     except Exception as e: 
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -289,20 +324,22 @@ def ver_cuotas(
             "cuotas": [{
                 "id": c.id, 
                 "numero": c.numero, 
-                "monto_base_bs": round(c.monto_base_bs, 2), 
-                "monto_total_bs": round(c.monto_total_bs, 2), 
+                "monto_base_bs": round(float(c.monto_base_bs or 0), 2), 
+                "monto_total_bs": round(float(c.monto_total_bs or 0), 2), 
+                "monto_total_usd": round(float(c.monto_total_usd or 0), 2),
                 "fecha_vencimiento": c.fecha_vencimiento.isoformat() if c.fecha_vencimiento else None, 
                 "estado": c.estado, 
                 "dias_atraso": (hoy - c.fecha_vencimiento).days if c.estado == "pendiente" and hoy > c.fecha_vencimiento else 0
             } for c in cuotas]
         }
-    except HTTPException: raise
+    except HTTPException: 
+        raise
     except Exception as e: 
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.delete("/{id}")
-@audit(accion="ELIMINAR_FINANCIAMIENTO", tabla="financiamientos")  # ✅ NUEVO
+@audit(accion="ELIMINAR_FINANCIAMIENTO", tabla="financiamientos")
 def eliminar_financiamiento(
     id: int, 
     db: Session = Depends(get_db), 
@@ -315,11 +352,10 @@ def eliminar_financiamiento(
         if financiamiento.estado == "completado": 
             raise HTTPException(status_code=400, detail="No se puede eliminar un financiamiento completado")
         
-        # ✅ NUEVO: Guardar datos ANTES de eliminar
         datos_antes = {
             "codigo": financiamiento.codigo,
             "cliente_id": financiamiento.cliente_id,
-            "monto_total_bs": financiamiento.monto_total_bs,
+            "monto_total_bs": float(financiamiento.monto_total_bs or 0),
             "estado": financiamiento.estado,
             "cuotas_aprobadas": financiamiento.cuotas_aprobadas
         }
@@ -333,7 +369,6 @@ def eliminar_financiamiento(
         db.delete(financiamiento)
         db.commit()
         
-        # ✅ NUEVO: Registrar auditoría manual con detalles
         registrar_auditoria(
             db=db,
             usuario_id=current_admin.id,
