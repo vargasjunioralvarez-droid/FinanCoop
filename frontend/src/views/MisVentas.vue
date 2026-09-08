@@ -12,7 +12,7 @@
             </div>
             <div class="ml-3">
               <h1 class="text-h4 font-weight-bold text-white">Mis Ventas del Día</h1>
-              <p class="text-subtitle-2 text-white" style="opacity: 0.7;">{{ fechaHoy }} | 🏪 {{ tiendaNombre || 'Cargando...' }}</p>
+              <p class="text-subtitle-2 text-white" style="opacity: 0.7;">{{ fechaMostrada }} | 🏪 {{ tiendaNombre || 'Cargando...' }}</p>
             </div>
           </div>
           <div class="d-flex align-center" style="gap: 8px;">
@@ -20,10 +20,42 @@
               <v-icon start>mdi-printer</v-icon>Imprimir
             </v-btn>
             <v-chip class="step-chip" color="transparent" size="large">
-              <span class="text-white font-weight-bold">{{ ventasHoy.length }} Ventas Hoy</span>
+              <span class="text-white font-weight-bold">{{ ventasHoy.length }} Ventas</span>
             </v-chip>
           </div>
         </div>
+
+        <!-- SELECTOR DE FECHA -->
+        <v-row class="mt-4">
+          <v-col cols="12" md="4">
+            <v-menu v-model="menuFecha" :close-on-content-click="false" transition="scale-transition">
+              <template v-slot:activator="{ props }">
+                <v-text-field
+                  v-model="fechaSeleccionadaTexto"
+                  label="📅 Fecha de ventas"
+                  prepend-inner-icon="mdi-calendar"
+                  readonly
+                  v-bind="props"
+                  variant="outlined"
+                  density="comfortable"
+                  dark
+                  class="custom-input"
+                />
+              </template>
+              <v-date-picker
+                v-model="fechaSeleccionada"
+                :max="hoyISO"
+                color="#4facfe"
+                @update:modelValue="cambiarFecha"
+              />
+            </v-menu>
+          </v-col>
+          <v-col cols="12" md="4">
+            <v-btn color="primary" variant="tonal" rounded="pill" @click="irHoy">
+              <v-icon start>mdi-calendar-today</v-icon>Ir a Hoy
+            </v-btn>
+          </v-col>
+        </v-row>
 
         <!-- KPIs PREMIUM -->
         <v-row class="mt-4">
@@ -34,7 +66,7 @@
                   <v-icon size="28" color="#4caf50">mdi-shopping</v-icon>
                 </div>
                 <div class="kpi-number text-success">{{ ventasHoy.length }}</div>
-                <div class="kpi-label">Ventas Hoy</div>
+                <div class="kpi-label">Ventas del Día</div>
               </v-card-text>
             </v-card>
           </v-col>
@@ -79,7 +111,7 @@
             <v-card id="reporte-ventas" class="glass-card rounded-xl" elevation="0">
               <v-card-title class="text-h6 font-weight-bold text-white pa-4">
                 <v-icon color="#4facfe" class="mr-2">mdi-clipboard-text</v-icon>
-                Ventas de Hoy
+                Ventas del Día
                 <v-spacer></v-spacer>
                 <v-chip v-if="ventasHoy.length > 0" color="#4facfe" variant="tonal" size="small">{{ ventasHoy.length }} registros</v-chip>
               </v-card-title>
@@ -145,8 +177,8 @@
 
                 <div v-if="ventasHoy.length === 0" class="empty-state glass-effect mt-2 rounded-xl">
                   <v-icon size="48" color="rgba(255,255,255,0.1)">mdi-cart-off</v-icon>
-                  <div class="text-body-1 mt-2" style="color: rgba(255,255,255,0.4);">No hay ventas registradas hoy</div>
-                  <div class="text-caption" style="color: rgba(255,255,255,0.2);">Las ventas que realices aparecerán aquí</div>
+                  <div class="text-body-1 mt-2" style="color: rgba(255,255,255,0.4);">No hay ventas registradas este día</div>
+                  <div class="text-caption" style="color: rgba(255,255,255,0.2);">Selecciona otra fecha o realiza una venta</div>
                 </div>
               </v-card-text>
             </v-card>
@@ -164,7 +196,25 @@ import { api } from '@/config/api'
 const ventasHoy = ref([])
 const tiendaNombre = ref('')
 
+// ✅ FECHA SELECCIONADA (hoy por defecto)
+const hoyISO = new Date().toISOString().split('T')[0]
+const fechaSeleccionada = ref(hoyISO)
+const menuFecha = ref(false)
+
 const fechaHoy = new Date().toLocaleDateString('es-VE', { weekday: 'long', day: 'numeric', month: 'long' })
+
+const fechaSeleccionadaTexto = computed(() => {
+  if (!fechaSeleccionada.value) return ''
+  const d = new Date(fechaSeleccionada.value + 'T00:00:00')
+  return d.toLocaleDateString('es-VE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+})
+
+const fechaMostrada = computed(() => {
+  if (!fechaSeleccionada.value) return fechaHoy
+  const d = new Date(fechaSeleccionada.value + 'T00:00:00')
+  return d.toLocaleDateString('es-VE', { weekday: 'long', day: 'numeric', month: 'long' })
+})
+
 const totalHoy = computed(() => ventasHoy.value.reduce((s, v) => s + (v.monto_total_bs || 0), 0))
 const totalEntrada = computed(() => ventasHoy.value.reduce((s, v) => s + (v.monto_entrada_bs || 0), 0))
 const totalPendiente = computed(() => ventasHoy.value.reduce((s, v) => s + ((v.monto_total_bs || 0) - (v.monto_entrada_bs || 0)), 0))
@@ -174,25 +224,45 @@ const formatearHora = (f) => f ? new Date(f).toLocaleTimeString('es-VE', { hour:
 
 const colorCategoria = (cat) => {
   const colores = {
-    'Salud': '#EF5350', 'Ropa': '#42A5F5', 'Comida': '#FFA726',
-    'Hogar': '#66BB6A', 'Tecnología': '#AB47BC', 'Educación': '#26C6DA',
-    'Transporte': '#78909C', 'Belleza': '#EC407A', 'Deporte': '#8D6E63'
+    'Feria': '#FF9800', 'Salud': '#EF5350', 'Odontología': '#42A5F5',
+    'Laboratorio': '#AB47BC', 'Otros': '#B0BEC5'
   }
   return colores[cat] || '#B0BEC5'
 }
 
+// ✅ FUNCIONES DE FECHA
+const cambiarFecha = (fecha) => {
+  fechaSeleccionada.value = fecha
+  menuFecha.value = false
+  cargarVentas()
+}
+
+const irHoy = () => {
+  fechaSeleccionada.value = hoyISO
+  cargarVentas()
+}
+
+// ✅ CARGAR VENTAS POR FECHA SELECCIONADA
 const cargarVentas = async () => {
   try {
     const data = await api.get('/financiamientos')
-    const hoy = new Date().toDateString()
-    ventasHoy.value = data.filter(f => new Date(f.creado_en).toDateString() === hoy)
-  } catch (e) {}
+    const lista = Array.isArray(data) ? data : (data.financiamientos || [])
+    const fechaBuscar = fechaSeleccionada.value || hoyISO
+    ventasHoy.value = lista.filter(f => {
+      if (!f.creado_en) return false
+      const fechaVenta = new Date(f.creado_en).toISOString().split('T')[0]
+      return fechaVenta === fechaBuscar
+    })
+  } catch (e) {
+    console.error('Error cargando ventas:', e)
+    ventasHoy.value = []
+  }
 }
 
 const cargarUsuario = async () => {
   try {
     const data = await api.get('/auth/verificar')
-    tiendaNombre.value = data.tienda_nombre || ''
+    tiendaNombre.value = data.tienda_nombre || data.nombre || ''
   } catch (e) {}
 }
 
@@ -218,7 +288,7 @@ const imprimirReporte = () => {
   ventana.document.write(`
     <html>
       <head>
-        <title>Reporte de Ventas - ${fechaHoy}</title>
+        <title>Reporte de Ventas - ${fechaMostrada.value}</title>
         <style>
           body { font-family: Arial, sans-serif; margin: 20px; color: #333; }
           .header { text-align: center; margin-bottom: 20px; }
@@ -238,7 +308,7 @@ const imprimirReporte = () => {
       <body>
         <div class="header">
           <h1>🏪 FinanCoop - Reporte de Ventas</h1>
-          <p>${fechaHoy} | Tienda: ${tiendaNombre.value || 'Todas'}</p>
+          <p>${fechaMostrada.value} | Tienda: ${tiendaNombre.value || 'Todas'}</p>
           <p>Generado: ${new Date().toLocaleString('es-VE')}</p>
         </div>
         <div class="resumen">
@@ -291,5 +361,9 @@ onMounted(() => { cargarVentas(); cargarUsuario() })
 .empty-state { padding: 40px; text-align: center; border: 1px dashed rgba(255,255,255,0.08); }
 .fade-in { animation: fadeIn 0.4s ease; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+.custom-input :deep(.v-field) { background: rgba(255,255,255,0.05) !important; border-radius: 12px !important; border: 1px solid rgba(255,255,255,0.08) !important; }
+.custom-input :deep(.v-field--focused) { border-color: #4facfe !important; }
+.custom-input :deep(.v-label) { color: rgba(255,255,255,0.5) !important; }
+.custom-input :deep(.v-field__input) { color: white !important; }
 @media (max-width: 600px) { .header-premium { flex-direction: column; gap: 12px; align-items: stretch !important; } .kpi-number { font-size: 1.3rem; } }
 </style>
