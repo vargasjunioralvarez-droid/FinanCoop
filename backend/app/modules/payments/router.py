@@ -151,7 +151,7 @@ def pagos_pendientes_conciliacion(
         pagos_lista = []
         for pago, cuota, fin, cliente in resultados:
             monto_bs = pago.monto_reportado_bs or 0
-            monto_usd = round(monto_bs / tasa, 2) if tasa > 0 else 0
+            monto_usd = round(float(monto_bs) / float(tasa), 2) if float(tasa) > 0 else 0
 
             cuotas_incl = []
             try:
