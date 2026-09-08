@@ -108,7 +108,7 @@ def actualizar_tasa(
                 financiamientos_afectados += 1
                 for c in cuotas_pendientes:
                     if c.monto_base_usd:
-                        c.monto_total_bs = c.monto_base_usd * request.tasa
+                        c.monto_total_bs = float(c.monto_base_usd) * float(request.tasa)  # ✅ float * float = OK
                         if c.monto_interes_mora_usd:
                             c.monto_interes_mora_bs = c.monto_interes_mora_usd * request.tasa
                         cuotas_recalculadas += 1
