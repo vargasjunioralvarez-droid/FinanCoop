@@ -285,9 +285,10 @@ const formatearBS = (m) => m ? Number(m).toLocaleString('es-VE', { minimumFracti
 const formatearUSD = (m) => m ? Number(m).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'
 const formatearFecha = (f) => f ? new Date(f).toLocaleDateString('es-VE', { day: '2-digit', month: '2-digit', year: 'numeric' }) : ''
 
+// ✅ CORREGIDO: Incluir cuotas "conciliando" como pendientes
 const calcularMorosidad = (fin) => {
   if (fin.estado === 'completado') return { nombre: 'Al Día', color: 'success', icono: 'mdi-check-circle', descripcion: 'Completado' }
-  const atrasadas = fin.cuotas?.filter(c => c.estado === 'pendiente' && new Date(c.fecha_vencimiento) < new Date()).length || 0
+  const atrasadas = fin.cuotas?.filter(c => (c.estado === 'pendiente' || c.estado === 'conciliando') && new Date(c.fecha_vencimiento) < new Date()).length || 0
   if (atrasadas === 0) return { nombre: 'Al Día', color: 'success', icono: 'mdi-check-circle', descripcion: 'Sin atrasos' }
   if (atrasadas === 1) return { nombre: 'Leve', color: 'warning', icono: 'mdi-alert', descripcion: '1 cuota atrasada' }
   if (atrasadas === 2) return { nombre: 'Moderada', color: 'orange', icono: 'mdi-alert', descripcion: '2 cuotas atrasadas' }
@@ -303,12 +304,22 @@ const cargarDatos = async () => {
     const datos = await Promise.all(financiamientosData.map(async (fin) => {
       const cuotasResponse = await api.get(`/financiamientos/${fin.id}/cuotas`)
       const cuotas = Array.isArray(cuotasResponse) ? cuotasResponse : cuotasResponse.data || []
+      
+      // ✅ CORREGIDO: Contar cuotas pagadas correctamente
       const pagadas = cuotas.filter(c => c.estado === 'pagada').length
-      const pendientes = cuotas.filter(c => c.estado === 'pendiente')
-      const atrasadas = cuotas.filter(c => c.estado === 'pendiente' && new Date(c.fecha_vencimiento) < new Date())
-      const saldoPendienteBS = pendientes.reduce((s, c) => s + (c.monto_total_bs || 0), 0)
-      const saldoPendienteUSD = pendientes.reduce((s, c) => s + (c.monto_total_usd || 0), 0)
-      const porcentajePagado = fin.cuotas_solicitadas > 0 ? Math.round((pagadas / fin.cuotas_solicitadas) * 100) : 0
+      
+      // ✅ CORREGIDO: Incluir "conciliando" como pendientes
+      const pendientes = cuotas.filter(c => c.estado === 'pendiente' || c.estado === 'conciliando')
+      const atrasadas = cuotas.filter(c => (c.estado === 'pendiente' || c.estado === 'conciliando') && new Date(c.fecha_vencimiento) < new Date())
+      
+      // ✅ CORREGIDO: Calcular saldo pendiente con montos convertidos a Number
+      const saldoPendienteBS = pendientes.reduce((s, c) => s + (Number(c.monto_total_bs) || 0), 0)
+      const saldoPendienteUSD = pendientes.reduce((s, c) => s + (Number(c.monto_total_usd) || 0), 0)
+      
+      // ✅ CORREGIDO: Porcentaje basado en total real de cuotas
+      const totalCuotas = cuotas.length || fin.cuotas_aprobadas || fin.cuotas_solicitadas || 0
+      const porcentajePagado = totalCuotas > 0 ? Math.round((pagadas / totalCuotas) * 100) : 0
+      
       return { 
         ...fin, 
         cliente_nombre: fin.cliente_nombre || 'Desconocido',
@@ -324,14 +335,27 @@ const cargarDatos = async () => {
       }
     }))
     
-    financiamientos.value = datos; aplicarFiltros(); calcularStats(); calcularNivelesMorosidad()
-    await nextTick(); crearGrafica()
-  } catch (e) { console.error('Error cargando datos:', e) }
+    financiamientos.value = datos
+    aplicarFiltros()
+    calcularStats()
+    calcularNivelesMorosidad()
+    await nextTick()
+    crearGrafica()
+  } catch (e) { 
+    console.error('Error cargando datos:', e) 
+  }
 }
 
 const aplicarFiltros = () => {
   let r = [...financiamientos.value]
-  if (filtros.value.busqueda) { const q = filtros.value.busqueda.toLowerCase(); r = r.filter(f => f.codigo?.toLowerCase().includes(q) || f.cliente_nombre?.toLowerCase().includes(q) || f.cliente_cedula?.includes(q)) }
+  if (filtros.value.busqueda) { 
+    const q = filtros.value.busqueda.toLowerCase()
+    r = r.filter(f => 
+      f.codigo?.toLowerCase().includes(q) || 
+      f.cliente_nombre?.toLowerCase().includes(q) || 
+      f.cliente_cedula?.includes(q)
+    ) 
+  }
   if (filtros.value.estado !== 'todos') r = r.filter(f => f.estado === filtros.value.estado)
   if (filtros.value.nivel !== 'todos') r = r.filter(f => f.cliente_nivel === filtros.value.nivel)
   if (filtros.value.morosidad !== 'todos') r = r.filter(f => f.morosidad.nombre.toLowerCase().replace(' ', '_') === filtros.value.morosidad)
@@ -340,7 +364,12 @@ const aplicarFiltros = () => {
 
 const calcularStats = () => {
   const activos = financiamientos.value.filter(f => f.estado === 'activo')
-  stats.value = { total: financiamientos.value.length, total_entrada: financiamientos.value.reduce((s, f) => s + (f.monto_entrada_bs || 0), 0), total_financiado: activos.reduce((s, f) => s + (f.saldo_pendiente_bs || 0), 0), total_pendiente: activos.reduce((s, f) => s + (f.saldo_pendiente_bs || 0), 0) }
+  stats.value = { 
+    total: financiamientos.value.length, 
+    total_entrada: financiamientos.value.reduce((s, f) => s + (Number(f.monto_entrada_bs) || 0), 0), 
+    total_financiado: activos.reduce((s, f) => s + (Number(f.saldo_pendiente_bs) || 0), 0), 
+    total_pendiente: activos.reduce((s, f) => s + (Number(f.saldo_pendiente_bs) || 0), 0) 
+  }
 }
 
 const nivelesMorosidad = ref([])
@@ -353,10 +382,10 @@ const calcularNivelesMorosidad = () => {
     { nombre: 'Crítica', color: 'red-darken-4', icono: 'mdi-alert-octagon', descripcion: '5+ cuotas atrasadas' }
   ]
   const activos = financiamientos.value.filter(f => f.estado === 'activo')
-  const total = activos.reduce((s, f) => s + f.saldo_pendiente_bs, 0)
+  const total = activos.reduce((s, f) => s + (Number(f.saldo_pendiente_bs) || 0), 0)
   nivelesMorosidad.value = niveles.map(n => {
     const filtrados = activos.filter(f => f.morosidad.nombre === n.nombre)
-    const monto = filtrados.reduce((s, f) => s + f.saldo_pendiente_bs, 0)
+    const monto = filtrados.reduce((s, f) => s + (Number(f.saldo_pendiente_bs) || 0), 0)
     return { ...n, cantidad: filtrados.length, monto, porcentaje: total > 0 ? ((monto / total) * 100).toFixed(1) : 0 }
   })
 }
@@ -365,22 +394,53 @@ const crearGrafica = () => {
   if (chartInstance) chartInstance.destroy()
   const ctx = chartRef.value?.getContext('2d')
   if (!ctx) return
-  chartInstance = new Chart(ctx, { type: 'doughnut', data: { labels: ['Entrada Cobrada', 'Financiado Pendiente'], datasets: [{ data: [stats.value.total_entrada, stats.value.total_pendiente], backgroundColor: ['#4CAF50', '#FF9800'], borderWidth: 0 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: 'rgba(255,255,255,0.7)' } } } } })
+  chartInstance = new Chart(ctx, { 
+    type: 'doughnut', 
+    data: { 
+      labels: ['Entrada Cobrada', 'Financiado Pendiente'], 
+      datasets: [{ 
+        data: [stats.value.total_entrada, stats.value.total_pendiente], 
+        backgroundColor: ['#4CAF50', '#FF9800'], 
+        borderWidth: 0 
+      }] 
+    }, 
+    options: { 
+      responsive: true, 
+      maintainAspectRatio: false, 
+      plugins: { 
+        legend: { 
+          position: 'bottom', 
+          labels: { color: 'rgba(255,255,255,0.7)' } 
+        } 
+      } 
+    } 
+  })
 }
 
 const abrirPagoEfectivo = async (fin) => {
-  financiamientoSeleccionado.value = fin; cuotaSeleccionada.value = null; cuotaInfo.value = null
+  financiamientoSeleccionado.value = fin
+  cuotaSeleccionada.value = null
+  cuotaInfo.value = null
   try {
     const cuotasResponse = await api.get(`/financiamientos/${fin.id}/cuotas`)
     const cuotas = Array.isArray(cuotasResponse) ? cuotasResponse : cuotasResponse.data || []
-    cuotasPendientes.value = cuotas.filter(c => c.estado === 'pendiente').map(c => ({ id: c.id, label: `Cuota #${c.numero} - BS ${formatearBS(c.monto_total_bs)}`, monto_total_bs: c.monto_total_bs, monto_total_usd: c.monto_total_usd }))
+    cuotasPendientes.value = cuotas
+      .filter(c => c.estado === 'pendiente' || c.estado === 'conciliando')
+      .map(c => ({ 
+        id: c.id, 
+        label: `Cuota #${c.numero} - BS ${formatearBS(c.monto_total_bs)}`, 
+        monto_total_bs: c.monto_total_bs, 
+        monto_total_usd: c.monto_total_usd 
+      }))
     dialogPago.value = true
-  } catch (e) {}
+  } catch (e) {
+    console.error('Error cargando cuotas:', e)
+  }
 }
 
 const confirmarPagoEfectivo = async () => {
   try { 
-    await api.post(`/pagos/cuotas/${cuotaSeleccionada.value}/pagar-efectivo`)  // ✅ CORRECTO
+    await api.post(`/pagos/cuotas/${cuotaSeleccionada.value}/pagar-efectivo`)
     alert('✅ Pago registrado')
     dialogPago.value = false
     await cargarDatos() 
@@ -405,10 +465,25 @@ const eliminarFinanciamiento = async (id) => {
 }
 
 const exportarExcel = () => {
-  const datos = financiamientosFiltrados.value.map(f => ({ Codigo: f.codigo, Cliente: f.cliente_nombre, Cedula: f.cliente_cedula, Fecha: formatearFecha(f.fecha_primera_cuota), Total_BS: f.monto_total_bs, Entrada_BS: f.monto_entrada_bs, Pendiente_BS: f.saldo_pendiente_bs, Estado: f.estado, Morosidad: f.morosidad.nombre, Progreso: f.porcentaje_pagado + '%' }))
+  const datos = financiamientosFiltrados.value.map(f => ({ 
+    Codigo: f.codigo, 
+    Cliente: f.cliente_nombre, 
+    Cedula: f.cliente_cedula, 
+    Fecha: formatearFecha(f.fecha_primera_cuota), 
+    Total_BS: f.monto_total_bs, 
+    Entrada_BS: f.monto_entrada_bs, 
+    Pendiente_BS: f.saldo_pendiente_bs, 
+    Estado: f.estado, 
+    Morosidad: f.morosidad.nombre, 
+    Progreso: f.porcentaje_pagado + '%' 
+  }))
   const h = Object.keys(datos[0] || {})
   const csv = [h.join(','), ...datos.map(r => h.map(k => `"${r[k]}"`).join(','))].join('\n')
-  const blob = new Blob([csv], { type: 'text/csv' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `financiamientos_${new Date().toISOString().split('T')[0]}.csv`; a.click()
+  const blob = new Blob([csv], { type: 'text/csv' })
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = `financiamientos_${new Date().toISOString().split('T')[0]}.csv`
+  a.click()
 }
 
 onMounted(() => { cargarDatos() })
