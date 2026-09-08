@@ -130,10 +130,9 @@ def pagos_pendientes_conciliacion(
 ):
     """Lista pagos pendientes de conciliación con una sola consulta optimizada."""
     try:
-        # Obtener la tasa UNA SOLA VEZ
-        tasa = obtener_tasa_actual(db)
+        # ✅ TASA COMO FLOAT
+        tasa = float(obtener_tasa_actual(db) or 0)
 
-        # Consulta base con JOINs para traer todo en una sola ida a la BD
         query = db.query(Pago, Cuota, Financiamiento, Cliente).join(
             Cuota, Pago.cuota_id == Cuota.id, isouter=True
         ).join(
@@ -142,7 +141,6 @@ def pagos_pendientes_conciliacion(
             Cliente, Financiamiento.cliente_id == Cliente.id
         ).filter(Pago.estado == "pendiente")
 
-        # Filtrar por tienda si aplica
         if tienda_id:
             query = query.filter(Financiamiento.tienda_id == tienda_id)
 
@@ -150,8 +148,9 @@ def pagos_pendientes_conciliacion(
 
         pagos_lista = []
         for pago, cuota, fin, cliente in resultados:
-            monto_bs = pago.monto_reportado_bs or 0
-            monto_usd = round(float(monto_bs) / float(tasa), 2) if float(tasa) > 0 else 0
+            # ✅ MONTOS COMO FLOAT
+            monto_bs = float(pago.monto_reportado_bs or 0)
+            monto_usd = round(monto_bs / tasa, 2) if tasa > 0 else 0
 
             cuotas_incl = []
             try:
@@ -178,7 +177,7 @@ def pagos_pendientes_conciliacion(
                 "modo_pago": pago.modo_pago or "cuota",
                 "cuotas_incluidas": cuotas_incl,
                 "es_pago_padre": pago.pago_padre_id is None,
-                "monto_original_bs": pago.monto_original_bs,
+                "monto_original_bs": float(pago.monto_original_bs) if pago.monto_original_bs else None,
                 "tienda_nombre": fin.tienda.nombre if fin and fin.tienda else None
             })
 
