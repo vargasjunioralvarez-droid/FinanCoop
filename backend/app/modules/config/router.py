@@ -110,7 +110,7 @@ def actualizar_tasa(
                     if c.monto_base_usd:
                         c.monto_total_bs = float(c.monto_base_usd) * float(request.tasa)  # ✅ float * float = OK
                         if c.monto_interes_mora_usd:
-                            c.monto_interes_mora_bs = c.monto_interes_mora_usd * request.tasa
+                            c.monto_interes_mora_bs = float(c.monto_interes_mora_usd) * float(request.tasa)
                         cuotas_recalculadas += 1
         
         db.commit()
@@ -144,20 +144,42 @@ def actualizar_tasa(
         raise HTTPException(status_code=500, detail="Error interno del servidor")
 
 @router.post("/tasa-dolar/bcv")
-@audit(accion="ACTUALIZAR_TASA_BCV", tabla="tasa_dolar")  # ✅ NUEVO
 async def actualizar_tasa_bcv(db: Session = Depends(get_db), current_user = Depends(get_current_admin)):
     """Consultar tasa del BCV y actualizar automáticamente."""
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.get("https://bcv-api.deno.dev/v1/rates")
-            if response.status_code != 200:
-                raise HTTPException(status_code=500, detail="No se pudo consultar el BCV")
+        # Intentar con la API del BCV
+        tasa_bcv = None
+        
+        # Método 1: Scraping del sitio oficial del BCV
+        try:
+            import httpx
+            from bs4 import BeautifulSoup
             
-            data = response.json()
-            tasa_bcv = data.get("rates", {}).get("USD", 0)
-            
-            if not tasa_bcv or tasa_bcv <= 0:
-                raise HTTPException(status_code=500, detail="Tasa BCV no válida")
+            async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+                response = await client.get("http://www.bcv.org.ve/")
+                if response.status_code == 200:
+                    soup = BeautifulSoup(response.text, 'html.parser')
+                    tasa_element = soup.find('div', {'id': 'dolar'})
+                    if tasa_element:
+                        tasa_texto = tasa_element.text.strip()
+                        tasa_texto = tasa_texto.replace('.', '').replace(',', '.')
+                        tasa_bcv = float(tasa_texto)
+        except Exception as e:
+            logger.warning(f"⚠️ Scraping BCV falló: {e}")
+        
+        # Método 2: API alternativa (si el scraping falla)
+        if not tasa_bcv:
+            try:
+                async with httpx.AsyncClient(timeout=15.0) as client:
+                    response = await client.get("https://bcv-api.deno.dev/v1/rates")
+                    if response.status_code == 200:
+                        data = response.json()
+                        tasa_bcv = data.get("rates", {}).get("USD", 0)
+            except Exception as e:
+                logger.warning(f"⚠️ API alternativa falló: {e}")
+        
+        if not tasa_bcv or tasa_bcv <= 0:
+            raise HTTPException(status_code=500, detail="No se pudo obtener la tasa del BCV")
         
         nueva_tasa = TasaDolar(
             tasa=float(tasa_bcv),
@@ -179,25 +201,11 @@ async def actualizar_tasa_bcv(db: Session = Depends(get_db), current_user = Depe
             
             for c in cuotas_pendientes:
                 if c.monto_base_usd:
-                    c.monto_total_bs = c.monto_base_usd * tasa_bcv
+                    c.monto_total_bs = float(c.monto_base_usd) * float(tasa_bcv)
                     if c.monto_interes_mora_usd:
-                        c.monto_interes_mora_bs = c.monto_interes_mora_usd * tasa_bcv
+                        c.monto_interes_mora_bs = float(c.monto_interes_mora_usd) * float(tasa_bcv)
         
         db.commit()
-        
-        logger.info(f"✅ Tasa BCV actualizada automáticamente: {tasa_bcv} BS/$")
-        
-        # ✅ NUEVO: Registrar auditoría manual
-        registrar_auditoria(
-            db=db,
-            usuario_id=current_user.id,
-            usuario_nombre=current_user.nombre,
-            usuario_rol=current_user.rol,
-            accion="ACTUALIZAR_TASA_BCV",
-            tabla="tasa_dolar",
-            registro_id=nueva_tasa.id,
-            detalles=f"Tasa BCV actualizada a {tasa_bcv} BS/USD"
-        )
         
         return {
             "success": True,
