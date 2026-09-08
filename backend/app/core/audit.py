@@ -27,14 +27,12 @@ def _obtener_ultimo_hash(db: Session) -> str:
 
 def _obtener_request(args, kwargs):
     """Obtener el objeto Request de forma segura desde args o kwargs."""
-    # Buscar en kwargs con diferentes nombres posibles
     for key in ['request', '_request', 'req']:
         if key in kwargs:
             request = kwargs[key]
             if hasattr(request, 'headers') and hasattr(request, 'client'):
                 return request
     
-    # Buscar en args (argumentos posicionales)
     for arg in args:
         if hasattr(arg, 'headers') and hasattr(arg, 'client'):
             return arg
@@ -44,19 +42,34 @@ def _obtener_request(args, kwargs):
 
 def _obtener_db(args, kwargs):
     """Obtener la sesión de base de datos de forma segura."""
-    # Buscar en kwargs
     for key in ['db', 'database', 'session']:
         if key in kwargs:
             db = kwargs[key]
             if hasattr(db, 'query'):
                 return db
     
-    # Buscar en args
     for arg in args:
         if hasattr(arg, 'query') and hasattr(arg, 'add'):
             return arg
     
     return None
+
+
+def _obtener_usuario_info(usuario):
+    """Obtener información del usuario de forma segura."""
+    if not usuario:
+        return None, None, None
+    
+    usuario_id = getattr(usuario, 'id', None)
+    usuario_nombre = getattr(usuario, 'nombre', getattr(usuario, 'username', None))
+    usuario_rol = getattr(usuario, 'rol', None)
+    
+    # ✅ Si no tiene rol, es un Cliente (no un Usuario admin)
+    if not usuario_rol:
+        usuario_id = None  # No guardar en auditoría (FK constraint)
+        usuario_rol = 'cliente'
+    
+    return usuario_id, usuario_nombre, usuario_rol
 
 
 def registrar_auditoria(
@@ -134,24 +147,17 @@ def audit(accion: str, tabla: str = None):
         if is_async:
             @wraps(func)
             async def async_wrapper(*args, **kwargs):
-                # ✅ Obtener request y db de forma segura
                 request = _obtener_request(args, kwargs)
                 db = _obtener_db(args, kwargs)
 
                 usuario = None
-                usuario_id = None
-                usuario_nombre = None
-                usuario_rol = None
-
                 if 'current_user' in kwargs:
                     usuario = kwargs.get('current_user')
                 elif 'current_admin' in kwargs:
                     usuario = kwargs.get('current_admin')
 
-                if usuario:
-                    usuario_id = getattr(usuario, 'id', None)
-                    usuario_nombre = getattr(usuario, 'nombre', getattr(usuario, 'username', None))
-                    usuario_rol = getattr(usuario, 'rol', None)
+                # ✅ Usar función segura para obtener info del usuario
+                usuario_id, usuario_nombre, usuario_rol = _obtener_usuario_info(usuario)
 
                 registro_id = kwargs.get('id') or kwargs.get('registro_id') or kwargs.get('pago_id') or kwargs.get('nivel')
 
@@ -205,24 +211,17 @@ def audit(accion: str, tabla: str = None):
         else:
             @wraps(func)
             def wrapper(*args, **kwargs):
-                # ✅ Obtener request y db de forma segura
                 request = _obtener_request(args, kwargs)
                 db = _obtener_db(args, kwargs)
 
                 usuario = None
-                usuario_id = None
-                usuario_nombre = None
-                usuario_rol = None
-
                 if 'current_user' in kwargs:
                     usuario = kwargs.get('current_user')
                 elif 'current_admin' in kwargs:
                     usuario = kwargs.get('current_admin')
 
-                if usuario:
-                    usuario_id = getattr(usuario, 'id', None)
-                    usuario_nombre = getattr(usuario, 'nombre', getattr(usuario, 'username', None))
-                    usuario_rol = getattr(usuario, 'rol', None)
+                # ✅ Usar función segura para obtener info del usuario
+                usuario_id, usuario_nombre, usuario_rol = _obtener_usuario_info(usuario)
 
                 registro_id = kwargs.get('id') or kwargs.get('registro_id') or kwargs.get('pago_id') or kwargs.get('nivel')
 
