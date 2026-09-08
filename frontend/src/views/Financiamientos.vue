@@ -296,29 +296,29 @@ const calcularMorosidad = (fin) => {
   return { nombre: 'Crítica', color: 'red-darken-4', icono: 'mdi-alert-octagon', descripcion: `${atrasadas} cuotas atrasadas` }
 }
 
+// ✅ OPTIMIZADO: Solo 1 llamada al backend
 const cargarDatos = async () => {
   try {
     const response = await api.get('/financiamientos')
     const financiamientosData = response.financiamientos || response.data || response || []
 
-    const datos = await Promise.all(financiamientosData.map(async (fin) => {
-      const cuotasResponse = await api.get(`/financiamientos/${fin.id}/cuotas`)
-      const cuotas = Array.isArray(cuotasResponse) ? cuotasResponse : cuotasResponse.data || []
-      
-      // ✅ CORREGIDO: Contar cuotas pagadas correctamente
+    const datos = financiamientosData.map((fin) => {
+      const cuotas = fin.cuotas || []
       const pagadas = cuotas.filter(c => c.estado === 'pagada').length
-      
-      // ✅ CORREGIDO: Incluir "conciliando" como pendientes
       const pendientes = cuotas.filter(c => c.estado === 'pendiente' || c.estado === 'conciliando')
       const atrasadas = cuotas.filter(c => (c.estado === 'pendiente' || c.estado === 'conciliando') && new Date(c.fecha_vencimiento) < new Date())
       
-      // ✅ CORREGIDO: Calcular saldo pendiente con montos convertidos a Number
-      const saldoPendienteBS = pendientes.reduce((s, c) => s + (Number(c.monto_total_bs) || 0), 0)
-      const saldoPendienteUSD = pendientes.reduce((s, c) => s + (Number(c.monto_total_usd) || 0), 0)
+      const saldoPendienteBS = fin.saldo_pendiente_bs !== undefined 
+        ? fin.saldo_pendiente_bs 
+        : pendientes.reduce((s, c) => s + (Number(c.monto_total_bs) || 0), 0)
       
-      // ✅ CORREGIDO: Porcentaje basado en total real de cuotas
-      const totalCuotas = cuotas.length || fin.cuotas_aprobadas || fin.cuotas_solicitadas || 0
-      const porcentajePagado = totalCuotas > 0 ? Math.round((pagadas / totalCuotas) * 100) : 0
+      const saldoPendienteUSD = fin.saldo_pendiente_usd !== undefined 
+        ? fin.saldo_pendiente_usd 
+        : pendientes.reduce((s, c) => s + (Number(c.monto_total_usd) || 0), 0)
+      
+      const porcentajePagado = fin.porcentaje_pagado !== undefined 
+        ? fin.porcentaje_pagado 
+        : (cuotas.length > 0 ? Math.round((pagadas / cuotas.length) * 100) : 0)
       
       return { 
         ...fin, 
@@ -333,7 +333,7 @@ const cargarDatos = async () => {
         cuotas_atrasadas: atrasadas.length, 
         fecha_primera_cuota: fin.fecha_primera_cuota 
       }
-    }))
+    })
     
     financiamientos.value = datos
     aplicarFiltros()
@@ -417,25 +417,22 @@ const crearGrafica = () => {
   })
 }
 
-const abrirPagoEfectivo = async (fin) => {
+// ✅ OPTIMIZADO: Usar cuotas ya cargadas sin llamada adicional
+const abrirPagoEfectivo = (fin) => {
   financiamientoSeleccionado.value = fin
   cuotaSeleccionada.value = null
   cuotaInfo.value = null
-  try {
-    const cuotasResponse = await api.get(`/financiamientos/${fin.id}/cuotas`)
-    const cuotas = Array.isArray(cuotasResponse) ? cuotasResponse : cuotasResponse.data || []
-    cuotasPendientes.value = cuotas
-      .filter(c => c.estado === 'pendiente' || c.estado === 'conciliando')
-      .map(c => ({ 
-        id: c.id, 
-        label: `Cuota #${c.numero} - BS ${formatearBS(c.monto_total_bs)}`, 
-        monto_total_bs: c.monto_total_bs, 
-        monto_total_usd: c.monto_total_usd 
-      }))
-    dialogPago.value = true
-  } catch (e) {
-    console.error('Error cargando cuotas:', e)
-  }
+  
+  const cuotas = fin.cuotas || []
+  cuotasPendientes.value = cuotas
+    .filter(c => c.estado === 'pendiente' || c.estado === 'conciliando')
+    .map(c => ({ 
+      id: c.id, 
+      label: `Cuota #${c.numero} - BS ${formatearBS(c.monto_total_bs)}`, 
+      monto_total_bs: c.monto_total_bs, 
+      monto_total_usd: c.monto_total_usd 
+    }))
+  dialogPago.value = true
 }
 
 const confirmarPagoEfectivo = async () => {
