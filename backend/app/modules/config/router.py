@@ -151,32 +151,33 @@ async def actualizar_tasa_bcv(db: Session = Depends(get_db), current_user = Depe
         tasa_bcv = None
         
         # Método 1: Scraping del sitio oficial del BCV
+            # Método 1: API de DolarApi (tasa oficial BCV)
         try:
-            import httpx
-            from bs4 import BeautifulSoup
-            
             async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
-                response = await client.get("http://www.bcv.org.ve/")
+                response = await client.get(
+                    "https://ve.dolarapi.com/v1/dolares/oficial",
+                    headers={"User-Agent": "Mozilla/5.0"}
+                )
                 if response.status_code == 200:
-                    soup = BeautifulSoup(response.text, 'html.parser')
-                    tasa_element = soup.find('div', {'id': 'dolar'})
-                    if tasa_element:
-                        tasa_texto = tasa_element.text.strip()
-                        tasa_texto = tasa_texto.replace('.', '').replace(',', '.')
-                        tasa_bcv = float(tasa_texto)
+                    data = response.json()
+                    tasa_bcv = float(data.get("promedio", 0) or data.get("precio", 0))
         except Exception as e:
-            logger.warning(f"⚠️ Scraping BCV falló: {e}")
+            logger.warning(f"⚠️ DolarApi falló: {e}")
         
-        # Método 2: API alternativa (si el scraping falla)
+        # Método 2: ExchangeMonitor como respaldo
         if not tasa_bcv:
             try:
-                async with httpx.AsyncClient(timeout=15.0) as client:
-                    response = await client.get("https://bcv-api.deno.dev/v1/rates")
+                async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+                    response = await client.get(
+                        "https://api.exchangemonitor.net/v1/rates",
+                        headers={"User-Agent": "Mozilla/5.0"}
+                    )
                     if response.status_code == 200:
                         data = response.json()
-                        tasa_bcv = data.get("rates", {}).get("USD", 0)
+                        bcv = data.get("data", {}).get("bcv", {})
+                        tasa_bcv = float(bcv.get("rate", 0))
             except Exception as e:
-                logger.warning(f"⚠️ API alternativa falló: {e}")
+                logger.warning(f"⚠️ ExchangeMonitor falló: {e}")
         
         if not tasa_bcv or tasa_bcv <= 0:
             raise HTTPException(status_code=500, detail="No se pudo obtener la tasa del BCV")
