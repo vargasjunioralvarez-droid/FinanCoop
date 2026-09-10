@@ -203,7 +203,8 @@ const {
   plataformaNativa, 
   cargandoHuella, 
   verificarSoporte, 
-  toggleHuella 
+  toggleHuella,
+  guardarCredencialesHuella  // ✅ IMPORTAR ESTO
 } = useBiometric()
 
 const verFotoAmpliada = ref(false)
@@ -214,31 +215,56 @@ const pinConfirmar = ref('')
 const errorPin = ref('')
 const cambiandoPin = ref(false)
 
-// 🆕 Toggle huella desde el switch
+// ✅ TOGGLE HUELLA - CON CÉDULA Y PIN
 const onToggleHuella = async (activar) => {
-  const resultado = await toggleHuella(activar)
-  
-  if (resultado.success) {
-    if (activar) {
-      alert('✅ Inicio de sesión con huella activado')
-    } else {
-      console.log('🔒 Huella desactivada')
+  try {
+    const cedula = usuario.value?.cedula || ''
+    
+    let pinGuardado = ''
+    try {
+      const loginForm = JSON.parse(localStorage.getItem('financoop_login_form') || '{}')
+      pinGuardado = loginForm.pin || ''
+    } catch (e) {
+      console.log('⚠️ No hay PIN guardado en login_form')
     }
-  } else {
+    
+    if (activar && (!cedula || !pinGuardado)) {
+      alert('❌ Debes iniciar sesión con PIN para activar la huella')
+      huellaActivada.value = false
+      return
+    }
+    
+    const resultado = await toggleHuella(activar, cedula, pinGuardado)
+    
+    if (resultado.success) {
+      if (activar) {
+        alert('✅ Inicio de sesión con huella activado')
+      } else {
+        console.log('🔒 Huella desactivada')
+      }
+    } else {
+      huellaActivada.value = !activar
+      alert('❌ ' + (resultado.error || 'Error al configurar huella'))
+    }
+  } catch (e) {
+    console.error('❌ Error onToggleHuella:', e)
     huellaActivada.value = !activar
-    alert('❌ ' + (resultado.error || 'Error al configurar huella'))
+    alert('❌ Error: ' + (e.message || 'No se pudo configurar la huella'))
   }
 }
 
 const abrirCambiarPin = () => {
-  pinActual.value = ''; pinNuevo.value = ''; pinConfirmar.value = ''; errorPin.value = ''
+  pinActual.value = ''
+  pinNuevo.value = ''
+  pinConfirmar.value = ''
+  errorPin.value = ''
   dialogCambiarPin.value = true
 }
 
 const guardarNuevoPin = async () => {
   errorPin.value = ''
   if (!pinActual.value || pinActual.value.length < 4) { errorPin.value = 'Ingresa tu PIN actual'; return }
-  if (!pinNuevo.value || pinNuevo.value.length < 4) { errorPin.value = 'Ingresa un PIN nuevo de 4 dígitos'; return }
+  if (!pinNuevo.value || pinNuevo.value.length < 4) { errorPin.value = 'Ingresa un PIN nuevo de 4-6 dígitos'; return }
   if (pinNuevo.value !== pinConfirmar.value) { errorPin.value = 'Los PINs no coinciden'; return }
   if (pinActual.value === pinNuevo.value) { errorPin.value = 'El PIN nuevo debe ser diferente'; return }
 
@@ -252,11 +278,32 @@ const guardarNuevoPin = async () => {
     })
     const data = await response.json()
     if (!response.ok) throw new Error(data.detail || 'Error al cambiar PIN')
+    
+    // ✅ ACTUALIZAR PIN GUARDADO PARA HUELLA
+    try {
+      const loginForm = JSON.parse(localStorage.getItem('financoop_login_form') || '{}')
+      loginForm.pin = pinNuevo.value
+      localStorage.setItem('financoop_login_form', JSON.stringify(loginForm))
+      
+      // Actualizar credenciales de huella también
+      if (huellaActivada.value && usuario.value?.cedula) {
+        guardarCredencialesHuella(usuario.value.cedula, pinNuevo.value)
+        console.log('✅ Credenciales de huella actualizadas con nuevo PIN')
+      }
+    } catch (e) {
+      console.log('⚠️ No se pudo actualizar PIN de huella:', e)
+    }
+    
     dialogCambiarPin.value = false
-    pinActual.value = ''; pinNuevo.value = ''; pinConfirmar.value = ''
+    pinActual.value = ''
+    pinNuevo.value = ''
+    pinConfirmar.value = ''
     alert('✅ PIN actualizado correctamente')
-  } catch (e) { errorPin.value = e.message || 'Error al cambiar PIN' }
-  finally { cambiandoPin.value = false }
+  } catch (e) {
+    errorPin.value = e.message || 'Error al cambiar PIN'
+  } finally {
+    cambiandoPin.value = false
+  }
 }
 
 onMounted(async () => {

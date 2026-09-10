@@ -27,12 +27,18 @@ async function verificarSoporte() {
     
     const credenciales = localStorage.getItem('financoop_huella_credenciales')
     if (credenciales) {
-      credencialesGuardadas.value = JSON.parse(credenciales)
+      try {
+        credencialesGuardadas.value = JSON.parse(credenciales)
+        console.log('📦 Credenciales huella encontradas:', credencialesGuardadas.value.cedula)
+      } catch (e) {
+        console.log('⚠️ Credenciales corruptas, limpiando...')
+        localStorage.removeItem('financoop_huella_credenciales')
+      }
     }
     
     if (huellaSoportada.value) {
       const pref = localStorage.getItem('financoop_huella_activada')
-      huellaActivada.value = pref === 'true'
+      huellaActivada.value = pref === 'true' && !!credencialesGuardadas.value
     }
     
     return huellaSoportada.value
@@ -43,12 +49,21 @@ async function verificarSoporte() {
 }
 
 function guardarCredencialesHuella(cedula, pin) {
-  const credenciales = { cedula, pin, fecha: new Date().toISOString() }
+  if (!cedula || !pin) {
+    console.log('⚠️ No se guardan credenciales: cedula o pin vacío')
+    return false
+  }
+  const credenciales = { 
+    cedula: String(cedula).trim(), 
+    pin: String(pin).trim(), 
+    fecha: new Date().toISOString() 
+  }
   localStorage.setItem('financoop_huella_credenciales', JSON.stringify(credenciales))
   credencialesGuardadas.value = credenciales
   huellaActivada.value = true
   localStorage.setItem('financoop_huella_activada', 'true')
-  console.log('✅ Credenciales guardadas para huella:', cedula)
+  console.log('✅ Credenciales guardadas para huella:', credenciales.cedula)
+  return true
 }
 
 function limpiarCredencialesHuella() {
@@ -59,10 +74,11 @@ function limpiarCredencialesHuella() {
   console.log('🔒 Credenciales de huella eliminadas')
 }
 
-async function toggleHuella(activar) {
+async function toggleHuella(activar, cedulaParam, pinParam) {
   cargandoHuella.value = true
   try {
     if (activar) {
+      // 1. Verificar identidad con huella
       await BiometricAuth.authenticate({
         reason: 'Verifica tu identidad para activar huella',
         cancelTitle: 'Cancelar',
@@ -70,76 +86,72 @@ async function toggleHuella(activar) {
         androidSubtitle: 'Coloca tu dedo en el sensor'
       })
       
-      const token = localStorage.getItem('financoop_token')
-      if (!token) {
-        return { success: false, error: 'Debes iniciar sesión primero' }
+      // 2. Obtener cédula y PIN
+      let cedula = cedulaParam
+      let pin = pinParam
+      
+      // Si no vienen por parámetro, buscar en localStorage
+      if (!cedula || !pin) {
+        try {
+          const loginForm = JSON.parse(localStorage.getItem('financoop_login_form') || '{}')
+          cedula = cedula || loginForm.cedula
+          pin = pin || loginForm.pin
+        } catch (e) {}
       }
       
-      const usuario = JSON.parse(localStorage.getItem('financoop_usuario') || '{}')
-      if (!usuario.cedula) {
-        return { success: false, error: 'No se encontraron datos del usuario' }
+      // Buscar en usuario
+      if (!cedula) {
+        try {
+          const usuario = JSON.parse(localStorage.getItem('financoop_usuario') || '{}')
+          cedula = usuario.cedula
+        } catch (e) {}
       }
       
-      guardarCredencialesHuella(usuario.cedula, usuario.pin || '')
+      if (!cedula || !pin) {
+        return { success: false, error: 'No se encontraron credenciales. Inicia sesión con PIN primero.' }
+      }
       
+      // 3. Guardar
+      guardarCredencialesHuella(cedula, pin)
       return { success: true }
     } else {
       limpiarCredencialesHuella()
       return { success: true }
     }
   } catch (e) {
-    console.error('❌ Error:', e.message)
+    console.error('❌ Error toggleHuella:', e.message)
     return { success: false, error: e.message || 'No se pudo verificar' }
   } finally {
     cargandoHuella.value = false
   }
 }
 
-// ✅ AUTENTICAR CON HUELLA - FLUJO CORRECTO
-async function autenticarConHuella(cedula) {
+// ✅ AUTENTICAR CON HUELLA - Sin necesidad de escribir cédula
+async function autenticarConHuella() {
   if (!huellaSoportada.value) {
-    return { success: false, error: 'Biometría no disponible' }
+    return { success: false, error: 'Biometría no disponible en este dispositivo' }
   }
 
-  // ✅ VERIFICAR CREDENCIALES GUARDADAS
-  if (!credencialesGuardadas.value) {
+  if (!credencialesGuardadas.value || !credencialesGuardadas.value.cedula || !credencialesGuardadas.value.pin) {
     return { 
       success: false, 
-      error: 'No hay credenciales guardadas. Inicia sesión con PIN primero.' 
-    }
-  }
-
-  // ✅ VERIFICAR QUE LA CÉDULA COINCIDA CON LA GUARDADA
-  if (credencialesGuardadas.value.cedula !== cedula) {
-    return { 
-      success: false, 
-      error: 'La cédula no coincide con la huella guardada. Usa tu PIN.' 
+      error: 'No hay huella configurada. Inicia sesión con PIN primero para activarla.' 
     }
   }
 
   cargandoHuella.value = true
   try {
-    // ✅ VERIFICAR HUELLA FÍSICA
+    // 1. Verificar huella
     await BiometricAuth.authenticate({
-      reason: `Autentícate para acceder a FinanCoop como ${cedula}`,
+      reason: `Bienvenido de nuevo, ${credencialesGuardadas.value.cedula}`,
       cancelTitle: 'Cancelar',
       androidTitle: 'Iniciar sesión',
-      androidSubtitle: `Usa tu huella para ingresar como ${cedula}`
+      androidSubtitle: 'Usa tu huella para ingresar'
     })
 
-    console.log('✅ Huella verificada para cédula:', cedula)
+    console.log('✅ Huella verificada para:', credencialesGuardadas.value.cedula)
 
-    // ✅ OBTENER EL PIN GUARDADO
-    const pin = credencialesGuardadas.value.pin
-    
-    if (!pin) {
-      return { 
-        success: false, 
-        error: 'No hay PIN guardado. Inicia sesión con PIN primero.' 
-      }
-    }
-
-    // ✅ LLAMAR AL LOGIN NORMAL CON PIN
+    // 2. Login con las credenciales guardadas
     const API_URL = 'https://financoop-agd5.onrender.com/api/v1'
     
     const response = await fetch(`${API_URL}/auth/login-cliente`, {
@@ -149,13 +161,19 @@ async function autenticarConHuella(cedula) {
         'Accept': 'application/json'
       },
       body: JSON.stringify({ 
-        cedula: cedula,
-        pin: pin
+        cedula: credencialesGuardadas.value.cedula,
+        pin: credencialesGuardadas.value.pin
       })
     })
 
     const data = await response.json()
+    
     if (!response.ok) {
+      // Si el PIN cambió, limpiar credenciales
+      if (response.status === 401) {
+        limpiarCredencialesHuella()
+        return { success: false, error: 'PIN ha cambiado. Inicia sesión con PIN nuevamente.' }
+      }
       return { success: false, error: data.detail || data.error || 'Error en login' }
     }
     
@@ -164,10 +182,21 @@ async function autenticarConHuella(cedula) {
       return { success: false, error: 'No se recibió token' }
     }
     
-    return { success: true, data: { access_token: token, cliente: data.cliente } }
+    return { 
+      success: true, 
+      data: { 
+        access_token: token, 
+        cliente: data.cliente,
+        cedula: credencialesGuardadas.value.cedula
+      } 
+    }
 
   } catch (e) {
-    console.error('❌ Error:', e.message)
+    console.error('❌ Error autenticarConHuella:', e.message)
+    // Si el usuario canceló, no es un error grave
+    if (e.message?.toLowerCase().includes('cancel')) {
+      return { success: false, error: null, cancelled: true }
+    }
     return { success: false, error: e.message || 'Huella no reconocida' }
   } finally {
     cargandoHuella.value = false

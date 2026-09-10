@@ -82,15 +82,17 @@
                   class="custom-input pin-input"
                   @keyup.enter="handleLogin"
                 />
+                <!-- ✅ BOTÓN HUELLA - No requiere cédula escrita -->
                 <v-btn
-                  v-if="huellaSoportada"
+                  v-if="huellaSoportada && huellaActivada"
                   icon="mdi-fingerprint"
                   size="large"
                   variant="tonal"
                   class="biometric-icon-btn"
                   @click="loginConHuella"
                   :loading="cargandoHuella"
-                  :disabled="!loginForm.cedula || cargando"
+                  :disabled="cargando"
+                  title="Iniciar sesión con huella"
                 />
               </div>
             </div>
@@ -253,7 +255,7 @@
               ✅ Código verificado correctamente
             </v-alert>
 
-            <p class="recuperar-text">Ingresa tu nuevo PIN de 6 caracteres</p>
+            <p class="recuperar-text">Ingresa tu nuevo PIN de 4-6 caracteres</p>
 
             <v-text-field
               v-model="recuperacion.nuevoPin"
@@ -306,11 +308,11 @@ import { buildApiUrl } from '@/config'
 const { loginForm, error, cargando, iniciarSesion, cargarDatos } = useFinanCash()
 const { 
   huellaSoportada, 
+  huellaActivada,
   cargandoHuella, 
   verificarSoporte, 
   autenticarConHuella,
-  guardarCredencialesHuella,
-  limpiarCredencialesHuella
+  guardarCredencialesHuella
 } = useBiometric()
 const router = useRouter()
 
@@ -337,24 +339,37 @@ onMounted(async () => {
 })
 
 // ============================================================
-// ✅ LOGIN CON PIN - GUARDA CREDENCIALES
+// ✅ LOGIN CON PIN - Guarda credenciales para huella
 // ============================================================
 const handleLogin = async () => {
   console.log('🔑 Intentando login...')
   
   try {
+    const cedula = loginForm.value.cedula?.trim()
+    const pin = loginForm.value.pin?.trim()
+    
+    if (!cedula || !pin) {
+      error.value = 'Ingresa tu cédula y PIN'
+      return
+    }
+    
     const success = await iniciarSesion()
     console.log('✅ Resultado login:', success)
     
     if (success) {
       console.log('✅ Login exitoso')
       
-      // ✅ GUARDAR CREDENCIALES PARA HUELLA
-      const cedula = loginForm.value.cedula?.trim()
-      const pin = loginForm.value.pin?.trim()
+      // ✅ GUARDAR CREDENCIALES TEMPORALES PARA HUELLA
       if (cedula && pin) {
-        guardarCredencialesHuella(cedula, pin)
-        console.log('✅ Credenciales guardadas para huella')
+        localStorage.setItem('financoop_login_form', JSON.stringify({ cedula, pin }))
+        console.log('💾 Credenciales guardadas temporalmente')
+        
+        // ✅ GUARDAR USUARIO
+        const usuarioExistente = JSON.parse(localStorage.getItem('financoop_usuario') || '{}')
+        localStorage.setItem('financoop_usuario', JSON.stringify({
+          ...usuarioExistente,
+          cedula: cedula
+        }))
       }
       
       await new Promise(resolve => setTimeout(resolve, 300))
@@ -369,32 +384,43 @@ const handleLogin = async () => {
 }
 
 // ============================================================
-// ✅ LOGIN CON HUELLA - VERIFICA QUE COINCIDA
+// ✅ LOGIN CON HUELLA - Sin necesidad de escribir cédula
 // ============================================================
 const loginConHuella = async () => {
-  const cedula = loginForm.value.cedula?.trim()
+  const resultado = await autenticarConHuella()
   
-  if (!cedula || cedula.length < 6) {
-    error.value = 'Ingresa tu número de cédula primero'
+  if (resultado.cancelled) {
+    console.log('🔓 Usuario canceló la huella')
     return
   }
-
-  // ✅ LA HUELLA VERIFICA QUE LA CÉDULA COINCIDA CON LA GUARDADA
-  const resultado = await autenticarConHuella(cedula)
   
   if (resultado.success) {
-    const token = resultado.data?.access_token || resultado.token
+    const token = resultado.data?.access_token
     if (token) {
       console.log('✅ Token recibido, guardando...')
       localStorage.setItem('financoop_token', token)
       
-      // ✅ GUARDAR USUARIO EN LOCALSTORAGE
+      // ✅ GUARDAR USUARIO Y CREDENCIALES
       const usuario = {
-        cedula: cedula,
+        cedula: resultado.data?.cedula || '',
         nombre: resultado.data?.cliente?.nombre || '',
         id: resultado.data?.cliente?.id || ''
       }
       localStorage.setItem('financoop_usuario', JSON.stringify(usuario))
+      
+      // Mantener credenciales para futuras autenticaciones
+      const cred = resultado.data?.cedula
+      if (cred) {
+        try {
+          const credGuardadas = JSON.parse(localStorage.getItem('financoop_huella_credenciales') || '{}')
+          if (credGuardadas.cedula) {
+            localStorage.setItem('financoop_login_form', JSON.stringify({
+              cedula: credGuardadas.cedula,
+              pin: credGuardadas.pin
+            }))
+          }
+        } catch (e) {}
+      }
       
       await new Promise(resolve => setTimeout(resolve, 300))
       await cargarDatos()
@@ -402,8 +428,8 @@ const loginConHuella = async () => {
     } else {
       error.value = 'Error: No se recibió token'
     }
-  } else {
-    error.value = resultado.error || 'Error en autenticación'
+  } else if (resultado.error) {
+    error.value = resultado.error
   }
 }
 
