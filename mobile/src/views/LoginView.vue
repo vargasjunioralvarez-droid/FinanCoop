@@ -82,7 +82,7 @@
                   class="custom-input pin-input"
                   @keyup.enter="handleLogin"
                 />
-                <!-- ✅ BOTÓN HUELLA - No requiere cédula escrita -->
+                <!-- ✅ BOTÓN HUELLA - Aparece si hay huella guardada -->
                 <v-btn
                   v-if="huellaSoportada && huellaActivada"
                   icon="mdi-fingerprint"
@@ -310,9 +310,11 @@ const {
   huellaSoportada, 
   huellaActivada,
   cargandoHuella, 
+  credencialesGuardadas,
   verificarSoporte, 
   autenticarConHuella,
-  guardarCredencialesHuella
+  guardarCredencialesHuella,
+  hayHuellaGuardada
 } = useBiometric()
 const router = useRouter()
 
@@ -334,12 +336,20 @@ const recuperacion = reactive({
   tokenTemp: ''
 })
 
+// ✅ CARGAR CÉDULA GUARDADA AL INICIAR
 onMounted(async () => {
   await verificarSoporte()
+  
+  // ✅ VERIFICAR SI HAY HUELLA GUARDADA Y CARGAR CÉDULA
+  const hayHuella = await hayHuellaGuardada()
+  if (hayHuella && credencialesGuardadas.value?.cedula) {
+    loginForm.value.cedula = credencialesGuardadas.value.cedula
+    console.log('✅ Cédula cargada automáticamente:', credencialesGuardadas.value.cedula)
+  }
 })
 
 // ============================================================
-// ✅ LOGIN CON PIN - Guarda credenciales para huella
+// ✅ LOGIN CON PIN
 // ============================================================
 const handleLogin = async () => {
   console.log('🔑 Intentando login...')
@@ -359,17 +369,10 @@ const handleLogin = async () => {
     if (success) {
       console.log('✅ Login exitoso')
       
-      // ✅ GUARDAR CREDENCIALES TEMPORALES PARA HUELLA
+      // ✅ GUARDAR CREDENCIALES TEMPORALES
       if (cedula && pin) {
         localStorage.setItem('financoop_login_form', JSON.stringify({ cedula, pin }))
         console.log('💾 Credenciales guardadas temporalmente')
-        
-        // ✅ GUARDAR USUARIO
-        const usuarioExistente = JSON.parse(localStorage.getItem('financoop_usuario') || '{}')
-        localStorage.setItem('financoop_usuario', JSON.stringify({
-          ...usuarioExistente,
-          cedula: cedula
-        }))
       }
       
       await new Promise(resolve => setTimeout(resolve, 300))
@@ -384,7 +387,7 @@ const handleLogin = async () => {
 }
 
 // ============================================================
-// ✅ LOGIN CON HUELLA - Sin necesidad de escribir cédula
+// ✅ LOGIN CON HUELLA
 // ============================================================
 const loginConHuella = async () => {
   const resultado = await autenticarConHuella()
@@ -400,27 +403,12 @@ const loginConHuella = async () => {
       console.log('✅ Token recibido, guardando...')
       localStorage.setItem('financoop_token', token)
       
-      // ✅ GUARDAR USUARIO Y CREDENCIALES
       const usuario = {
         cedula: resultado.data?.cedula || '',
         nombre: resultado.data?.cliente?.nombre || '',
         id: resultado.data?.cliente?.id || ''
       }
       localStorage.setItem('financoop_usuario', JSON.stringify(usuario))
-      
-      // Mantener credenciales para futuras autenticaciones
-      const cred = resultado.data?.cedula
-      if (cred) {
-        try {
-          const credGuardadas = JSON.parse(localStorage.getItem('financoop_huella_credenciales') || '{}')
-          if (credGuardadas.cedula) {
-            localStorage.setItem('financoop_login_form', JSON.stringify({
-              cedula: credGuardadas.cedula,
-              pin: credGuardadas.pin
-            }))
-          }
-        } catch (e) {}
-      }
       
       await new Promise(resolve => setTimeout(resolve, 300))
       await cargarDatos()

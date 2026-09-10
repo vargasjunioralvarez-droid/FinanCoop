@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { BiometricAuth } from '@aparajita/capacitor-biometric-auth'
 import { Capacitor } from '@capacitor/core'
+import { Preferences } from '@capacitor/preferences'
 
 const huellaSoportada = ref(false)
 const huellaActivada = ref(false)
@@ -9,6 +10,10 @@ const plataformaNativa = ref(false)
 const cargandoHuella = ref(false)
 const biometricType = ref('')
 const credencialesGuardadas = ref(null)
+
+// ✅ Claves de Preferences
+const KEY_CREDENCIALES = 'financoop_huella_credenciales'
+const KEY_ACTIVADA = 'financoop_huella_activada'
 
 async function verificarSoporte() {
   plataformaNativa.value = Capacitor.isNativePlatform()
@@ -25,20 +30,22 @@ async function verificarSoporte() {
     huellaSoportada.value = result.isAvailable
     biometricType.value = result.biometryType || 'fingerprint'
     
-    const credenciales = localStorage.getItem('financoop_huella_credenciales')
-    if (credenciales) {
+    // ✅ LEER DE PREFERENCES (persiste entre cierres)
+    const { value: credencialesStr } = await Preferences.get({ key: KEY_CREDENCIALES })
+    if (credencialesStr) {
       try {
-        credencialesGuardadas.value = JSON.parse(credenciales)
+        credencialesGuardadas.value = JSON.parse(credencialesStr)
         console.log('📦 Credenciales huella encontradas:', credencialesGuardadas.value.cedula)
       } catch (e) {
         console.log('⚠️ Credenciales corruptas, limpiando...')
-        localStorage.removeItem('financoop_huella_credenciales')
+        await Preferences.remove({ key: KEY_CREDENCIALES })
       }
     }
     
     if (huellaSoportada.value) {
-      const pref = localStorage.getItem('financoop_huella_activada')
-      huellaActivada.value = pref === 'true' && !!credencialesGuardadas.value
+      const { value: activada } = await Preferences.get({ key: KEY_ACTIVADA })
+      huellaActivada.value = activada === 'true' && !!credencialesGuardadas.value
+      console.log('🔐 Huella activada:', huellaActivada.value)
     }
     
     return huellaSoportada.value
@@ -48,29 +55,52 @@ async function verificarSoporte() {
   }
 }
 
-function guardarCredencialesHuella(cedula, pin) {
+async function guardarCredencialesHuella(cedula, pin) {
   if (!cedula || !pin) {
     console.log('⚠️ No se guardan credenciales: cedula o pin vacío')
     return false
   }
+  
   const credenciales = { 
     cedula: String(cedula).trim(), 
     pin: String(pin).trim(), 
     fecha: new Date().toISOString() 
   }
-  localStorage.setItem('financoop_huella_credenciales', JSON.stringify(credenciales))
+  
+  // ✅ GUARDAR EN PREFERENCES (persiste entre cierres)
+  await Preferences.set({
+    key: KEY_CREDENCIALES,
+    value: JSON.stringify(credenciales)
+  })
+  await Preferences.set({ key: KEY_ACTIVADA, value: 'true' })
+  
+  // También guardar en localStorage como respaldo
+  try {
+    localStorage.setItem('financoop_huella_credenciales', JSON.stringify(credenciales))
+    localStorage.setItem('financoop_huella_activada', 'true')
+    localStorage.setItem('financoop_usuario', JSON.stringify({ cedula }))
+  } catch (e) {}
+  
   credencialesGuardadas.value = credenciales
   huellaActivada.value = true
-  localStorage.setItem('financoop_huella_activada', 'true')
-  console.log('✅ Credenciales guardadas para huella:', credenciales.cedula)
+  
+  console.log('✅ Credenciales guardadas permanentemente:', credenciales.cedula)
   return true
 }
 
-function limpiarCredencialesHuella() {
-  localStorage.removeItem('financoop_huella_credenciales')
+async function limpiarCredencialesHuella() {
+  // ✅ LIMPIAR DE PREFERENCES
+  await Preferences.remove({ key: KEY_CREDENCIALES })
+  await Preferences.set({ key: KEY_ACTIVADA, value: 'false' })
+  
+  // También limpiar de localStorage
+  try {
+    localStorage.removeItem('financoop_huella_credenciales')
+    localStorage.setItem('financoop_huella_activada', 'false')
+  } catch (e) {}
+  
   credencialesGuardadas.value = null
   huellaActivada.value = false
-  localStorage.setItem('financoop_huella_activada', 'false')
   console.log('🔒 Credenciales de huella eliminadas')
 }
 
@@ -78,7 +108,6 @@ async function toggleHuella(activar, cedulaParam, pinParam) {
   cargandoHuella.value = true
   try {
     if (activar) {
-      // 1. Verificar identidad con huella
       await BiometricAuth.authenticate({
         reason: 'Verifica tu identidad para activar huella',
         cancelTitle: 'Cancelar',
@@ -86,11 +115,9 @@ async function toggleHuella(activar, cedulaParam, pinParam) {
         androidSubtitle: 'Coloca tu dedo en el sensor'
       })
       
-      // 2. Obtener cédula y PIN
       let cedula = cedulaParam
       let pin = pinParam
       
-      // Si no vienen por parámetro, buscar en localStorage
       if (!cedula || !pin) {
         try {
           const loginForm = JSON.parse(localStorage.getItem('financoop_login_form') || '{}')
@@ -99,7 +126,6 @@ async function toggleHuella(activar, cedulaParam, pinParam) {
         } catch (e) {}
       }
       
-      // Buscar en usuario
       if (!cedula) {
         try {
           const usuario = JSON.parse(localStorage.getItem('financoop_usuario') || '{}')
@@ -111,11 +137,10 @@ async function toggleHuella(activar, cedulaParam, pinParam) {
         return { success: false, error: 'No se encontraron credenciales. Inicia sesión con PIN primero.' }
       }
       
-      // 3. Guardar
-      guardarCredencialesHuella(cedula, pin)
+      await guardarCredencialesHuella(cedula, pin)
       return { success: true }
     } else {
-      limpiarCredencialesHuella()
+      await limpiarCredencialesHuella()
       return { success: true }
     }
   } catch (e) {
@@ -126,10 +151,20 @@ async function toggleHuella(activar, cedulaParam, pinParam) {
   }
 }
 
-// ✅ AUTENTICAR CON HUELLA - Sin necesidad de escribir cédula
+// ✅ AUTENTICAR CON HUELLA - Persiste entre cierres
 async function autenticarConHuella() {
   if (!huellaSoportada.value) {
     return { success: false, error: 'Biometría no disponible en este dispositivo' }
+  }
+
+  // ✅ Si no hay credenciales en memoria, leer de Preferences
+  if (!credencialesGuardadas.value) {
+    const { value: credencialesStr } = await Preferences.get({ key: KEY_CREDENCIALES })
+    if (credencialesStr) {
+      try {
+        credencialesGuardadas.value = JSON.parse(credencialesStr)
+      } catch (e) {}
+    }
   }
 
   if (!credencialesGuardadas.value || !credencialesGuardadas.value.cedula || !credencialesGuardadas.value.pin) {
@@ -141,7 +176,6 @@ async function autenticarConHuella() {
 
   cargandoHuella.value = true
   try {
-    // 1. Verificar huella
     await BiometricAuth.authenticate({
       reason: `Bienvenido de nuevo, ${credencialesGuardadas.value.cedula}`,
       cancelTitle: 'Cancelar',
@@ -151,7 +185,6 @@ async function autenticarConHuella() {
 
     console.log('✅ Huella verificada para:', credencialesGuardadas.value.cedula)
 
-    // 2. Login con las credenciales guardadas
     const API_URL = 'https://financoop-agd5.onrender.com/api/v1'
     
     const response = await fetch(`${API_URL}/auth/login-cliente`, {
@@ -169,9 +202,8 @@ async function autenticarConHuella() {
     const data = await response.json()
     
     if (!response.ok) {
-      // Si el PIN cambió, limpiar credenciales
       if (response.status === 401) {
-        limpiarCredencialesHuella()
+        await limpiarCredencialesHuella()
         return { success: false, error: 'PIN ha cambiado. Inicia sesión con PIN nuevamente.' }
       }
       return { success: false, error: data.detail || data.error || 'Error en login' }
@@ -193,7 +225,6 @@ async function autenticarConHuella() {
 
   } catch (e) {
     console.error('❌ Error autenticarConHuella:', e.message)
-    // Si el usuario canceló, no es un error grave
     if (e.message?.toLowerCase().includes('cancel')) {
       return { success: false, error: null, cancelled: true }
     }
@@ -201,6 +232,27 @@ async function autenticarConHuella() {
   } finally {
     cargandoHuella.value = false
   }
+}
+
+// ✅ VERIFICAR SI HAY HUELLA ACTIVADA (para LoginView)
+async function hayHuellaGuardada() {
+  if (!plataformaNativa.value) await verificarSoporte()
+  
+  if (!huellaSoportada.value) return false
+  
+  const { value: credencialesStr } = await Preferences.get({ key: KEY_CREDENCIALES })
+  const { value: activada } = await Preferences.get({ key: KEY_ACTIVADA })
+  
+  if (credencialesStr && activada === 'true') {
+    try {
+      credencialesGuardadas.value = JSON.parse(credencialesStr)
+      huellaActivada.value = true
+      return true
+    } catch (e) {
+      return false
+    }
+  }
+  return false
 }
 
 export function useBiometric() {
@@ -215,6 +267,7 @@ export function useBiometric() {
     toggleHuella,
     autenticarConHuella,
     guardarCredencialesHuella,
-    limpiarCredencialesHuella
+    limpiarCredencialesHuella,
+    hayHuellaGuardada
   }
 }
